@@ -1,0 +1,9 @@
+[submodule "sglang"]
+	path = sglang
+	url = https://github.com/sgl-project/sglang.git
+[submodule "Megatron-Bridge"]
+	path = Megatron-Bridge
+	url = https://github.com/NVIDIA-NeMo/Megatron-Bridge.git
+[submodule "Megatron-LM"]
+	path = Megatron-LM
+	url = https://github.com/NVIDIA/Megatron-LM.git
