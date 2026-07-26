@@ -7,3 +7,6 @@
 [submodule "Megatron-LM"]
 	path = Megatron-LM
 	url = https://github.com/NVIDIA/Megatron-LM.git
+[submodule "TransferQueue"]
+	path = TransferQueue
+	url = https://github.com/Ascend/TransferQueue.git

@@ -15,6 +15,9 @@
 | 06 | [Megatron 后端与格式转换](06_megatron_backend_and_mbridge.md) | 训练后端 | 原生透传、bridge 模式、mbridge/megatron_to_hf、routing replay |
 | 07 | [自定义接口与 Agentic RL](07_customization_and_agentic.md) | 应用层 | 三层自定义接口、`slime/agent/` TITO 层、examples 全景 |
 | 08 | [工程化与可观测性](08_engineering_observability.md) | 工程化 | 分离调试、权重对账、容错、trace/profiling、CI、可复现 |
+| 09 | [TransferQueue：独立数据平面](09_transferqueue.md) | 数据流中间件 | Ascend TransferQueue 源码走读（本仓库根目录第三方源码）：BatchMeta、Controller 账本、Sampler、存储后端、与 slime 数据流对照 |
+| 10 | [引擎内部实现（SGLang 篇）](10_engine_internals_sglang.md) | 推理引擎内部 | `sglang/` 源码走读：RL 端点三层调用链、NCCL 组管理、IPC 还原、torch_memory_saver、abort、logprob/回放数据、router 一致性哈希 |
+| 11 | [训练侧内部实现](11_megatron_and_bridge_internals.md) | 训练引擎内部 | `Megatron-LM/` + `Megatron-Bridge/` 源码走读：get_model/mpu 通信组/DistributedOptimizer/流水线调度；AutoBridge/CONFIG_MAPPING/ParamMapping |
 
 另有一篇独立示例走读：[tau-bench Qwen3-4B](tau-bench_qwen3_4B.md)。
 

@@ -265,7 +265,7 @@ server 模式下的关键组件：
 | P2P weight transfer | LMSys/SGLang | RDMA P2P 把 1T 参数同步 53s→约 7s |
 | APRIL | RLsys Foundation | 主动 partial rollout，rollout 吞吐 +22.5%（最高 44%） |
 | SpecForge | SGLang | 投机解码训练框架（EAGLE3），用于 rollout 加速 |
-| TransferQueue | Ascend | 把 Actor/Rollout/Ref/Advantage 解耦到独立集群的数据传输队列（Relax 使用） |
+| TransferQueue | Ascend | RL 系统独立数据平面（AsyncFlow 论文）：控制面 Ray actor 维护样本×字段生产状态与样本×任务消费状态，数据面可插拔存储（Mooncake/元戎/RayRDT）；verl 集成（PR #5401）后 e2e 吞吐 +49.1%，被 ROLL（RemoteBatch）、UniRL（KV 接口）、Relax 采用。源码已随本仓库提供，走读见 [09_transferqueue.md](09_transferqueue.md) |
 | mbridge / Megatron-Bridge | THUDM / NVIDIA | HF ↔ Megatron 权重/配置转换层 |
 | verifiers + PrimeRL | Prime Intellect | 去中心化跨集群 RL（SHARDCAST 权重分发 + TOPLOC 计算验证） |
 | Miles / vime / Relax | RadixArk / vLLM / RedAI | 基于 slime 的企业级 / vLLM-native / omni-modal 衍生框架 |
@@ -311,5 +311,8 @@ server 模式下的关键组件：
 | 训练后端与格式转换 | `slime/backends/megatron_utils/`（model.py / model_provider.py / data.py）、`megatron_to_hf/`、`slime_plugins/` | 06 |
 | Agentic RL 与自定义接口 | `slime/agent/`、`examples/`（search-r1 / fully_async / multi_agent / coding_agent_rl） | 07 |
 | 工程化与可观测 | `slime/utils/`（timer / tracking / misc）、`slime/ray/rollout.py` 健康监控、`tests/` | 08 |
+| 独立数据平面（第三方） | `TransferQueue/`（仓库根目录下的 Ascend 开源源码，非 slime 组件） | 09 |
+| 推理引擎内部（第三方） | `sglang/`（仓库根目录 vendored 源码）：RL 端点服务端实现 | 10 |
+| 训练引擎内部（第三方） | `Megatron-LM/`、`Megatron-Bridge/`（仓库根目录 vendored 源码） | 11 |
 
 > 注：行号引用以写作时仓库快照为准，上游演进后可能漂移；阅读时建议用符号名搜索定位。

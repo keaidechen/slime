@@ -106,6 +106,8 @@ slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Mega
 
 ## 8. 小结
 
+> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）与 Megatron-Bridge 内部（AutoBridge/CONFIG_MAPPING/ParamMapping）的实现细节见 [11_megatron_and_bridge_internals.md](11_megatron_and_bridge_internals.md)。
+
 - 训练 actor = Megatron 原生 `get_model/optimizer` + RL 所需的 ref/old/teacher 多 tag 管理；
 - bridge 模式让 HF 新模型 day-0 可训；`megatron_to_hf` 让每步权重同步可转；
 - routing replay、stateless Adam、critic head 重初始化是 RL 场景的三个特色增量。

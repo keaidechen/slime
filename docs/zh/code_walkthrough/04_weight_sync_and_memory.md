@@ -159,6 +159,8 @@
 
 ## 6. 小结
 
+> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [10_engine_internals_sglang.md](10_engine_internals_sglang.md)；HF 转换的通用实现见 [11_megatron_and_bridge_internals.md](11_megatron_and_bridge_internals.md) 第二部分。
+
 - 权重同步 = 分片 gather（TP/EP）→ HF 转换 → 分桶 → NCCL/IPC/磁盘传输 → 引擎落盘或广播加载；pause/flush/continue 保证一致性，全局锁防 NCCL 死锁；
 - 异构引擎（PD 分离）、新引擎热加入（容错）、版本对账都被一等支持；
 - 显存错峰三档：rollout release（KV/权重）→ train sleep（torch_memory_saver）→ release-train（杀进程）；

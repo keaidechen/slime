@@ -213,6 +213,8 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
 
 ## 6. 小结
 
+> 本篇讲的是客户端视角；服务端（SGLang 内部）如何实现这些端点，见 [10_engine_internals_sglang.md](10_engine_internals_sglang.md)。
+
 - server 模式 = 训练侧只面对一个 router URL + 一组 HTTP 控制端点；
 - 生成主循环 = over-sampling 提交 + 乱序完成 + 动态过滤 + abort 清尾 + 半成品回 buffer；
 - RL 相对普通 serving 的三个增量：`return_logprob`、top-p/routed-experts 回放、会话亲和与中断续写。
