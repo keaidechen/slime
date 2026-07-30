@@ -10,3 +10,6 @@
 [submodule "TransferQueue"]
 	path = TransferQueue
 	url = https://github.com/Ascend/TransferQueue.git
+[submodule "TransformerEngine"]
+	path = TransformerEngine
+	url = https://github.com/NVIDIA/TransformerEngine.git
