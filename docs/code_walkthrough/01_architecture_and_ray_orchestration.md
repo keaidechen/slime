@@ -69,7 +69,7 @@ def train(args):
 2. **`create_rollout_manager(...)`**（train.py:19）：创建 `RolloutManager` actor。它内部会启动全部 SGLang server 和 router。**先建它的原因**：如果用户没指定 `--num-rollout`，需要从数据源算出"一个 epoch 有多少步"再乘 `num_epoch`（`slime/ray/placement_group.py:240-244`）。
 3. **`create_training_models(...)`**（train.py:21）：创建 actor（以及 PPO 时的 critic）训练 actor 组。
 4. **`actor_model.update_weights()`**（train.py:27）：训练侧加载完 checkpoint 后，先做一次全量权重同步，保证推理引擎与训练侧一致再开始产数据。
-5. 可选的 `check_weights(action="compare")`（train.py:29-30）：**正确性校验**——把推理引擎里的权重和训练侧逐一比较，用于 CI 和调试（这是"RL bug 不报错只降智"哲学的体现，见 08 篇）。
+5. 可选的 `check_weights(action="compare")`（train.py:29-30）：**正确性校验**——把推理引擎里的权重和训练侧逐一比较，用于 CI 和调试（这是"RL bug 不报错只降智"哲学的体现，见 09 篇）。
 
 ### 2.1 主循环：一步 RL 的 9 个动作
 
@@ -165,7 +165,7 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 | 默认（分离） | `actor + rollout`，offset=actor 数 | PG 前段给训练、后段给推理，各占各的卡 |
 | `--colocate` | `max(actor, rollout)`，offset=0 | 训练与推理**同一段 bundle**（同一批卡），靠显存错峰复用 |
 | `--rollout-external` | 只要 actor 的卡 | 推理引擎在任务外部管理（External Rollout Engines），只留训练资源 |
-| 调试 | `debug_train_only` / `debug_rollout_only` | 只起一半系统，分离调试（见 08 篇） |
+| 调试 | `debug_train_only` / `debug_rollout_only` | 只起一半系统，分离调试（见 09 篇） |
 
 **举例**：`actor_num_nodes=2`、`actor_num_gpus_per_node=8`、`rollout_num_gpus=8`、非 colocate → 创建 24 个 bundle；`"actor"` 拿前 16 个，`"rollout"` 拿后 8 个（placement_group.py:127-132）。critic 与 actor 共用同一段（`result["critic"] = result["actor"]`，placement_group.py:135）——因为 critic 与 actor 从不同时占满显存。
 
@@ -268,8 +268,98 @@ slime 的参数分三类（README「参数说明」）：
 
 ---
 
-## 7. 小结与阅读路线
+## 7. 深入拆解：三个容易被忽略但很关键的机制
+
+### 7.1 `InfoActor` 探测重排的完整代码与一个两机例子
+
+`_create_placement_group`（`slime/ray/placement_group.py:42-97`）先建一个"什么都不干、只报告自己在哪"的一次性 actor：
+
+```python
+@ray.remote(num_gpus=1)
+class InfoActor:
+    def get_ip_and_gpu_id(self):
+        return ray.util.get_node_ip_address(), ray.get_gpu_ids()[0]
+```
+
+流程是：`placement_group(bundles, strategy="PACK")` 申请 N 个 `{"GPU":1,"CPU":1}` bundle → 对每个 `bundle_index` 起一个绑定到该 bundle 的 `InfoActor` → `ray.get([actor.get_ip_and_gpu_id.remote() ...])` 收集 `(ip, gpu_id)` → 立刻 `ray.kill` 全部探测 actor（它们只是"侵入式体检"，用完即弃）→ 按 `(ip, gpu_id)` 排序得到 `reordered_bundle_indices` 和 `reordered_gpu_ids`。
+
+**两机 8 卡的具体例子**：假设 Ray 调度把 `bundle_index 0~3` 放到节点 `10.0.0.2`（GPU id 分别是 4,5,6,7，因为该节点其它任务先占了 0-3），`bundle_index 4~7` 放到节点 `10.0.0.1`（GPU id 0-3）。排序前 `bundle_index` 顺序是"调度器分配到的顺序"（不确定、可能犬牙交错）；排序后（先按 IP 字符串排序，`10.0.0.1 < 10.0.0.2`）：
+
+```
+逻辑顺序 i :        0    1    2    3    4    5    6    7
+reordered_bundle_indices: 4    5    6    7    0    1    2    3   （节点1的4个bundle排前面）
+reordered_gpu_ids:        0    1    2    3    4    5    6    7   （每个节点内部再按gpu_id排序）
+```
+
+这样一来，"逻辑顺序里的前 N 个"永远对应"IP 排序最小、GPU 编号最小"的一段连续资源——训练 rank 0 稳定落在 `10.0.0.1` 的 GPU 0 上，是 NCCL rendezvous、`nvidia-smi topo` 拓扑规划的前提。
+
+### 7.2 `_allocate_gpus_for_actor` 的完整环境变量清单
+
+`slime/ray/actor_group.py:57-97`（比 00/01 篇早期版本多了两条）：
+
+```python
+env_vars = {
+    "NCCL_CUMEM_ENABLE": os.environ.get("NCCL_CUMEM_ENABLE", "0"),
+    "NVTE_FP8_BLOCK_SCALING_FP32_SCALES": os.environ.get("NVTE_FP8_BLOCK_SCALING_FP32_SCALES", "1"),
+    **{name: "1" for name in NOSET_VISIBLE_DEVICES_ENV_VARS_LIST},   # 不让 Ray 自动重映射 CUDA_VISIBLE_DEVICES
+    **self.args.train_env_vars,                                      # 用户自定义透传
+}
+if self.args.offload_train and self.args.train_backend == "megatron":
+    # LD_PRELOAD 注入 torch_memory_saver 的 hook 库 + TMS_INIT_ENABLE(_CPU_BACKUP)
+    ...
+if self.args.use_routing_replay and self.role == "actor":
+    env_vars["ENABLE_ROUTING_REPLAY"] = "1"   # critic 不做 routing replay
+```
+
+- `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`（`slime/ray/utils.py`）：与 rollout 侧 `SGLangEngine` 同款技巧（见 02 篇 §4.2）——训练进程也**绕开 Ray 的自动 GPU 重映射**，资源隔离完全靠 `placement_group_bundle_index` 精确指定的 bundle，`num_gpus`（下面会看到实际是 `0.4`）只是记账数字。
+- `NVTE_FP8_BLOCK_SCALING_FP32_SCALES`：Transformer Engine 的 FP8 blockwise scale 用 FP32 存储（避免 scale 本身精度不足），与 04 篇的 FP8 权重传输链路相关。
+- `ENABLE_ROUTING_REPLAY` 只给 `role=="actor"` 设置，是因为**critic 没有推理引擎产生的路由数据可供回放**（critic 不参与 rollout 生成）。
+
+### 7.3 `num_gpus_per_actor=0.4` 的真实调用位置与 rank0 master 地址协商
+
+`0.4` 这个数字只出现在 `placement_group.py:155`（`create_actor_group` 内构造 `RayTrainGroup` 时传入），且**只影响 `TrainRayActor.options(num_gpus=...)` 这次调度声明**，`ray.remote()` 装饰器本身声明的是 `num_gpus=1`（`actor_group.py:106-109` 的 `actor_options`）——`.options()` 会覆盖装饰器默认值。这是"声明层"与"装饰器默认层"两次不同数值的分离设计：装饰器给一个保守默认，实例化时按 colocate/分离场景动态调整。
+
+rank 0 的 `master_addr/master_port` 协商（`actor_group.py:116-128`）：
+
+```python
+master_addr, master_port = None, None
+for rank in range(world_size):
+    actor = TrainRayActor.options(...).remote(world_size, rank, master_addr, master_port)
+    if rank == 0:
+        master_addr, master_port = ray.get(actor.get_master_addr_and_port.remote())
+    self._actor_handlers.append(actor)
+```
+
+**严格顺序依赖**：rank 0 的 actor 必须先创建、`ray.get` 拿到它选好的 `(ip, port)` 后，才能把这个地址传给 rank 1..N-1 的构造函数——这是手写 `torch.distributed` rendezvous 的标准做法（Megatron 内部 `init_process_group` 需要一个大家都能连上的地址）。注意这里是**逐个 `.remote()` 顺序发起**而非并行，因为 rank 0 之后的 rank 依赖它的返回值。
+
+### 7.4 `RayTrainGroup` 完整方法一览
+
+除 01 篇正文提到的 `update_weights`/`async_train` 外，`actor_group.py` 还有这些方法（均是"广播 + 等待"模式）：
+
+| 方法 | 行号 | 说明 |
+|---|---|---|
+| `create(rollout_manager=None)` | 187-207 | 真正创建 Ray actor 并调 `actor.init.remote(...)`；`release_train` 模式下每轮都要重新 `create()` |
+| `release()` | 180-185 | `ray.kill(actor, no_restart=True)` 杀掉全部 actor 并清空 `_actor_handlers`，`sleep(5)` 等资源真正释放 |
+| `save_model(rollout_id, force_sync)` | 150-159 | 存档；`release_train` 时顺带把 `args.load` 指回 `args.save`，为下次 `create()` 重建做准备（`no_load_optim = no_save_optim` 等参数联动） |
+| `onload()` / `offload()` | 174-178 | 分别调各 actor 的 `wake_up`/`sleep`（torch_memory_saver 挂起/恢复，04 篇） |
+| `clear_memory()` | 209-210 | 非 offload 模式下的普通显存清理 |
+| `set_rollout_manager(rollout_manager)` | 212-214 | 把 `RolloutManager` 的 handle 注入每个训练 actor（训练侧后续找 rollout 侧要靠这个引用） |
+
+`update_weights()`（161-172）在 `_full_disk_weight_update_enabled()`（全量+磁盘模式）时走一条特殊分支：先算出新的 `weight_version`（`self._disk_weight_version + 1`），广播完权重后如果 `release_train` 就立刻 `self.release()`（训练 actor 用完即杀），再调 `_reload_rollout_weights_from_disk`——**这解释了为什么 disk 模式配合 release_train 特别省显存**：训练进程写完 checkpoint 就死，GPU 立刻整段还给 rollout，而磁盘上的新权重再让引擎异步拉取加载。
+
+### 7.5 断点续训三层状态如何对齐
+
+一次 `--load <ckpt>` 恢复训练时，三处状态必须一致才能真正"从断点继续"：
+
+1. **训练侧**：`initialize_model_and_optimizer` 返回 `loaded_rollout_id`，`start_rollout_id = loaded_rollout_id + 1`（`actor.py`）；
+2. **数据源游标**：`rollout_manager.load.remote(start_rollout_id - 1)`（`placement_group.py:221-222`）按这个 rollout_id 找到对应的 `global_dataset_state_dict_{rollout_id}.pt` 恢复 `epoch_id/sample_offset` 等游标（03 篇）；
+3. **多 actor 一致性断言**：`create()` 返回的是**每个 rank 各自算出的** `start_rollout_id` 列表，`placement_group.py:216-219` 断言它们全部相等——如果某个 rank 的 checkpoint 损坏或版本不一致，这里会直接报错而不是静默用错误的起点继续训练（"RL bug 不报错只降智"哲学在启动阶段的体现，09 篇会继续展开）。
+
+---
+
+## 8. 小结与阅读路线
 
 - driver（`train.py`）搭台：PG 分资源 → RolloutManager 起推理 → RayTrainGroup 起训练 → 首轮权重同步 → 主循环 9 动作。
 - 三类 actor 通过 Ray handle 互相直连，无中心控制器；数据经 object store 流动，权重经 NCCL/IPC/磁盘流动。
+- placement group 的"探测重排"、`num_gpus` 分数声明与 `CUDA_VISIBLE_DEVICES` 解耦、rank0 rendezvous 协商，是理解 slime 资源调度确定性的三把钥匙；这些机制在 02 篇 §4.1-4.2 有更详细的 rollout 侧对应版本，建议对照读。
 - 下一篇（02）钻进 `RolloutManager` 内部，看 server 模式的 rollout 是如何生成数据的。

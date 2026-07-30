@@ -1,4 +1,4 @@
-# 10 引擎内部实现（SGLang 篇）：RL 专用端点在服务端发生了什么
+# 11 引擎内部实现（SGLang 篇）：RL 专用端点在服务端发生了什么
 
 > 衔接 [02_rollout_sglang_server_mode.md](02_rollout_sglang_server_mode.md) 与 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)。
 > 02/04 篇讲的是 slime（客户端）如何调用；本篇深入仓库根目录 vendored 的 `sglang/` 源码，讲服务端收到请求后做了什么。读完你会理解"server 模式为什么可行"——这些端点是 SGLang 专门为 RL 系统造的。
@@ -60,6 +60,25 @@ async def update_weights_from_distributed(
 **接收**（`weight_updater.py:222-283`）：按 `names/dtypes/shapes` 逐个 `torch.empty` 分配 → `dist.broadcast(..., src=0)` 从训练源接收 → 按名字写回模型参数。还有一条 **bucket 路径**：训练侧把多张量 flatten 进一个大 buffer 一次广播，服务端按元数据切片 reshape 落位——即 `FlattenedTensorBucket`（`weight_sync/tensor_bucket.py:19`），与 slime 侧 `update_weight_buffer_size` 分桶（04 篇 §2.2）配套。
 
 **对照记忆**：slime 侧 `update_weight_from_distributed.py:240-355`（pause→分桶→广播）与本节（锁→empty→broadcast→flush_cache）合起来就是一次完整的权重同步。
+
+### 2.5 深入拆解：`FlattenedTensorBucket`（`weight_sync/tensor_bucket.py:19-89`）——为什么要把多个张量拼成一个再传
+
+不分桶的朴素做法是"每个参数发一次 NCCL broadcast"——一个几百层的模型有几千个参数张量，每次 broadcast 都有固定的 kernel launch + 同步开销，几千次这样的小广播会让延迟被"次数"而不是"总字节数"主导。`FlattenedTensorBucket` 的做法是先在发送侧把一组张量拼成一条：
+
+```python
+for i, (name, tensor) in enumerate(named_tensors):
+    flattened = tensor.flatten().view(torch.uint8)      # 按字节视图摊平（不同 dtype 也能拼在一起）
+    metadata_obj = FlattenedTensorMetadata(
+        name=name, shape=tensor.shape, dtype=tensor.dtype,
+        start_idx=current_idx, end_idx=current_idx+numel, numel=numel,
+    )
+    current_idx += numel
+self.flattened_tensor = torch.cat(flattened_tensors, dim=0)   # 一次 cat，一次 broadcast
+```
+
+`.view(torch.uint8)` 是这里的关键技巧：把张量按**原始字节**重新解释（不做数值转换），这样即使一个桶里混有 `bf16` 的权重和 `fp8` 的另一个权重，也能被拼进同一个 `uint8` 一维数组一起传输——**通信层完全不关心 dtype，只搬字节**；接收端按 `FlattenedTensorMetadata` 里的 `start_idx/end_idx/shape/dtype` 切片、`view(dtype)`、`reshape(shape)` 还原出每个原始张量。这与 slime 侧 `update_weight_buffer_size` 分桶（04 篇 §2.2）是同一机制的两端：训练侧按桶大小把参数分组拼包，引擎侧收到后按同一份 metadata 拆开——**metadata 本身很小（只有 name/shape/dtype/offset），走 HTTP／Ray 控制面传递即可，真正的大字节流走一次 NCCL**。
+
+**直觉**：如果模型有 3000 个参数张量、单次 broadcast 固定开销 0.5ms，不分桶要 1.5 秒纯开销；分桶成 30 个大 bucket（每桶 100 个参数拼一起）就只需要 30 次广播的固定开销（15ms），网络传输时间由总字节数决定不受影响——分桶省的是"次数税"，不是"流量税"。
 
 ---
 
@@ -126,7 +145,7 @@ slime 启动的是 **sgl-model-gateway**（Rust crate，`sglang/sgl-model-gatewa
 | `/update_weights_from_disk` | — | 从磁盘 checkpoint 重载（04 篇 disk 模式） |
 | `/pause_generation` / `/continue_generation` | — | 生成闸门（配合权重更新的第一道锁） |
 | `/flush_cache` | — | 清空 radix cache |
-| `get_weight_version` | — | 版本对账（04 篇 §3、08 篇 §2.1） |
+| `get_weight_version` | — | 版本对账（04 篇 §3、09 篇 §2.1） |
 
 Engine 类（`entrypoints/engine.py:1244-1443`）还提供同名的进程内 API（非 HTTP 模式时用），与 HTTP 路由共享同一套 TokenizerManager 实现。
 

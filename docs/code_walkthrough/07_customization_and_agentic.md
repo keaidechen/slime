@@ -86,6 +86,27 @@ async def generate(args, sample: Sample, sampling_params: dict) -> Sample:
 
 这套设计的思想（README 引用的「Agent-Oriented Design」博客）：**agent 循环属于用户代码，slime 只提供 token 捕获与训练闭环**——agent 用什么框架、什么 prompt 工程、什么工具，都与 RL 基础设施解耦。
 
+### 2.1 深入拆解：为什么"记录每轮 token"这么难——TITO 场景下的 re-tokenization drift
+
+TITO（token-in-token-out）的理想情况是：外部 agent 框架第 N 轮请求时，它发来的 `prompt_ids` 应该正好等于"我们上一轮记的 tokens + 上一轮生成的 output_ids"（严格前缀延伸）。但现实中经常不是这样，原因通常是：
+
+- 外部框架把上一轮的**文本**（不是 token）存进对话历史，下一轮重新走 chat template 渲染再 tokenize——同一段文本，两次 tokenize 结果可能因为上下文（相邻消息）不同而产生细微差异（BPE 的上下文敏感性）；
+- 或者外部框架对上一轮回复做了改写（如去掉了某些 markdown 标记）。
+
+`TrajectoryManager`（`slime/agent/trajectory.py`）设计了一套三分类算法来处理这种"漂移"：
+
+**`classify_token_drift`**（169-191 行）先算 `realign_at = _common_prefix_len(self.tokens, turn.prompt_ids)`（两个 token 序列的最长公共前缀长度，`_common_prefix_len` 用 4096 token 一块的分块比较加速，116-127 行），`drift = len(self.tokens) - realign_at` 就是"公共前缀之后，我方持有但对方没有复现"的 token 数：
+
+- **`drift == 0`（CLEAN）**：对方发来的 `prompt_ids` 完整包含了我方持有的全部 token 作为前缀——最理想情况，直接把 `prompt_ids` 超出部分（通常是新工具结果）追加进来；
+- **`drift > 0` 但落在"最近一次响应段"内且新响应很短（`REALIGN`）**：说明漂移只发生在**最新一轮生成的回复文本被重新 tokenize** 这个局部范围内，还没有历史包袱——`_align_to_prompt`（216-224 行）直接**用对方最新的 prompt_ids 覆盖掉我方保存的那一段**，并将这段的 `loss_mask`/`logprobs` 清零（因为这段文本的边界已经变了，之前保存的 per-token logprob 已经对不上新的 token 边界，不能再用来算 loss）；
+- **其它情况（`FORK`）**：漂移发生得"太早"（不在最近一轮响应段内，说明历史被大幅改写）或漂移量太大（`len(turn.output_ids) >= fork_threshold`）——此时不再尝试修补，`_SampleBuilder` 直接判定**这条链路作废**，调用方为这个 session 重新开一个全新的 builder（`fork`），已经积累的部分仍然可以产出一条 `Sample`（前提是它已经有过 trained response，见 `has_trained_response`），但从这一轮之后另起一条独立的训练样本。
+
+**一个具体例子**：假设第 1 轮我们记录了 `tokens=[..., "The", "answer", "is", "42", "."]`（trained, loss_mask=1），第 2 轮外部 agent 把这句话重新渲染进对话历史再发来请求，因为紧邻的下一条消息不同导致 BPE 切分变化，实际收到的 `prompt_ids` 尾部变成了 `[..., "The", "answer", "is", "4", "2", "."]`（"42" 被切成了 "4"+"2" 两个 token）。`_common_prefix_len` 会在 `"is"` 之后停止匹配（"42" vs "4" 不相等），`drift = 2`（我方多出"42"和"."两个 token 没被复现，取决于具体对齐位置）。因为这个漂移就发生在"最近一次响应段"内、且新一轮的 `output_ids` 不长，判定为 `REALIGN`：直接用对方的 `[..., "4", "2", "."]` 覆盖我方保存的 `[..., "42", "."]`，并把这几个 token 的 `loss_mask` 置 0——**代价是这一小段文本从"可训练"变成"仅上下文"，但避免了因 token 边界错位导致后续 loss 计算彻底崩掉**。
+
+这是一个"宁可少训一点、也不要训练数据本身出现静默错位"的典型工程取舍——与整份文档反复出现的"不变量校验优先于容错猜测"的风格一致（03 篇 `append_response_tokens` 的严格断言、01 篇多 rank `start_rollout_id` 一致性断言是同一哲学的另外两个例子）。
+
+`response_trained` 标志（`MessageNode.__init__`，82 行）解决另一个问题：**消息树上同一个回复节点可能被多条叶子路径共享**（多分支对话/多候选回复复用同一个历史前缀），线性化成 `list[Sample]` 时，第一条经过它的路径把它标记为"已训练"（loss_mask=1），后续路径遇到同一节点只把它当上下文重放（loss_mask=0）——**保证同一段回复内容在整批训练数据里只贡献一次梯度**，否则共享前缀的回复会被过采样、其梯度权重被隐式放大。
+
 ---
 
 ## 3. Examples 全景地图

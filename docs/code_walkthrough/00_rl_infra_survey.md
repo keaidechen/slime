@@ -55,7 +55,7 @@ verl（HybridFlow 论文）与 APRIL 论文都指出：**RL 训练 80% 以上的
 
 ## 2. 知识点地图（Taxonomy）
 
-这一节把领域知识组织成 10 个子领域，每个子领域给出：核心问题、主流方案、代表性工作。后续每一篇 slime 代码走读文档（01–08）对应其中一个子领域。
+这一节把领域知识组织成 10 个子领域，每个子领域给出：核心问题、主流方案、代表性工作。后续每一篇 slime 代码走读文档（01–09，另有 08 篇专讲奖励模型与评估）对应其中一个子领域。
 
 ### 2.1 编排与资源管理 → 走读文档 01
 
@@ -136,6 +136,8 @@ server 模式下的关键组件：
 - **KL 估计器**：k1（直接 log 比）、k2（平方）、k3（Schulman 无偏估计）——数值稳定性各不相同。
 - **entropy / clip 统计**：训练健康度观测的必需品。
 
+**奖励与评估（RM Hub / Eval Pipeline） → 走读文档 08**：advantage 计算的输入端——规则奖励（数学答案等价性判断、F1/EM、多选题）、外部 RM 服务、group RM、dynamic sampling filter（丢弃全对/全错组）、评测集独立采样参数与 early stop，这些常被视为"业务代码"而非"infra"，但直接决定训练信号质量，slime 把它们做成了统一的可插拔 hub。
+
 ### 2.7 训练后端 → 走读文档 06
 
 - **Megatron-LM**：NVIDIA 的大规模训练框架，支持 TP/PP/EP/CP/SP 五维并行，大模型（百亿→万亿）标配。slime、NeMo-RL（经 Megatron Bridge）走此路。
@@ -160,7 +162,7 @@ server 模式下的关键组件：
 - **true on-policy**：slime 提出并实践的修正路线——通过 TIS 重要性采样修正 FP8 rollout 引入的偏差，恢复 on-policy 语义。
 - **rollout_log_probs 回传**：修正的前提是推理引擎把每个 token 的 logprob 随样本一起返回。
 
-### 2.10 工程化与可观测性 → 走读文档 08
+### 2.10 工程化与可观测性 → 走读文档 09
 
 - **可复现**：种子、数据顺序、rollout 重放（rollout-only / train-only 分离调试，把 rollout 数据落盘再回放训练）。
 - **容错**：rollout server 健康监控、超时重试、故障隔离（server 模式天然优势）。
@@ -265,7 +267,7 @@ server 模式下的关键组件：
 | P2P weight transfer | LMSys/SGLang | RDMA P2P 把 1T 参数同步 53s→约 7s |
 | APRIL | RLsys Foundation | 主动 partial rollout，rollout 吞吐 +22.5%（最高 44%） |
 | SpecForge | SGLang | 投机解码训练框架（EAGLE3），用于 rollout 加速 |
-| TransferQueue | Ascend | RL 系统独立数据平面（AsyncFlow 论文）：控制面 Ray actor 维护样本×字段生产状态与样本×任务消费状态，数据面可插拔存储（Mooncake/元戎/RayRDT）；verl 集成（PR #5401）后 e2e 吞吐 +49.1%，被 ROLL（RemoteBatch）、UniRL（KV 接口）、Relax 采用。源码已随本仓库提供，走读见 [09_transferqueue.md](09_transferqueue.md) |
+| TransferQueue | Ascend | RL 系统独立数据平面（AsyncFlow 论文）：控制面 Ray actor 维护样本×字段生产状态与样本×任务消费状态，数据面可插拔存储（Mooncake/元戎/RayRDT）；verl 集成（PR #5401）后 e2e 吞吐 +49.1%，被 ROLL（RemoteBatch）、UniRL（KV 接口）、Relax 采用。源码已随本仓库提供，走读见 [10_transferqueue.md](10_transferqueue.md) |
 | mbridge / Megatron-Bridge | THUDM / NVIDIA | HF ↔ Megatron 权重/配置转换层 |
 | verifiers + PrimeRL | Prime Intellect | 去中心化跨集群 RL（SHARDCAST 权重分发 + TOPLOC 计算验证） |
 | Miles / vime / Relax | RadixArk / vLLM / RedAI | 基于 slime 的企业级 / vLLM-native / omni-modal 衍生框架 |
@@ -310,9 +312,11 @@ server 模式下的关键组件：
 | RL 算法 | `slime/backends/megatron_utils/loss.py`、`slime/utils/ppo_utils.py`（如存在） | 05 |
 | 训练后端与格式转换 | `slime/backends/megatron_utils/`（model.py / model_provider.py / data.py）、`megatron_to_hf/`、`slime_plugins/` | 06 |
 | Agentic RL 与自定义接口 | `slime/agent/`、`examples/`（search-r1 / fully_async / multi_agent / coding_agent_rl） | 07 |
-| 工程化与可观测 | `slime/utils/`（timer / tracking / misc）、`slime/ray/rollout.py` 健康监控、`tests/` | 08 |
-| 独立数据平面（第三方） | `TransferQueue/`（仓库根目录下的 Ascend 开源源码，非 slime 组件） | 09 |
-| 推理引擎内部（第三方） | `sglang/`（仓库根目录 vendored 源码）：RL 端点服务端实现 | 10 |
-| 训练引擎内部（第三方） | `Megatron-LM/`、`Megatron-Bridge/`（仓库根目录 vendored 源码） | 11 |
+| 奖励模型与评估 | `slime/rollout/rm_hub/`、`slime/rollout/filter_hub/`、`slime/utils/eval_config.py` | 08 |
+| 工程化、可观测与 Profiling | `slime/utils/`（timer / trace_utils / profile_utils / tracking）、`slime/ray/rollout.py` 健康监控、`tests/` | 09 |
+| 独立数据平面（第三方） | `TransferQueue/`（仓库根目录下的 Ascend 开源源码，非 slime 组件） | 10 |
+| 推理引擎内部（第三方） | `sglang/`（仓库根目录 vendored 源码）：RL 端点服务端实现 | 11 |
+| 训练引擎内部（第三方，Megatron-LM） | `Megatron-LM/`（仓库根目录 vendored 源码） | 12 |
+| 训练引擎内部（第三方，Megatron-Bridge） | `Megatron-Bridge/`（仓库根目录 vendored 源码） | 13 |
 
 > 注：行号引用以写作时仓库快照为准，上游演进后可能漂移；阅读时建议用符号名搜索定位。

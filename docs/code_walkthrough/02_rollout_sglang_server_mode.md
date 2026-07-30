@@ -44,7 +44,48 @@ driver 与训练侧看到的是这组方法（rollout.py）：
 | `offload/onload/onload_weights/onload_kv` | 584-600 | 显存错峰（04 篇） |
 | `get_updatable_engines_and_lock` | 533 | 权重同步时取引擎列表 + 互斥锁 |
 | `recover_updatable_engines` | 601 | 容错恢复 |
-| `check_weights` | 628 | 权重一致性校验（08 篇） |
+| `check_weights` | 628 | 权重一致性校验（09 篇） |
+
+### 2.3 深入拆解：为什么用 HTTP 通信，而不是让 Ray 直接调用 rollout engine
+
+**关键点：`SGLangEngine`（Ray actor）本身不是推理引擎，它只是一个"进程启动器 + HTTP 客户端适配器"**：
+
+```python
+def launch_server_process(server_args: ServerArgs) -> multiprocessing.Process:
+    from sglang.srt.entrypoints.http_server import launch_server
+    multiprocessing.set_start_method("spawn", force=True)
+    p = multiprocessing.Process(target=launch_server, args=(server_args,))
+    p.start()
+```
+
+它用 `multiprocessing.Process` 启动了一个**独立的操作系统进程**，运行 sglang 自己的 `launch_server`。真正跑推理的 Scheduler / DetokenizerManager 是**另外的子进程**，进程间用 **ZMQ IPC** 通信，Ray 完全不参与这条链路；sglang 对外暴露的唯一稳定"接口契约"就是 FastAPI 起的这个 HTTP 服务（`/generate`、`/health_generate`、`/update_weights_from_tensor` 等几十个 endpoint，11 篇详解）。所以 `SGLangEngine._make_request` 等方法本质上都是 `requests.post/get(...)`——**不是"不想"直接调引擎，而是"没有别的方式"直接调**：sglang 引擎架构就是"HTTP server 前置于子进程引擎"，Ray actor 无法穿透到它内部的 ZMQ IPC 做函数调用。
+
+**为什么真正的生成请求（海量并发采样）走 HTTP router，而不走 Ray**：
+
+1. **一个"engine"可能跨多个节点，Ray 看不到内部拓扑**：当 `tp_size` 超过单机 GPU 数时，一个 engine 跨 `nnodes` 个节点，只有 `node_rank == 0` 的进程对外暴露 HTTP 端口，真正的跨 rank 协同（TP/PP all-reduce）发生在 sglang 内部靠 NCCL，Ray 完全介入不了这层；
+2. **负载均衡/容错/PD-disaggregation 路由是重活，没必要在 Ray 里重造轮子**：sgl-model-gateway（Rust 实现）已经提供了 prefix-cache 感知路由、熔断重试、PD bootstrap room 路由等工业级能力（11 篇 §7）；
+3. **支持"外部引擎"（`args.rollout_external`）**：完全独立于 Ray、已经在别处跑起来的 sglang server 可以直接接入同一个 router，对上层 rollout 代码没有任何区别；
+4. **性能/并发模型更适合**：一次 rollout 是成千上万个并发采样请求，`httpx.AsyncClient` 连接池 + 流式 SSE 输出比 Ray RPC（GCS 调度 + cloudpickle 序列化 + object store）更轻量，也更适合流式增量输出；
+5. **职责分离**：Ray 只承担"控制面"（申请 GPU、起停进程、健康检测重启、权重更新时的 NCCL 握手协调）——低频、非并发热点；"数据面"（海量 generate 请求）完全走 HTTP router，两者解耦干净，也是 sglang 自身单机部署（不依赖 Ray）时的标准用法，slime 只是原样复用。
+
+### 2.4 深入拆解：`rollout_engine_lock` 只为一件事而存在
+
+`RolloutManager.__init__` 创建的这把锁（`slime/ray/utils.py` 的 `Lock`，本质是一个只有布尔状态的 Ray actor，`acquire()` 非阻塞立即返回 True/False，调用方自旋轮询）**只在 NCCL 分布式广播路径（`UpdateWeightFromDistributed`）里用到**：
+
+```python
+# update_weight_from_distributed.py
+def _update_bucket_weights_from_distributed(self, converted_named_tensors, pbar=None, load_format=None):
+    """Lock → broadcast → clear → unlock → pbar++. Lock prevents NCCL deadlock."""
+    while not ray.get(self.rollout_engine_lock.acquire.remote()):
+        time.sleep(0.1)
+    refs = update_weights_from_distributed(...)
+    ray.get(refs)
+    ray.get(self.rollout_engine_lock.release.remote())
+```
+
+**原因**：`connect_rollout_engines_from_distributed` 为**每个 PP rank**建一个独立 NCCL group（04 篇 §5.5 的 `slime-pp_{n}`）。NCCL 集合通信要求同一 group 内所有参与方**以完全相同的顺序**发出对应操作，否则"张量 A 的广播在训练侧发出、但引擎侧先收到了本该属于张量 B 广播的调用"这种错位会导致 NCCL 死锁（hang）。没有这把锁，多个 PP rank（甚至同一 rank 内多个 bucket）可能并发对同一批 rollout engine 发起广播，Ray 端调用到达顺序和 NCCL 端发起顺序不一致就会踩坑。加了这把全局锁后，任意时刻只允许一个"bucket 广播"跟 rollout engine 群的 NCCL group 打交道——代码注释直白写着"Lock prevents NCCL deadlock"。
+
+**它不是唯一的同步机制，也不是所有更新路径都用**：`UpdateWeightFromTensor`（colocated，CUDA-IPC/nixl）接收了这个参数但根本不调用它——每个 bucket 是一次性 Ray remote 调用 + GPU 直接传输，不存在长期存活的 NCCL group，没有"顺序错位死锁"的风险；`UpdateWeightFromDisk*` 同理不用，改用同机 flock 文件锁保证串行。真正保证"权重替换期间不会用半新半旧权重生成"的，是另一套完全独立的机制——`pause_generation`/`continue_generation`（几乎所有更新路径都用，保证推理正确性），`rollout_engine_lock` 只管 NCCL 调用顺序不冲突，两者是完全不同维度的问题，不要混淆。
 
 ---
 
@@ -199,23 +240,116 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
 
 **为什么 slime 敢只做 server 模式？** 因为 SGLang 把 RL 需要的一切控制面（热更新、显存释放、中断、logprob 回传、top-p/routed-experts 回放）都经 HTTP 暴露了，engine 模式的内存直传优势被抹平，剩下全是 server 模式的结构性收益（隔离、弹性、负载均衡、多模型）。
 
----
+### 4.1 深入拆解：model / server_group / engine 三层结构
+
+`--sglang-config` YAML 的顶层是一个**列表**，每一项是一个"model"——这在 RL 训练里很常用：可以同时部署 `actor`（接收权重更新，生成 rollout）、`ref`（参考模型，`update_weights: false` 永不更新，算 KL 用）、甚至 `reward`（奖励模型）。它们是**互相独立**的一整套 SGLang 部署（各自的 router 进程、各自的 engine 进程），只是共用同一个 `RolloutManager`/同一个 Ray placement group 编排：
+
+```
+SglangConfig                                    (整个 --sglang-config YAML)
+ └─ models: list[ModelConfig]                   (第 1 层：model，如 actor / ref / reward)
+     └─ server_groups: list[ServerGroupConfig]  (第 2 层：server_group)
+         └─ 展开为运行时的 ServerGroup(dataclass)
+             └─ all_engines: list[SGLangEngine(Ray actor)]  (第 3 层：engine)
+```
+
+**第 2 层 server_group** 是同一个 model 内部不同"角色"的引擎组，最典型场景是 **PD 分离**：`worker_type=prefill, num_gpus=4, num_gpus_per_engine=2` → TP=2，4 卡跑出 2 个 prefill engine；`worker_type=decode, num_gpus=8, num_gpus_per_engine=4` → TP=4，8 卡跑出 2 个 decode engine。`worker_type` 还可以是 `regular`（不做 PD 分离）、`encoder`（多模态 EPD 分离用）、`placeholder`（只占 GPU 位置不真正起引擎）。**一个 `ServerGroup` 内部所有 engine 必须同构**。
+
+**第 3 层 engine** 是 `SGLangEngine` 这个 Ray actor，**一个 engine ≈ 一个逻辑上的 sglang server 实例（一个 TP 副本）**：`num_engines = group_cfg.num_gpus // num_gpus_per_engine`。如果 `num_gpus_per_engine`（TP size）超过单机 GPU 数，一个"逻辑 engine"要跨多台节点部署，`all_engines`（原始列表）包含每个"node-in-engine"的 actor，而 `engines`（对外可见的）每隔 `nodes_per_engine` 取一个——只保留每个逻辑 engine 里 `node_rank==0` 那个，只有它对外暴露 HTTP 端口，节点间协同全靠 sglang 内部的 NCCL。
+
+**一个完整例子**：`actor` model 配置 `worker_type=regular, num_gpus=8, num_gpus_per_engine=4`（TP=4），单机 8 卡：`num_engines=2`，各自在 4 张 GPU 上起 sglang server，都注册到 `actor` model 唯一的那个 router 上，rollout 代码打 `http://{actor_router_ip}:{actor_router_port}/generate` 时 router 在这 2 个 engine 间做负载均衡。如果同时配置了 `ref` model（`update_weights: false`），`RolloutManager.servers` 就是 `{"actor": RolloutServer(...update_weights=True), "ref": RolloutServer(...update_weights=False)}`——训练侧权重更新只会找 `update_weights=True` 的那个。
+
+### 4.2 深入拆解：GPU 分配如何从 placement group 精确落到 `base_gpu_id`
+
+链路：`create_placement_groups`（探测重排，01 篇 §7.1）→ 按 `actor`/`rollout` 切出各自的重排索引段（01 篇 §7.3 的例子：非 colocate 时 rollout 拿后半段，colocate 时训练/推理拿完全重叠的段）→ `ServerGroup.start_engines()` 再从"rollout 专属"的重排数组里，按 `gpu_offset`（跨 model/跨 group 全局累加，避免不同 model 抢同一批卡）+ `i * num_gpus_per_engine_on_node` 算出这个 engine 在数组里的下标 → 取出该下标对应的**真实物理 GPU id**作为 `base_gpu_id`，一路传进 `SGLangEngine.init()` → `ServerArgs(base_gpu_id=...)` → sglang 自己的 `--base-gpu-id` 启动参数。
+
+同 01 篇 §7.2 描述的训练侧机制一样，`RolloutRayActor.options(num_gpus=0.2, ...)` 这里的 `num_gpus=0.2` 也**故意申报一个远小于真实需求的零头值**——真正的资源隔离由 `placement_group_bundle_index` 精确指定的 bundle 保证，`num_gpus` 只是记账数字；同时设置 `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`，让 Ray **不要**自动重映射 `CUDA_VISIBLE_DEVICES`，因为 sglang 通过 `multiprocessing.Process` 另起子进程，且自己接受显式的 `--base-gpu-id` 精确指定要用哪几张卡——如果 Ray 再自动重映射一层，两套"GPU 编号"体系会打架错位。**一句话**：`pg` 负责"预定哪些物理机器上的哪些 GPU 资源槛"、`bundle_index` 决定 Ray actor 被调度到哪台物理机，而"这台机器上具体用第几号卡"由 `base_gpu_id` 显式传给 sglang，绕开 Ray 的自动分配机制。
+
+
 
 ## 5. 评测路径
 
-`eval_rollout` / `eval_rollout_single_dataset`（sglang_rollout.py:473-614）与训练路径共用 `generate_and_rm`，差异：
-
-- 数据来自 `--eval-*` 配置的 `EvalDatasetConfig`，每个数据集可有自己的采样参数与 per-sample `generate_function_path`（568-569 行）；
-- 用 `EVAL_PROMPT_DATASET` 全局缓存（470 行）避免每个 rollout 重复加载；
-- 结果按数据集聚合 rewards/truncated，由 `_log_eval_rollout_data`（rollout.py:1259）记录。
+`eval_rollout` / `eval_rollout_single_dataset`（sglang_rollout.py:473-614）与训练路径共用 `generate_and_rm`，差异：数据来自 `--eval-*` 配置的 `EvalDatasetConfig`，每个数据集可有自己的采样参数与 per-sample `generate_function_path`；用 `EVAL_PROMPT_DATASET` 全局缓存避免每个 rollout 重复加载；结果按数据集聚合 rewards/truncated，由 `_log_eval_rollout_data` 记录。**评测数据集配置的完整字段、reward 打分的分发机制、dynamic filter 的完整实现，见 [08_rm_hub_and_eval.md](08_rm_hub_and_eval.md)。**
 
 ---
 
-## 6. 小结
+## 6. 深入拆解：prompt 是怎么"复用"的、abort 精确做了什么
 
-> 本篇讲的是客户端视角；服务端（SGLang 内部）如何实现这些端点，见 [10_engine_internals_sglang.md](10_engine_internals_sglang.md)。
+### 6.1 `_prepare_prompt_ids`：partial rollout 续写的真正入口
+
+02 篇正文提到"`generate` 里 `sample.tokens` 非空时直接把已有 token 作为输入续写"，具体实现是 `_prepare_prompt_ids`（`sglang_rollout.py:43-62`）：
+
+```python
+def _prepare_prompt_ids(sample: Sample, tokenizer, processor: Any) -> list[int]:
+    raw_multimodal_inputs = sample.multimodal_inputs or {}
+    has_multimodal_inputs = any(value is not None for value in raw_multimodal_inputs.values())
+    reuse_existing_input_ids = bool(sample.tokens) and (
+        sample.multimodal_train_inputs is not None or not has_multimodal_inputs
+    )
+    if processor and has_multimodal_inputs and not reuse_existing_input_ids:
+        processor_output = processor(text=sample.prompt, **build_processor_kwargs(raw_multimodal_inputs))
+        ...
+        return prompt_ids
+    if reuse_existing_input_ids:
+        return sample.tokens          # ← partial rollout 续写：直接把"prompt+已生成前缀"整段送回去当输入
+    return tokenizer.encode(sample.prompt, add_special_tokens=False)
+```
+
+三个分支的选择逻辑：`sample.tokens` 非空（即这是一条从 buffer 里取出的半成品）且（非多模态，或多模态但已经缓存过 `multimodal_train_inputs`）→ 直接复用已有 token 序列；否则如果有多模态输入且还没 tokenize 过，走 `processor` 编码一次（顺带把非 `input_ids/attention_mask` 的字段，如 `pixel_values`，缓存进 `sample.multimodal_train_inputs`，避免每次续写都重新跑一次视觉 encoder 的预处理）；纯文本首次生成则用 tokenizer 直接编码 prompt。**这是"续写"与"首次生成"共用同一套代码路径的关键分支点**——不是两套逻辑，而是一个函数根据 `Sample` 当前状态自动决定行为。
+
+### 6.2 `abort()` 的精确时序（`sglang_rollout.py:336-372`）
+
+```python
+async def abort(args, rollout_id):
+    aborted_samples = []
+    state = GenerateState(args)
+    assert not state.aborted
+    state.aborted = True                                  # ① 置全局标志：新请求短路返回 ABORTED
+
+    response = await get(f"http://{router_ip}:{router_port}/workers")   # ② 问 router 要在线 worker 列表
+    urls = [w["url"] for w in response["workers"]]
+    await abort_servers_until_idle(urls)                    # ③ 对每个 server 发 /abort_request 并等排空
+
+    count = 0
+    while state.pendings:                                   # ④ 等所有本地挂起的 asyncio task 真正 return
+        done, state.pendings = await asyncio.wait(state.pendings, return_when=asyncio.FIRST_COMPLETED)
+        if not args.partial_rollout:
+            continue
+        for task in done:
+            group = task.result()
+            for sample in group:
+                if sample.response and "start_rollout_id" not in sample.metadata:
+                    sample.metadata["start_rollout_id"] = rollout_id   # ⑤ 打上"从哪一轮开始半成品"的标记
+            aborted_samples.append(group)
+            count += len(group)
+    return aborted_samples
+```
+
+容易忽略的两点：
+
+1. **`assert not state.aborted`**：`abort()` 只能在一次 rollout 里调用一次（`GenerateState` 是单例，跨轮由 `reset()` 清空），如果被误调两次会直接触发断言——这是"防御式编程"的例子，宁可显式崩溃也不要一个已经在收尾的批次被再次打断产生数据错位。
+2. **`start_rollout_id` 只在样本第一次被 abort 时打**（`"start_rollout_id" not in sample.metadata`）：一条样本可能在 partial rollout 下被打断、续写、又被打断多次，`start_rollout_id` 始终记录**它第一次开始半成品生命周期时的 rollout 步数**，而不是最近一次——这个字段与 `weight_versions` 字段配合，能诊断"一条最终样本经历了从第几轮到第几轮的权重跨度"，是排查 partial rollout 训练异常时最先要看的两个字段。
+
+### 6.3 一个数字例子：`over_sampling_batch_size` 如何驱动 abort 的触发时机
+
+假设 `rollout_batch_size=16`（要 16 组）、`n_samples_per_prompt=4`、`over_sampling_batch_size=20`（每次多要 20 组）：
+
+1. 循环第一次进入 `while state.remaining_batch_size < target_data_size(16)`：`remaining_batch_size` 初值 0 < 16，取 20 组样本提交（`remaining_batch_size` 变为 20，超过 16 也没关系，循环条件已经满足退出内层 while）；
+2. 进入 `asyncio.wait(FIRST_COMPLETED)`，样本陆续完成，`data` 列表逐渐填满（每完成一组检查 dynamic filter，未被丢弃则 `data.append(group)`）；
+3. 因为一开始就提交了 20 组（比目标 16 组多 4 组"富余"），大概率不需要二次补采就能凑够 16 组——但一旦有组被 dynamic filter 丢弃（比如判定"组内 reward 方差为 0"），`remaining_batch_size` 会减 1，若减到低于 16 又会触发内层 while 再取样本补齐；
+4. 一旦 `len(data) >= 16`，外层 `while len(data) < target_data_size` 退出主循环，调用 `abort(args, rollout_id)` ——此时可能还有 20-16=4 组左右（受 dynamic filter 影响，实际数字会波动）尚在生成中，它们的中间态会被 `abort` 收集成 `aborted_samples` 回写 buffer。
+
+**直觉**：`over_sampling_batch_size` 越大于 `rollout_batch_size`，"抢跑"的富余度越大，长尾样本被提前甩出主路径的概率越高，但同时被 abort 掉的半成品也越多（如果不开 partial rollout，这些半成品直接丢弃，等价于浪费的算力）。
+
+---
+
+## 7. 小结
+
+> 本篇讲的是客户端视角；服务端（SGLang 内部）如何实现这些端点，见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)。
 
 - server 模式 = 训练侧只面对一个 router URL + 一组 HTTP 控制端点；
+- model/server_group/engine 三层结构支持多模型部署（actor/ref/reward 各自独立一整套 SGLang），GPU 分配从 placement group 探测重排到 `base_gpu_id` 全程可追踪；
+- `rollout_engine_lock` 只为防止 NCCL 广播路径的调用顺序错位死锁而存在，与保证"不读到半更新权重"的 `pause_generation` 是完全不同维度的两把锁；
 - 生成主循环 = over-sampling 提交 + 乱序完成 + 动态过滤 + abort 清尾 + 半成品回 buffer；
-- RL 相对普通 serving 的三个增量：`return_logprob`、top-p/routed-experts 回放、会话亲和与中断续写。
+- RL 相对普通 serving 的三个增量：`return_logprob`、top-p/routed-experts 回放、会话亲和与中断续写；
+- `_prepare_prompt_ids` 的三分支选择是"续写 vs 首次生成"这两种看似不同的路径实际共用一套代码的关键；`abort()` 的幂等断言与 `start_rollout_id` 首次打标语义是排查 partial rollout 问题的入口。
 - 下一篇（03）看这些数据如何被组织成 `Sample`、如何在 buffer 中流转、以及 fully async 如何进一步解耦。

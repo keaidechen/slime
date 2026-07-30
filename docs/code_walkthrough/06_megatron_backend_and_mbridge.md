@@ -17,6 +17,54 @@
 
 值得注意：**一个进程内可以有多个模型"tag"**（actor / ref / old_actor / rollout_actor / teacher），`_switch_model(target_tag)`（actor.py:291）在它们之间切换——ref 前向、old_actor 备份等操作共用同一套分布式上下文。
 
+### 1.1 深入拆解：`TensorBackuper` ——用"pinned CPU 影子权重"模拟多个模型，而不是真的多份 GPU 权重
+
+如果给 actor/ref/old_actor 各开一份独立的 GPU 权重，显存直接翻 3 倍——colocate 场景下这是不可接受的。slime 的解法在 `slime/utils/tensor_backper.py`：**永远只有一份"活跃"的 GPU 权重，其余 tag 的权重被搬到 pinned CPU 内存里当"备份"，切换时整段拷回 GPU 覆盖当前权重**。
+
+```python
+class _TensorBackuperNormal(TensorBackuper):
+    def backup(self, tag):                      # 把当前 GPU 权重存成名为 tag 的备份
+        for name, param in self._source_getter():
+            backup_dict[name] = torch.empty_like(param, device="cpu", pin_memory=True)  # 首次分配 pinned 内存
+            backup_dict[name].copy_(param.detach(), non_blocking=True)                  # 异步 D2H
+        torch.cuda.synchronize()
+
+    def restore(self, tag):                      # 把名为 tag 的备份权重拷回，覆盖当前 GPU 权重
+        for name, param in self._source_getter():
+            param.copy_(backup_dict[name], non_blocking=True)                           # 异步 H2D
+        torch.cuda.synchronize()
+```
+
+**`pin_memory=True` 是关键**：普通 CPU 内存（page-able memory）做 D2H/H2D 拷贝时 CUDA 驱动要先把数据搬到一段临时的锁页缓冲区再传输，pinned memory 直接跳过这一步，DMA 带宽能跑满——对一个几十 GB 的模型来说，这个选择直接决定了 `_switch_model` 是"零点几秒"还是"好几秒"的量级差异。
+
+**`copy()` 方法**（`copy(src_tag, dst_tag)`）：不经过 GPU，直接在两份 CPU 备份之间互拷（例如把 `actor` 备份复制成 `old_actor` 备份的初值），用于"某个 tag 需要先有一份初始快照，之后再逐步被覆盖"的场景。
+
+**`_TensorBackuperNoop` 是一个更巧妙的优化**：当调用方明确知道"这个 tag 的权重跟当前 GPU 权重完全一样"（`single_tag` 不为 `None`，例如 `kl_coef=0` 时根本不需要区分 ref 和 actor），就完全不做任何拷贝，`backup()`/`restore()` 退化成空操作——但为了防止"逻辑上以为切换了 tag，实际权重却在别处被改动"这种隐蔽 bug，它用一个廉价的 checksum 兜底：
+
+```python
+def backup(self, tag):
+    self._backup_hash_dict = _compute_hash_dict(dict(self._source_getter()))   # 只存哈希，不存数据
+def restore(self, tag):
+    assert _compute_hash_dict(...) == self._backup_hash_dict                    # 用哈希校验"权重确实没变过"
+```
+
+`_compute_hash_tensor` 故意写了注释 `# Not a real/good hash, but pretty fast`——把 tensor 按位重解释成 `uint32` 后求和，不是密码学意义上的哈希（会漏检某些巧合的位翻转），但足够快（一次 `sum()` reduce）且能在绝大多数场景下抓到"以为没变、其实变了"的编程错误。**这是"用测试断言代替真实数据保存"的思路**：既然理论上不该有差异，那就用一个廉价检测手段验证"理论符合实践"，而不是为了保险起见真的存一份数据——用极低成本换取和 `_TensorBackuperNormal` 相同的安全性。
+
+### 1.2 深入拆解：`StatelessAdam`（`stateless_adam.py`）——数学上等价于什么？
+
+`--use-stateless-adam` 的动机是省掉 Adam 一阶/二阶矩（`exp_avg`/`exp_avg_sq`）的显存（每个参数额外 2 份 FP32 状态，等于模型参数量的 2 倍显存）。但它不是"不用 Adam"，而是**每一步都假装 Adam 的历史矩全是 0，重新算一遍"如果只有当前这一个梯度，Adam 会怎么更新"**：
+
+```python
+group["step"] = 1                                   # 永远当作 Adam 的第 1 步
+numerator_scale, denominator_scale = (1.0, 1.0) if bias_correction else (1-beta1, sqrt(1-beta2))
+denom = grad.abs() * denominator_scale + eps         # 二阶矩的"第一步"估计就是 |grad| 本身
+param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad / (|grad| + eps)
+```
+
+当 `bias_correction=True`（默认）时，`denom ≈ |grad| + eps`，于是更新量约为 `-lr * grad / |grad| ≈ -lr * sign(grad)`——**这在数学上非常接近 signSGD**（只看梯度符号、不看梯度大小的更新规则），只是保留了 Adam 的 per-parameter eps 平滑和 weight decay 处理。这解释了它为什么被称为"stateless"：它不是 Adam 的近似简化版，而是**精确复现"矩估计每一步都被重置为 0"这一假设下 Adam 该做的更新**，代价是失去了 Adam 最有价值的"跨步矩估计带来的自适应学习率"能力，换来零优化器状态显存。
+
+`load_state_dict` 里 `state_dict["state"] = {}`（清空 state）与 `_disable_distributed_optimizer_state_initialization`（把 Megatron `DistributedOptimizer.init_state_fn` 替成空函数）配合，确保 Megatron 分布式优化器框架**从不尝试为这个优化器分配矩状态的存储空间**——如果不做这一步，即使用了 `StatelessAdam`，Megatron 外层框架仍会按标准 Adam 的假设预分配状态张量，显存节省就落空了。
+
 ---
 
 ## 2. 复用 Megatron 的模型构建
@@ -106,7 +154,7 @@ slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Mega
 
 ## 8. 小结
 
-> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）与 Megatron-Bridge 内部（AutoBridge/CONFIG_MAPPING/ParamMapping）的实现细节见 [11_megatron_and_bridge_internals.md](11_megatron_and_bridge_internals.md)。
+> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）见 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)，Megatron-Bridge 内部（AutoBridge/CONFIG_MAPPING/ParamMapping）见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 训练 actor = Megatron 原生 `get_model/optimizer` + RL 所需的 ref/old/teacher 多 tag 管理；
 - bridge 模式让 HF 新模型 day-0 可训；`megatron_to_hf` 让每步权重同步可转；

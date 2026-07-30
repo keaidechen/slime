@@ -190,6 +190,42 @@ DataSource (abc)                     data_source.py:17-46
 
 ---
 
+## 5.5 深入拆解：`Sample.append_response_tokens` ——为什么它是整条 rollout 链路里最"婆婆妈妈"的函数
+
+`slime/utils/types.py:253-314` 是 `Sample` 类里逻辑最密的方法，因为它要同时维护 **5 组必须始终对齐的并行数组**：`tokens`、`loss_mask`、`rollout_log_probs`、`rollout_top_p_token_ids/offsets`（ragged）、`rollout_routed_experts`。凡是"多轮工具调用/agent 场景"下逐段拼接响应（模型输出一段、工具返回一段、模型再输出一段……），都要走这个函数，而不是手写 `sample.tokens += xxx`。
+
+**核心设计：`trainable` 参数把"模型生成的 token"和"环境/工具塞进来的 token"区分开**：
+
+```python
+if tokens and trainable and log_probs is None:
+    raise ValueError("trainable response tokens require rollout log probabilities.")   # 模型 token 必须带 logprob，否则后续 loss 计算无源可依
+if tokens and not trainable:
+    if log_probs is not None:
+        raise ValueError("non-trainable response tokens should not pass rollout log probabilities.")  # 工具 token 不该有 logprob
+    log_probs = [0.0] * len(tokens)   # 用 0 占位，保证数组长度对齐；真正是否算 loss 靠 loss_mask=0 而不是这个 0
+```
+
+`loss_mask` 的追加逻辑很关键：`self.loss_mask += [1 if trainable else 0] * len(tokens)`——**工具返回的文本会被塞进 `tokens`（模型需要"看到"工具结果才能继续推理），但对应位置的 `loss_mask` 是 0**，训练时这些 token 只贡献 context（参与 attention），不贡献梯度。这就是"Agentic RL 中如何把多轮工具调用拼成单条训练序列"的标准答案——不是过滤掉工具文本，而是保留它但屏蔽其 loss。
+
+**top-p ragged 数组为什么要用 `offsets` 而不是定长数组**：SGLang 返回的"每个生成 token 对应的 top-p 候选集合"，候选数量因 token 而异（有的 token 分布集中只需 1-2 个候选，有的分布平坦需要几十个）。`rollout_top_p_token_ids` 是所有 token 候选集拼接后的一维数组，`rollout_top_p_token_offsets` 长度恒为 `response_length+1`，第 `i` 个 token 的候选区间是 `token_ids[offsets[i]:offsets[i+1]]`（经典 CSR/ragged tensor 表示法，节省存储且天然支持变长）。`_merge_rollout_top_p_token_data`（types.py:39-51）在续写（partial rollout）时把新一段的 offsets **整体平移 `base_offset`** 后拼到旧数组尾部——这是"分段生成如何合并成一条完整轨迹的 ragged 元数据"的具体实现，比直接理解"续写"更底层一层。
+
+`_apply_meta_info` 里 `rollout_routed_experts` 的 reshape（types.py:361-376）是另一个"不常见但关键"的地方：SGLang 侧只返回**从某个起点 `routed_experts_start_len` 开始新增**的路由记录（增量传输，不重复传已确认的部分），`expected_rows = len(self.tokens) - 1 - routed_experts_start_len`（`-1` 是因为路由发生在"预测下一个 token"时，最后一个 token 之后没有下一步路由）；reshape 成 `(rows, num_layers, moe_router_topk)` 后，若 `routed_experts_start_len==0`（首次写入）直接赋值，否则**保留旧数组的前 `routed_experts_start_len` 行、丢弃可能被重新计算的尾部、拼上新数据**——这是为 MoE 模型做 routing replay（训练时强制走 rollout 时同样的专家路径，避免因权重更新导致路由漂移带来的偏差）设计的增量式校验+拼接协议。
+
+## 5.6 `Sample` 字段速查（按用途分组）
+
+| 分组 | 字段 | 说明 |
+|---|---|---|
+| 身份 | `group_index`, `index`, `rollout_id` | `rollout_id` 默认回退为 `index`；agent 拆分单次 rollout 为多训练样本时，同一 rollout 产生的样本共享 `rollout_id`，loss 归一化按 rollout 而非样本计数，避免"一次探索拆成 5 条训练样本导致它被过采样 5 倍" |
+| 输入 | `prompt`, `tokens`, `multimodal_inputs`, `multimodal_train_inputs`, `multimodal_train_input_id` | `multimodal_train_inputs` 是 processor 处理后可直接喂模型的张量（如 `pixel_values`），续写时靠它避免重复跑视觉预处理 |
+| 输出 | `response`, `response_length`, `loss_mask`, `rollout_log_probs`, `rollout_top_p_token_ids/offsets`, `rollout_routed_experts` | 见上 |
+| 评价 | `label`, `reward`, `remove_sample` | `reward` 可为标量或 dict（多目标奖励，靠 `--reward-key` 选取），`remove_sample=True` 会在后处理阶段被整条丢弃 |
+| 状态 | `status`（PENDING/COMPLETED/TRUNCATED/ABORTED/FAILED）, `weight_versions` | `FAILED` 专指"工具报错/解析失败等可恢复错误"，区别于 `ABORTED`（被主动打断）——上层重试逻辑据此决定是否重投 |
+| 蒸馏/回放 | `teacher_log_probs` | OPD（on-policy distillation）专用，05 篇 |
+| 调试/路由 | `metadata`, `train_metadata`, `session_id`, `generate_function_path`, `custom_rm_path` | `session_id` 用于 router 的一致性哈希策略（同一会话尽量落在同一引擎，提高 KV cache 复用率），`generate_function_path`/`custom_rm_path` 支持按样本级别覆盖生成函数/奖励函数（比全局参数更细粒度） |
+| 性能统计 | `spec_info`, `prefix_cache_info`, `non_generation_time` | `SpecInfo` 统计投机采样接受率/接受长度；`PrefixCacheInfo` 统计 prefix cache 命中率；`non_generation_time` 记录 agent 场景下"等工具/等环境"占用的墙钟时间，与"生成时间"分开统计，避免 agentic 场景吞吐指标被工具延迟污染 |
+
+---
+
 ## 6. 小结
 
 - `Sample` 用"扁平 token + loss_mask + 状态机 + 严格不变量"统一了单轮、多轮、多模态、续写一切轨迹；

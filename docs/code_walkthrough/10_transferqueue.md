@@ -1,4 +1,4 @@
-# 09 TransferQueue：RL 系统的独立数据平面
+# 10 TransferQueue：RL 系统的独立数据平面
 
 > 对应综述（`00_rl_infra_survey.md`）§3.10 与趋势 #2。
 > 本篇基于你补充到仓库根目录的第三方源码 `TransferQueue/`（Ascend 开源，论文 *AsyncFlow: An Asynchronous Streaming RL Framework*，arXiv 2507.01663）。它不是 slime 的一部分，而是"数据流中间件"这一新兴子领域的代表实现——值得单独精读。
@@ -153,6 +153,39 @@ class BaseSampler(ABC):
 
 上层封装：`StreamingDataset`（`dataloader/streaming_dataset.py:37`）是 torch `IterableDataset`，`__iter__` 里循环"查就绪 → sampler 选样 → 拉数据 → 标记消费"；`StreamingDataLoader`（streaming_dataloader.py:37）再包一层标准 DataLoader 接口（`reset/step/get_buffer`）。训练侧因此可以像写普通 PyTorch 训练一样消费异步产生的 RL 数据。
 
+### 7.1 深入拆解：`GRPOGroupNSampler` 怎么判断"整组就绪"（`sampler/grpo_group_n_sampler.py`）
+
+它的假设很朴素但很关键：**同一个 prompt 的 N 个采样在写入时必须占用连续的 `global_index`**（例如 prompt 0 的 4 个样本占 `[0,1,2,3]`，prompt 1 占 `[4,5,6,7]`）——这样"判断一组是否完整"就退化成"判断一段连续 N 个整数是否都在 `ready_indexes` 里"，不需要额外维护"哪个样本属于哪个 prompt"的映射表。
+
+```python
+sorted_ready_indexes = sorted(ready_indexes)
+i = 0
+while i <= len(sorted_ready_indexes) - n and found_groups < required_groups:
+    potential_group = sorted_ready_indexes[i : i + n]
+    is_consecutive = all(potential_group[j+1] - potential_group[j] == 1 for j in range(n-1))
+    if is_consecutive:
+        complete_group_indices.extend(potential_group)
+        found_groups += 1
+        i += n              # 命中一组，跳过整组继续扫
+    else:
+        i += 1              # 没命中，只前进一格（因为落单的样本可能是下一组的起点）
+```
+
+**一个数字例子**：`n_samples_per_prompt=3`，某一时刻 `ready_indexes = [0, 1, 3, 4, 5, 6, 7, 9, 10, 11]`（表示 prompt 0 只完成了 2/3 个采样、prompt 1（3,4,5）和 prompt 2（6,7,？）..实际上按 3 个一组来看：`[0,1]` 不成组，`[3,4,5]` 连续成组，`[6,7]` 不连续于后续的 9 所以不成组，`[9,10,11]` 连续成组）。扫描过程：`i=0` 看 `[0,1,3]`，`1→3` 差 2 不连续，`i+=1`；`i=1` 看 `[1,3,4]`，不连续，`i+=1`；`i=2` 看 `[3,4,5]`，连续！收进结果，`found_groups=1`，`i+=3=5`；`i=5` 看 `[6,7,9]`，`7→9` 差 2 不连续，`i+=1`；`i=6` 看 `[7,9,10]`，不连续，`i+=1`；`i=7` 看 `[9,10,11]`，连续！`found_groups=2`，命中 `required_groups`（若 `batch_size=6`）。最终 `sampled_indexes=[3,4,5,9,10,11]`——**恰好跳过了不完整的 prompt 0 和"看似有希望但实际不连续"的 6/7**，这与代码自带的 docstring 示例完全一致。
+
+**`_states` 缓存的意义**（141-191 行）：以 `(partition_id, task_name, dp_rank, batch_index)` 为 key 缓存采样结果——**同一个 `(dp_rank, batch_index)` 组合永远返回相同的样本集合**，即使底层 `ready_indexes` 后续发生了变化（比如更多样本就绪了）。这解决了分布式训练里的一个隐蔽问题：如果不缓存，某个 rank 因为网络延迟晚一点调用 `sample()`，看到的 `ready_indexes` 集合与其它 rank 不同，可能采出不同的样本组合，导致同一 DP 组的不同 rank 训练不同的数据（破坏 DP 的"同步梯度平均"假设）——缓存把"这一批具体是哪些样本"在第一次决定后就冻结下来，后续任何 rank/重试再问同一个 `batch_index` 都拿到完全一致的答案。
+
+### 7.2 一个完整数字例子：8 个 prompt × 4 采样的 GRPO 端到端数据流
+
+设 `n_samples_per_prompt=4`，一轮 rollout 产出 8 个 prompt（`global_index` 0-31，prompt k 占 `[4k, 4k+3]`）：
+
+1. **写入**：rollout worker 陆续调用 `client.async_put`，每完成一条样本的 `input_ids/response/reward` 就写一次——由于生成是并发的，完成顺序可能是 `prompt3-sample1, prompt0-sample2, prompt3-sample0, ...` 完全乱序，但每次 `async_put` 只影响自己那一行的 `production_status`，不需要等其它样本；
+2. **controller 账本**：某一时刻 `production_status` 矩阵里，index `[12,13,14,15]`（prompt 3）四行的 `reward` 列全为 1，而 index `[0,1,2,3]`（prompt 0）还差一个——`scan_data_status` 能立刻算出"当前哪些样本的 `{input_ids, response, reward}` 三字段全齐"，返回 `ready_indexes` 大约是 `[4,5,...,31]`（减去 prompt 0 缺的那个）；
+3. **`GRPOGroupNSampler.sample(ready_indexes, batch_size=16, ...)`**：`required_groups=4`，扫描连续段，跳过不完整的 prompt 0，从 prompt 1 开始收集直到凑够 4 组（16 条），返回 `sampled_indexes`（例如 prompt 1/2/3/4 各 4 条）；
+4. **`get_data`**：训练客户端拿这 16 个 index 对应的 `BatchMeta`，直连存储后端并发拉取张量，本地组装成 `TensorDict`（不经过 controller，避免这一步成为瓶颈）；
+5. **训练侧消费**：GRPO advantage 计算天然要求"同一 prompt 的样本在同一批里"（组内做归一化），这正是 `GRPOGroupNSampler` 保证"要么整组都在，要么整组都不在"的原因——如果允许部分组样本混进批次，advantage 的组统计量就会算错；
+6. **prompt 0 怎么办**：它会留在 `ready_indexes` 之外，等第 4 个样本的 reward 写完之后，下一次 `sample()` 调用会把它纳入下一批（或本批次的"补齐"逻辑，取决于调用方的重试策略）——这与 slime 里 partial rollout"半成品留在 buffer 里等下一轮"是同一个思想的不同实现（03 篇 §3）。
+
 ---
 
 ## 8. 可插拔存储后端
@@ -185,7 +218,7 @@ README 中还给出了 roadmap 信号：RAY 原生 RDT 支持（已完成）、R
 
 ## 10. 与 slime 数据流的对照
 
-slime 没有采用 TransferQueue，两者代表数据流设计的两个点：
+slime 没有采用 TransferQueue，两者代表数据流设计的两个点。**提醒**：本篇属于"对比参考"性质——TransferQueue 不是 slime 依赖的组件，读者可以按需查阅，不属于理解 slime 自身架构的必读路径（真正必读的是 01-09 与 11-13）。
 
 | 维度 | slime | TransferQueue 系（verl/ROLL…） |
 |---|---|---|

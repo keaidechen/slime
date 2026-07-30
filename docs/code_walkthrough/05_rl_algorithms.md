@@ -49,6 +49,33 @@ train_one_step
 
 这段代码注释里有句大实话：`# TODO: this is super ugly... do better abstraction.`（loss.py:126）——CP 与 packing/loss 的笛卡尔积是 RL infra 里最易错的区域之一，读代码时抓住"全局位置 ↔ 本地位置"的换算即可。
 
+### 2.4 深入拆解：`_VocabParallelLogProbEntropy`（`slime/utils/ppo_utils.py:187-316`）——TP 下如何"跨卡算 softmax 却只传一个标量"
+
+这是全代码库里最需要"手推公式"才能看懂的一个自定义 autograd Function。背景：TP 把词表 `V` 切成 `tp_size` 份，每个 rank 只持有 `logits[:, rank*V/tp : (rank+1)*V/tp]`，而 `log_softmax(logits)[target] = logits[target] - logsumexp(logits)` 里的 `logsumexp` 需要**全词表**才能算对——直接 all-gather 整个 `[T, V]` logits 到每个 rank 会爆显存（`V` 常常是几万到十几万），所以要设计一个"只传必要的几个标量、大头计算量分布式做"的算法。
+
+**forward 的三段式**（对应 Megatron 原生 `vocab_parallel_cross_entropy` 的思路，但这里额外支持 top-p 掩码和熵）：
+
+1. **判断 target 是否在本 rank 词表范围内**（`target_mask`，205-207 行）：`target_mask=True` 表示这个 token 的正确答案不在我这个 rank 的词表分片里，此时先把 `masked_target_1d` 强行置 0（避免后面 gather 越界），最后再用 `masked_fill_(target_mask, 0.0)` 把这些位置的贡献清零；
+2. **`vocab_parallel_softmax` 闸门函数**（210-229 行）：先 `all_reduce(MAX)` 拿全局最大值做数值稳定（跨 rank 的 max 才是真正的全局 max），减完之后 `exp_()`（就地操作省显存）算局部 `sum_exp_logits`，再 `all_reduce(SUM)` 拿到全局分母——**这里只通信了两个标量（每个 token 一个 max 值 + 一个 sum 值），而不是整个 logits**，这是"分布式 logsumexp"的标准写法：`logsumexp(x) = max(x) + log(sum(exp(x-max(x))))`，max 和 sum 都可以先局部算再跨 rank 归约；
+3. **`predicted_logits` 的全局归约**（273-274 行）：每个 token 的正确答案只落在某一个 rank 上，其余 rank 该值已被清零，`all_reduce(SUM)` 后自然只有那个 rank 的贡献生效——**这是一种"用 all_reduce 实现跨 rank 的 gather"的技巧**：既然只有一个 rank 非零，sum 就等价于 gather。
+
+**熵的计算复用同一套 softmax**：`entropy = logits_max + log(sum_exp) - sum(softmax * logits)`（249 行），这是熵 `H = -Σp·log(p)` 展开后代入 `log(p) = logit - logsumexp` 的等价式，好处是不需要再单独算一次 `log(softmax)`。
+
+**backward 为什么要 `ctx.mark_non_differentiable(entropy)`**（278 行）：当 `entropy_coef=0`（不参与 loss）时，熵只是用来打日志的指标，`with_entropy_grad=False`，此时**故意不保存计算熵梯度所需的 `[T,V]` 大张量**（`saved_entropy_softmax` 等在 283-287 行被替换成 `new_empty((0,))` 空张量）——这是显式的"反向传播成本裁剪"：一个 `[T,V]` 的 float32 张量在 `T=4096, V=150000` 时就是 2.4GB，如果熵不参与梯度就不该白白占着显存等 backward。
+
+**一个数字直觉**：4 卡 TP，词表 15 万，某 rank 持有 `[T, 37500]` 的 logits 分片；对每个 token，通信量是 2 次 all_reduce（各 1 个标量/token）+ 1 次 all_reduce（predicted_logits，1 个标量/token）= 3 个标量/token 的跨卡通信，而不是把 37500 维的分片传来传去——这正是为什么 TP 下算 logprob 不会成为通信瓶颈。
+
+### 2.5 zigzag CP 的一个切分例子
+
+假设一条序列长度 8（token 0-7），`CP=2`。zigzag（Ring Attention 的标准切法）不是简单地"前 4 个给 rank0，后 4 个给 rank1"（这样 rank0 全是"简单"的早期 token、rank1 全是"难"的后期 token，causal attention 下两个 rank 的计算量严重不均衡），而是"掐头去尾配对"：
+
+```
+全局位置:   0  1  2  3  4  5  6  7
+zigzag 分配: 0  1  1  0  0  1  1  0    (示意：rank0 拿 {0,3,4,7} 之类的对称配对，具体实现是"前一半"与"后一半"分别对半镶嵌)
+```
+
+（slime 实际实现细节见 `get_logits_and_tokens_offset_with_cp`，核心思想是每个 rank 拿到"一段从序列头部、一段从序列尾部对称位置"的 token，使得每个 rank 的 causal attention 计算量基本相等）。取 response 部分时必须知道这种"跳跃式"映射关系，才能把两个 rank 各自算出的 logprob 正确拼回原始顺序——这也是为什么 `allgather_cp` 模式提供了一个"先拼成正常顺序、算完再拆回 zigzag"的旁路（用一次通信换取代码简单性，用于调试或不关心额外通信开销的场景）。
+
 ---
 
 ## 3. 地基二：advantage 的构造
@@ -145,6 +172,20 @@ MiniMax-M1 的做法：比率 clamp 后 **stop-gradient** 当权重，梯度从 
 ### 4.4 OPSM：序列级拒采
 
 `compute_opsm_mask`（ppo_utils.py:54-92）：**负 advantage 且序列 KL 超过 `opsm_delta` 的序列整段 mask 掉**——策略已明显偏离旧策略的"坏样本"不再贡献梯度，是 off-policy 防护的另一种形态。
+
+### 4.5 完整数字例子：一组 GRPO 样本从 reward 走到 policy loss
+
+设一个 prompt 采样 8 条（`n_samples_per_prompt=8`），规则奖励 `reward = [1,1,0,0,1,0,1,1]`（1=答对，0=答错），`kl_coef=0`（不做 KL 惩罚，纯 GRPO）：
+
+1. **组内归一化**（发生在 rollout 侧的 reward 后处理，而非 `loss.py`）：`mean=0.625, std≈0.484`，归一化后 `reward_norm ≈ [0.775, 0.775, -1.29, -1.29, 0.775, -1.29, 0.775, 0.775]`——这一步是"GRPO 省 critic"的关键：不需要学一个 value 网络，直接靠组内统计量得到一个零均值的相对优势信号；
+2. **广播到 token**（`get_grpo_returns`）：每条样本内所有 response token 的 advantage 都等于该样本的 `reward_norm`（例如样本 0 的 5 个 response token 全部 advantage=0.775）；
+3. **`ppo_kl = old_log_probs - log_probs`**：假设样本 0 某个 token 训练时算出 `log_probs=-0.5`，生成时记录的 `old_log_probs=-0.7`（同一份权重理论上应该相等，但因为 packing/精度/若干步内已更新过参数等原因会有细微差异），`ppo_kl = -0.7-(-0.5) = -0.2`；
+4. **`ratio = exp(-ppo_kl) = exp(0.2) ≈ 1.221`**：新策略比旧策略更倾向于生成这个 token（比值 >1）；
+5. **PPO-clip**（设 `eps_clip=0.2, eps_clip_high=0.28`，DAPO 式 clip-higher）：`ratio` 落在 `[0.8, 1.28]` 内未被裁剪，`pg_loss = -min(ratio·A, clip(ratio)·A) = -1.221 × 0.775 ≈ -0.946`（因为 advantage 为正，未裁剪分支占优，loss 取更小的负值即更大的"损失下降量"，梯度会推动模型进一步提高这个 token 的概率）；
+6. **样本 2**（答错，advantage=-1.29）：若其某 token 的 `ratio≈1.22` 同样未被裁剪，`pg_loss = -1.22 × (-1.29) ≈ 1.574`（正的 loss，梯度会*降低*这个 token 的概率——错误答案里出现的 token 被抑制）；
+7. **归一化求和**（§6）：8 条样本的所有 token loss 按"每条样本内部先按 token 数取平均，再对样本取平均"（或反之，取决于 `--loss-agg-mode`）汇总成一个标量，反传给 Megatron 做梯度累积。
+
+**直觉**：GRPO 把"这条样本比组内平均水平好还是差"变成一个恒定的乘数，PPO-clip 再把"这一步参数更新是不是走得太快"这件事通过 ratio 裁剪限制住——两者一个负责"往哪个方向走"，一个负责"这一步别走太远"。
 
 ---
 

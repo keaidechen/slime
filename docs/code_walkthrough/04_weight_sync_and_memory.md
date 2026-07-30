@@ -157,9 +157,55 @@
 
 ---
 
+## 5.5 深入拆解：异构 PD 分离下 NCCL 组的 rank 分配
+
+`connect_rollout_engines_from_distributed`（`update_weight/update_weight_from_distributed.py:268-310`）建组时，**训练侧只有 rank 0（`_is_pp_src_rank` 为真的那些 PP stage 的 DP=TP=0 rank）参与这个 NCCL 组**，其余训练 rank 完全不知道这个组的存在——权重广播是"训练侧一个代表 + 全部推理引擎"的星型拓扑，不是"全部训练 rank + 全部引擎"。
+
+```python
+if engine_gpu_counts is None:
+    engine_gpu_counts = [args.rollout_num_gpus_per_engine] * len(rollout_engines)  # 同构默认：每引擎 TP 大小一致
+world_size = sum(engine_gpu_counts) + 1        # +1 = 训练侧那个代表
+cumulative = [0]
+for c in engine_gpu_counts:
+    cumulative.append(cumulative[-1] + c)      # 前缀和，用于算每个引擎在组内的起始 rank
+refs = [
+    engine.init_weights_update_group.remote(
+        rank_offset=cumulative[i] + 1,          # engine i 占据 [cumulative[i]+1, cumulative[i+1]] 这一段 rank
+        world_size=world_size, group_name=group_name, backend="nccl",
+    ) for i, engine in enumerate(rollout_engines)
+]
+model_update_groups = init_process_group(..., rank=0, world_size=world_size)  # 训练代表自己是 rank 0
+```
+
+**具体数字例子**：PD 分离场景，2 个 prefill 引擎（各 TP=2）+ 1 个 decode 引擎（TP=4），`rollout_engines = [prefill0, prefill1, decode0]`，`engine_gpu_counts = [2, 2, 4]`：
+
+```
+cumulative = [0, 2, 4, 8]
+world_size = 2+2+4+1 = 9
+训练代表 rank : 0
+prefill0 占据 rank : [1, 2]     (cumulative[0]+1=1 起，共2个)
+prefill1 占据 rank : [3, 4]     (cumulative[1]+1=3 起，共2个)
+decode0  占据 rank : [5, 6,7,8] (cumulative[2]+1=5 起，共4个)
+```
+
+每个引擎内部再各自决定组内 rank 到"自己 TP rank"的映射（各引擎自己的 `init_weights_update_group` 实现，11 篇有对应服务端解读）。这段代码同时说明了**为什么改变引擎数量/TP 配置必须重建整个 NCCL 组**（`disconnect_rollout_engines_from_distributed` 先销毁旧组）——rank 分配完全依赖 `engine_gpu_counts` 这个静态列表，一旦引擎拓扑变化，之前分配的 rank 全部失效，容错重连（09 篇）本质上就是"销毁重建"这一套逻辑的重复调用。
+
+## 5.6 一个完整的多并行维度广播例子
+
+设训练侧 `TP=4, PP=2, EP=1, DP=2`（共 16 卡），rollout 侧 2 个同构引擎各 `TP=2`（共 4 卡）：
+
+1. **PP 维度**：训练侧有 2 个 PP stage，每个 stage 只负责模型的一部分层，所以**每个 PP stage 都要单独建一个 NCCL 组**并广播自己那部分层——`self._group_name = f"slime-pp_{pp_rank}"`（代码 80 行），即整个流程要建 `slime-pp_0` 和 `slime-pp_1` 两个独立的组，分两次广播才能把完整模型送到引擎侧；
+2. **TP 维度**：每个 PP stage 内 `_is_pp_src_rank` 要求 `DP=0 且 TP=0`，即每个 stage 只有 1 个训练 rank 作为代表——但代表只是"发起广播的那个进程"，它发出去的权重必须是**先在 TP 组内 all-gather 完整（把 4 份 TP 切片拼成完整 tensor）之后**的完整权重（04 篇正文 §2 提到的"AllGather 到 rank0"步骤），否则引擎侧收到的就是不完整的切片；
+3. **DP 维度**：`DP=2` 意味着同一份权重训练时被复制了两份（两组 TP×PP 网格各自算梯度、优化器更新后理论上权重相同），选 `DP rank==0` 的那一份广播即可，另一份 DP 组完全不参与传输；
+4. **引擎侧**：`world_size = 4(prefill/decode GPU) + 1 = 5`，两次广播（对应 2 个 PP stage）各自的组大小都是 5，只是 payload 不同（stage 0 广播 embedding+前半层，stage 1 广播后半层+lm_head）。
+
+**直觉总结**：NCCL 广播组的数量 = PP stage 数（因为模型按层水平切开，每段要单独发）；每次广播的"发送方"永远是"该 PP stage 内 TP=0、DP=0 的那一个 rank"（先经 TP all-gather 拿到完整层权重）；EP（专家并行）的权重需要先在 EP 组内 all-gather 出全部专家再发（`_ep_gather_and_convert`），否则只发得出本地持有的那几个专家。
+
+---
+
 ## 6. 小结
 
-> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [10_engine_internals_sglang.md](10_engine_internals_sglang.md)；HF 转换的通用实现见 [11_megatron_and_bridge_internals.md](11_megatron_and_bridge_internals.md) 第二部分。
+> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)；HF 转换的通用实现见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 权重同步 = 分片 gather（TP/EP）→ HF 转换 → 分桶 → NCCL/IPC/磁盘传输 → 引擎落盘或广播加载；pause/flush/continue 保证一致性，全局锁防 NCCL 死锁；
 - 异构引擎（PD 分离）、新引擎热加入（容错）、版本对账都被一等支持；
