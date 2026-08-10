@@ -1,4 +1,4 @@
-# 03. KV Cache、RadixAttention 与引用锁
+# 2.2 KV Cache、RadixAttention 与引用锁
 
 ## 1. 为什么 KV cache 是 serving 的中心
 
