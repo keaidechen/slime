@@ -1,4 +1,4 @@
-# 00. Infra 工程师的 Megatron 学习地图
+# Infra 工程师的 Megatron 学习地图
 
 ## 1. 先建立正确边界
 

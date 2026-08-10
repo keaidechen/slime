@@ -1,4 +1,4 @@
-# 04. Pipeline Parallel：1F1B、交错调度与 P2P
+# Pipeline Parallel：1F1B、交错调度与 P2P
 
 ## 1. schedule 选择
 

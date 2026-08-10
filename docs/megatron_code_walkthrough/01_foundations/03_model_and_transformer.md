@@ -1,4 +1,4 @@
-# 02. 模型、Transformer 组件与 ModuleSpec
+# 模型、Transformer 组件与 ModuleSpec
 
 ## 1. 从 `GPTModel` 看组合关系
 

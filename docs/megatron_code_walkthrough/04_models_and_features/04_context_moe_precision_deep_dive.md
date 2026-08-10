@@ -1,4 +1,4 @@
-# 06. Context Parallel、MoE/EP 与低精度训练
+# Context Parallel、MoE/EP 与低精度训练深读
 
 ## 1. Context Parallel（CP）
 

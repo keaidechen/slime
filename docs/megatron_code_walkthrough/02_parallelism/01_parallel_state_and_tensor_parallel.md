@@ -1,4 +1,4 @@
-# 03. Rank 网格、进程组、Tensor/Sequence Parallel
+# Rank 网格、进程组、Tensor/Sequence Parallel
 
 ## 1. 先画 rank 网格
 

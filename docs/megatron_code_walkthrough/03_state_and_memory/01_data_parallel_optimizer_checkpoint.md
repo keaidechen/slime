@@ -1,4 +1,4 @@
-# 05. DDP、分布式 Optimizer 与 Checkpoint
+# DDP、分布式 Optimizer 与 Checkpoint
 
 ## 1. Megatron DDP 不只是 PyTorch DDP 包装
 
