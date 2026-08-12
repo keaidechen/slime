@@ -1,78 +1,223 @@
-# 13 训练侧内部实现：Megatron-Bridge 篇
+# 13 训练侧内部实现：slime 内建 HF↔Megatron 权重转换
 
-> 衔接 [06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)。
-> 12 篇讲 Megatron-LM 这个训练执行引擎本身；本篇讲 slime `--megatron-to-hf-mode bridge` 依赖的转换/建模层 Megatron-Bridge——它负责"HF 格式 ↔ Megatron 格式"的双向翻译，是与 Megatron-LM 完全不同的一套代码（源码在 `Megatron-Bridge/src/megatron/bridge/`），值得单独理解其设计。
-
----
-
-## 1. 为什么需要一个独立的 Bridge 层
-
-Megatron 原生只认自己的 `TransformerConfig` + 内部命名（`self_attention.linear_qkv` 等），HuggingFace 生态的模型全部是 `AutoModelForCausalLM` + `config.json` + safetensors，两套命名/切分方式完全不同（HF 的 `q_proj/k_proj/v_proj` 三个独立权重 vs Megatron 融合成一个 `linear_qkv`；HF 无并行概念 vs Megatron 权重按 TP/PP/EP 切片存储）。RL 训练又需要频繁在两种格式间转换（读 HF 预训练权重初始化、导出 HF 格式做评测/部署），转换逻辑如果散落在各处会随模型族数量爆炸——Megatron-Bridge 把这件事收敛成一套**注册表驱动**的通用框架，一次实现新模型族的映射规则，之后加载/导出全自动复用。
-
-## 2. 三层职责分离
-
-`models/conversion/model_bridge.py:352-361` 的注释把架构讲得很清楚：
-
-| 层 | 类 | 职责 |
-|---|---|---|
-| 编排 | `MegatronModelBridge`（model_bridge.py） | 建转换任务、进度、错误处理 |
-| 映射表 | `MegatronMappingRegistry`（mapping_registry.py） | 参数名映射，通配符匹配（`*.layers.{i}.`） |
-| 张量变换 | `MegatronParamMapping`（param_mapping.py:56） | 真正做拼接/拆分 + TP/PP/EP 分布式通信 |
-
-这个三层拆分本身是一个值得学习的设计模式：**"知道转换什么"（映射表）与"知道怎么转换"（张量变换）与"负责流程调度"（编排）分离**——新增一个模型族只需要写一份映射表 + 复用已有的张量变换类（QKV融合、gate_up融合等变换是通用的，绝大多数 transformer 模型族都能复用），而不需要重新实现整套转换逻辑。
-
-## 3. `AutoBridge`（auto_bridge.py:229）
-
-**`from_hf_pretrained`（auto_bridge.py:459 起）**：
-
-1. **只读 config**（508 行）：线程安全地读 `config.json`，不下载权重；
-2. **架构校验与路由**（`_validate_config`，1919-1995）：检查 `architectures` 以 `ForCausalLM` 等后缀结尾，解析出 dispatch key（优先 `auto_map` 类名），查注册表找到具体 bridge（如 `LlamaBridge/Qwen3Bridge/DeepseekV3Bridge/Glm4MoeBridge`——`models/` 下 55 个模型族 bridge 文件）；
-3. **懒加载权重**：权重**不立即读入内存**，`PreTrainedCausalLM` + `SafeTensorsStateSource`（`models/hf_pretrained/`）按需从 safetensors 分片流式读取——大模型转换的内存友好关键；
-4. 兼容处理：transformers 5.0+ 的 `rope_scaling` property 坑（512-526 行）。
-
-**`to_megatron_provider`（auto_bridge.py:1638-1714）**：HF config → Megatron provider 的翻译：
-
-- 核心是 **`CONFIG_MAPPING`**（model_bridge.py:437）：HF→Megatron 字段翻译表，例如
-  - `num_hidden_layers→num_layers`、`intermediate_size→ffn_hidden_size`、`num_key_value_heads→num_query_groups`、`tie_word_embeddings→share_embeddings_and_output_weights`；
-  - MoE：`num_local_experts/n_routed_experts→num_moe_experts`、`num_experts_per_tok→moe_router_topk`、`n_group→moe_router_num_groups`；
-  - MLA：`q_lora_rank/kv_lora_rank→qk_head_dim/qk_pos_emb_head_dim`；MTP：`num_nextn_predict_layers→mtp_num_layers`；
-- 产出 `GPTModelProvider`（MLA 模型为 `MLAModelProvider`）——它继承 `TransformerConfig` 全部字段，**同时也是一个 model provider**（可调用返回 GPTModel）。slime 的 `model_provider.py:95-107` 再往它身上拷 TP/PP/EP 等并行参数（06 篇 §3）；
-- 细节：`make_vocab_size_divisible_by`（找 ≤128 的 2 的幂整除词表，供 TP padding）、YaRN rope scaling 的 GPT/MLA 两种字段风格。
-
-**`load_hf_weights`（auto_bridge.py:573）/ `save_hf_weights`**：按映射表逐参数转换 + 分布式通信。`MegatronParamMapping` 的子类体系（param_mapping.py，20+ 种）覆盖了所有典型变换：
-
-- `ReplicatedMapping`（param_mapping.py:1266）：各 TP rank 复制；
-- **QKV 融合/拆分**：HF 的 `q/k/v_proj` ↔ Megatron 的 `linear_qkv`（拼接维度按 GQA 分组）；
-- **gate_up 融合/拆分**：`gate_proj+up_proj` ↔ `linear_fc1`；
-- **MoE**：HF 的 `experts.{i}.` ↔ Megatron 的 `experts.local_experts.{i}.`，并处理 EP 分片（每个 EP rank 只持有部分 expert）；
-- TP 分布式原语：转换时按本 rank 的 TP/PP/EP 位置只处理自己的分片（或做必要的 gather/scatter）。
-
-**量化**（`models/conversion/quantization_utils.py`）：FP8（ue8m0、blockwise scale）、MXFP4、INT4 的量化/反量化——与 slime 04 篇 §5 的 FP8 传输链衔接。
-
-### 3.1 深入拆解：一个具体例子——Qwen3 的 QKV 从 HF 到 Megatron 怎么拼
-
-假设 Qwen3（GQA，`num_attention_heads=32`，`num_key_value_heads=8`，`head_dim=128`）从 HF checkpoint 加载：HF 侧是三个独立张量 `q_proj.weight [4096, hidden]`、`k_proj.weight [1024, hidden]`、`v_proj.weight [1024, hidden]`（`1024 = 8×128`）。Megatron 的 `linear_qkv` 需要把它们**按 GQA 分组交织**拼成一个大张量——不是简单地 `cat([q, k, v])`，而是按"每个 KV head 对应 4 个 Q head（32/8=4）"的分组规律，把 `[q0,q1,q2,q3,k0,v0]`、`[q4,q5,q6,q7,k1,v1]`……这样交织排列（Megatron 内部实现按 GQA repeat 的方式组织 QKV 存储布局，以便前向时能连续切片取出各注意力头）。对应的 `QKVMapping` 类知道这套排列规则，加载时按此重排 HF 权重，导出时执行逆操作还原成 HF 的三个独立张量。
-
-如果模型是 `TP=2`，这个融合后的 `linear_qkv` 张量还要在**注意力头维度**上再切一刀分给两个 TP rank（每个 rank 拿 16 个 Q head + 4 个 KV head 对应的权重行），映射类需要同时处理"HF→Megatron 命名/融合"和"按当前 rank 的 TP 位置切片"两件事——这也是为什么"张量变换"要单独抽出一层类体系，而不是写成一次性脚本：融合逻辑和并行切片逻辑必须能够独立组合（同一套融合规则要能在 TP=1/2/4/8 等不同并行度下正确工作）。
-
-## 4. 与 slime 本地转换层的关系
-
-| | slime `megatron_to_hf/` | Megatron-Bridge |
-|---|---|---|
-| 覆盖 | 每模型族一个手写精简模块（deepseekv3/qwen3moe/glm4moe…） | 通用注册表 + 55 个模型 bridge |
-| 优化目标 | **每步权重同步**的热路径（与 gather/分桶流水线内联，04 篇 §2.2） | 正确性与覆盖率（启动加载/最终导出） |
-| 在 slime 中的角色 | NCCL/IPC 权重同步时的逐参数转换 | `--megatron-to-hf-mode bridge` 时的模型构建与 HF 权重加载 |
-
-即：**bridge 管"进"（HF→Megatron 建模型、加载权重），slime 本地层管"出"（Megatron→推理引擎的高频转换）**。两者在同一套命名约定上工作，互相验证。
-
-**为什么 slime 不干脆全用 Megatron-Bridge 做权重同步**：权重同步是**每一轮 rollout 都要执行一次**的热路径，追求的是"这一批已知模型族、已知并行配置下尽可能快"，可以把转换规则和分桶/NCCL 广播流水线写在一起做深度优化（04 篇）；而 Bridge 追求的是"任意 HF 模型、任意并行配置都要转换正确"，必然要为通用性付出一些性能开销（通配符匹配、注册表查找、更保守的通信模式）。两者的取舍方向不同，所以 slime 选择"启动/评测用 Bridge 保正确性，热路径用手写精简模块保性能"。
+> 衔接 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)、[06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)。
+>
+> **历史说明**：文件名为兼容旧链接而保留。slime v0.3.1 已删除 `Megatron-Bridge/`、`AutoBridge`、`--megatron-to-hf-mode bridge` 与 bridge iterator。本篇只解释当前仓库内的 `hf_to_megatron/`、`megatron_to_hf/` 和 `HfWeightIteratorDirect`。
 
 ---
 
-## 5. 小结
+## 1. 先回答三个最容易混淆的问题
 
-- Megatron-Bridge = 编排层（`MegatronModelBridge`）+ 通配符映射表（`MegatronMappingRegistry`）+ 20 余种张量变换/分布式原语（`MegatronParamMapping` 子类）；
-- `AutoBridge.from_hf_pretrained` 三步：只读 config → 架构路由到具体模型 bridge → 懒加载 safetensors，大模型转换不占内存；
-- `CONFIG_MAPPING` 是 HF↔Megatron 字段翻译的核心表，覆盖普通/MoE/MLA/MTP 各类字段；
-- QKV/gate_up 融合与 TP/PP/EP 切片是两件必须能独立组合的事，这是张量变换类体系存在的原因；
-- slime 的取舍清晰：训练栈全复用 Megatron-LM（12 篇），转换热路径自己写精简版，加载/导出交给 Bridge（本篇）。
+### 1.1 模型结构和 checkpoint 转换是一回事吗？
+
+不是。`model_provider.py` 先用 Megatron 参数、`--spec` 或 `--custom-model-provider-path` 构造出每个 rank 应持有的模型结构；随后 checkpoint loader 才把 HF 或 Megatron 权重填进去。
+
+因此支持一个新模型至少有两个独立任务：
+
+1. **结构支持**：Megatron 能构造正确的 layer、attention、MoE/MTP/MLA 结构；
+2. **权重支持**：slime 知道 HF 名称/布局与该 Megatron 结构之间如何互转。
+
+只增加 `_LOADERS` 不会让未知结构自动可训；只增加 custom provider 也不会让 HF safetensors 自动对齐。
+
+### 1.2 为什么既有 `hf_to_megatron/`，又有 `megatron_to_hf/`？
+
+两条路径的使用频率和数据所有权不同：
+
+| 方向 | 主要时机 | 输入形态 | 输出形态 |
+|---|---|---|---|
+| HF → Megatron | 启动时从 HF checkpoint 初始化 | CPU safetensors，HF 名称，完整逻辑 tensor | 当前 rank 的 Megatron parameter/buffer shard |
+| Megatron → HF | 每轮权重同步、磁盘发布、HF 导出 | PP/TP/EP 分散的 Megatron 参数或 actor CPU backup | 分桶的 `(hf_name, tensor)`，随后走 IPC/NCCL/磁盘 |
+
+前者“目标 parameter 已存在，读一个 HF tensor 后切给本 rank”；后者“来源散在多个 rank，必须先找齐并 gather，再拆成 HF tensor”。它们共享布局知识，但不是同一个控制流的正反播放。
+
+### 1.3 为什么不继续依赖通用 Bridge？
+
+从当前代码能得到的直接结论是：slime 选择了**显式模型族映射 + 单一 direct iterator**。收益是依赖面和热路径更小，失败位置清楚，也容易把分桶、量化、SGLang 命名兼容直接放进 RL 高频同步链路；代价是每个新模型族都必须在双向转换目录中显式适配并测试，不能承诺任意 HF 架构自动支持。
+
+---
+
+## 2. HF → Megatron：启动加载链路
+
+入口在 `slime/backends/megatron_utils/checkpoint.py::load_checkpoint`：
+
+```text
+load path
+  ├─ 有 latest_checkpointed_iteration.txt 或目录名是 iter_XXXXXXX
+  │    └─ Megatron 原生 load_checkpoint（含可用的训练状态）
+  └─ 其他非空目录
+       └─ _load_checkpoint_hf
+            └─ hf_to_megatron.load_hf_weights
+```
+
+HF 目录只有模型权重，没有 Megatron optimizer/RNG/iteration 语义。加载完成后 optimizer 若存在会 `reload_model_params()`，函数返回 iteration 0；参数校验也会设置 `no_load_optim=True`、`no_load_rng=True`、`finetune=True`。这就是为什么“能从 HF 起训”不等于“能从 HF 无损断点续训”。
+
+### 2.1 注册表只按 `config.model_type` 分发
+
+`hf_to_megatron/__init__.py` 的 `_LOADERS` 是显式字典：
+
+```python
+_LOADERS = {
+    "deepseek_v3": deepseek_hf_tensor,
+    "glm4": glm4_hf_tensor,
+    "qwen3": qwen_hf_tensor,
+    "qwen3_moe": qwen_moe_hf_tensor,
+    "qwen3_5": qwen3_5_hf_tensor,
+    # ...
+}
+```
+
+`supports_hf_weight_loading` 和 `load_hf_weights` 都使用 `AutoConfig.model_type` 查表。没有命中就抛异常，不会按名字相似度选择一个“可能能用”的 loader。这个 fail-fast 很重要：错误权重映射往往形状仍能对上，却会把语义不同的块静默装错。
+
+### 2.2 `SafetensorReader` 的 `maxsize=1` 到底缓存什么？
+
+reader 先读 `model.safetensors.index.json` 建立 `tensor name -> filename` 映射；无 index 时扫描所有 safetensors 的 key。这里很容易把两层缓存混淆：
+
+- `self._files[filename]` 保存每个已经访问过的 `safe_open` 对象，同一 shard 后续读取会复用它；
+- `get_tensor` 上的 `lru_cache(maxsize=1)` 缓存的是最近一次以 `name` 为 key 的**返回 tensor**，不是最近一个文件 handle；
+- 因此切换 shard 不会从 `self._files` 移除旧 handle，当前实现并没有把打开的 shard 数量限制为 1；
+- `safe_open` 使用 mmap/lazy access，避免 eager 地把所有 shard 内容装进 RAM。内存友好来自按 tensor 延迟读取，而不是“一次只开一个文件”。
+
+若 1-byte FP8 tensor 同时存在 `<name>_scale_inv`，reader 按 scale 的二维 shape 推出 128×128 block，先 pad、反量化成 BF16，再裁回原形状。
+
+### 2.3 从完整 HF tensor 到本 rank shard
+
+`load_model_hf_weights` 遍历当前 Megatron model 的 `named_params_and_buffers`。对每个目标参数：
+
+1. 模型族函数按 Megatron 参数名取出/合并 HF tensor；
+2. `_pad_vocab` 把 embedding/output layer 补到 `padded_vocab_size`；
+3. `shard_mcore_tensor` 读取目标 parameter 上的 `tensor_model_parallel`、`parallel_mode`、`partition_dim`、`partition_stride`；
+4. 普通参数按 TP rank 切，expert 参数按 expert-TP rank 切；
+5. 形状必须与本 rank parameter 完全相等，随后转 dtype/device 并 `copy_`。
+
+这里**不需要 PP scatter**：函数只遍历本 PP stage 实际构造出来的参数，因此每个 stage 自然只请求自己那部分层。
+
+---
+
+## 3. 一个可验证的 Qwen GQA/QKV 例子
+
+设 `num_attention_heads=32`、`num_key_value_heads=8`、`head_dim=128`、`hidden_size=4096`。HF 有：
+
+```text
+q_proj.weight: [4096, 4096]  # 32 * 128
+k_proj.weight: [1024, 4096]  #  8 * 128
+v_proj.weight: [1024, 4096]
+```
+
+Megatron 的 `linear_qkv.weight` 不是简单的 `[all Q][all K][all V]`。`merge_qkv` 先按 8 个 query group reshape：
+
+```text
+每组 = [4 个 Q head, 1 个 K head, 1 个 V head]
+     = [q0 q1 q2 q3 k0 v0]
+下一组 [q4 q5 q6 q7 k1 v1]
+...
+```
+
+具体代码等价于：
+
+```python
+q = q.reshape(num_groups, heads_per_group * head_dim, hidden)
+k = k.reshape(num_groups, head_dim, hidden)
+v = v.reshape(num_groups, head_dim, hidden)
+linear_qkv = torch.cat((q, k, v), dim=1).reshape(-1, hidden)
+```
+
+若目标 `linear_qkv` 是 TP column-parallel 参数，`shard_mcore_tensor` 再沿 `partition_dim` 把交织后的 tensor 切给对应 TP rank。顺序不能反：如果先把 HF 的 Q/K/V 各自朴素切 TP，再在不了解 GQA group 边界的情况下拼接，某些 rank 会拿到不配套的 KV group。
+
+反方向的 `megatron_to_hf/qwen2.py::convert_qwen2_to_hf` 做严格逆操作：把完整 `linear_qkv` reshape 成 `[num_query_groups, ?, head_dim, hidden]`，按 `[heads_per_group, 1, 1]` split，再分别 flatten 成 q/k/v。gate/up 也是同样思路：HF→Megatron 用 `cat` 合成 `linear_fc1`，Megatron→HF 用 `chunk(2)` 拆回两个名字。
+
+---
+
+## 4. Megatron → HF：两条分布式热路径
+
+两条路径共享 `megatron_to_hf.convert_to_hf` 和最终 HF 命名契约，但 gather 控制流并不相同：
+
+- `UpdateWeightFromTensor`、HF writer 与完整 disk sync 使用 `update_weight/hf_weight_iterator_direct.py::HfWeightIteratorDirect`；
+- 专用 `UpdateWeightFromDistributed` 自己流式 TP/EP gather；`UpdateWeightFromDiskDelta` 继承该实现。
+
+### 4.1 先建立全局 `ParamInfo`
+
+每个 rank 从本地参数收集：名称、dtype、shape、字节数、`src_rank` 和 TP 属性。随后：
+
+- PP 组 `all_gather_object` 交换各 stage 的参数表；
+- EP 组补齐各 expert 所在 rank；
+- virtual PP/MTP 可能让同名参数出现多次，选择最小 `src_rank` 作为确定来源；
+- 最后在 Gloo 全局组交换并断言每个 rank 看到的排序后名称/shape/dtype 一致。
+
+这个元数据对账回答了“为什么非源 rank 也能按同样顺序参加 collective”：所有 rank 先冻结出同一份参数计划，后续不会各自按本地 `named_parameters()` 顺序猜。
+
+### 4.2 分桶估算为何要乘 TP size？
+
+本地 `ParamInfo.size` 只是一个 TP shard 的字节数，但传给 SGLang 的通常是 all-gather 后的完整 tensor。`pack_param_info_buckets` 对普通参数乘 TP size，对 expert 参数乘 expert-TP size，再与 `--update-weight-buffer-size` 比较。否则 bucket 会系统性低估峰值显存和传输大小。
+
+单个参数本身超过上限时仍会独占一个超大 bucket；这个参数是软分桶边界，不会切开一个 parameter。
+
+### 4.3 `_get_megatron_full_params` 做了哪些通信？
+
+对一个 bucket：
+
+1. `src_rank` 从 actor backup 取 tensor，其他 rank 分配目标 shape 的空 tensor；
+2. PP broadcast 让需要参与后续步骤的 stage 看见参数；
+3. expert 参数在 EP 组 broadcast；
+4. 恢复 parameter 的 TP 属性；
+5. `all_gather_params_async` 批量重建完整 TP/ETP tensor。
+
+之后 `_convert_to_hf_named_tensors` 对每个完整 tensor 调 `convert_to_hf`。`convert_to_hf` 先去 `module.` wrapper、移除 vocab padding，再按 `model_name` 分派到模型族转换器，最后按 rollout 的 quantization config 做 FP8/int4/fp4 处理。
+
+### 4.4 direct 与 distributed 路径如何分工
+
+```text
+HfWeightIteratorDirect.get_hf_weight_chunks
+  ├─ UpdateWeightFromTensor -> colocated CUDA IPC / 混合拓扑中的远端 NCCL
+  └─ HF checkpoint writer   -> safetensors + index
+       ├─ UpdateWeightFromDisk -> engine reload
+       └─ save_hf_model_to_path -> HF export
+
+UpdateWeightFromDistributed
+  ├─ _iter_non_expert_chunks -> TP gather -> convert_to_hf -> NCCL
+  └─ _iter_expert_chunks     -> TP + EP gather -> convert_to_hf -> NCCL
+       └─ UpdateWeightFromDiskDelta 复用这些 chunk 做差量编码
+```
+
+direct 路径先形成全局 `ParamInfo` 计划，适合要统一处理 colocate、混合 engine 拓扑和 checkpoint writer 的场景。专用 distributed 路径则按当前参数流逐个/逐批 gather，只有 PP source rank 生成 HF chunk 并向 engine 广播；disk-delta 覆盖消费动作但保留这套 gather 顺序。
+
+所以“复用”的边界是 `convert_to_hf` 和 chunk 的 HF 命名格式，而不是所有 updater 都通过同一个 iterator。`HfWeightIteratorBase.create` 当前只返回 direct 实现，也没有旧的 bridge wrapper。
+
+---
+
+## 5. HF 导出并不是 `torch.save(state_dict)`
+
+`hf_checkpoint_saver.save_hf_model_direct_to_path` 还需要处理：
+
+1. 输出目录不能与 `--hf-checkpoint` 相同，避免清理旧权重时把模板目录毁掉；
+2. 先复制 config、tokenizer 等非权重资产；
+3. 多节点 writer 按 chunk 取模分工，每个 writer 仍观察所有 chunk，以维持某些跨 chunk 的有状态配对；
+4. 每个 shard 检查 HF tensor 名不能重复；
+5. 所有 rank `all_gather_object` 汇总 `weight_map/total_size/shard_files`；
+6. 确定性重命名为 `model-00001-of-XXXXX.safetensors`，rank 0 写 `model.safetensors.index.json`。
+
+因此磁盘全量同步和“导出一个可被 Transformers/SGLang 读取的 HF checkpoint”复用同一 writer 是合理的：两者都需要完整的 HF 目录语义，而不只是若干 tensor 文件。
+
+---
+
+## 6. 如何新增一个模型族
+
+最小检查清单：
+
+1. 在 `model_provider.py` 的原生参数/`--spec` 路径或自定义 provider 中保证 Megatron 结构正确；
+2. 在 `hf_to_megatron/` 实现 `get_hf_tensor(name, reader, config)`，并按 `config.model_type` 注册；
+3. 在 `megatron_to_hf/` 实现逆向命名和布局拆分，并加入 `_convert_to_hf_core` 分派；
+4. 覆盖 embedding/lm head tying、QKV bias、QK norm、gate-up、MoE experts/shared expert/router、MTP/MLA、vocab padding 等该模型实际存在的参数；
+5. 做 HF→Megatron→HF round-trip，检查名称集合、shape、dtype 和 tensor 值；
+6. 再做一次真实 weight sync，确认 SGLang 接收名称与导出名称一致。
+
+“shape 都对”不是充分条件。QKV/GQA、MoE expert 编号和 gate/up 次序即使装错也可能保持相同 shape，必须做数值 round-trip 或小模型 forward 对账。
+
+---
+
+## 7. 小结
+
+- slime 当前没有 Megatron-Bridge 运行路径；结构由 Megatron provider 构造，权重由 slime 内建转换器显式适配；
+- HF→Megatron 是启动加载：按目标 parameter 属性切本 rank shard；
+- Megatron→HF 是高频分布式路径：先统一 `ParamInfo`、跨 PP/EP/TP 收齐，再按模型族拆分和分桶；
+- `HfWeightIteratorDirect` 服务 colocate/hybrid tensor sync、完整磁盘同步和 HF 导出；专用 NCCL 与 disk-delta updater 使用自己的流式 gather；
+- 新模型必须分别验证结构、双向映射和 SGLang 命名契约，不能把通用文件格式支持误当成模型语义支持。

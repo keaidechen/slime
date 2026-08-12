@@ -84,7 +84,7 @@ rank3: layers 6-7, 14-15
 
 ## 6. 自定义 pipeline layout
 
-`pipeline_parallel_layer_layout.py` 和官方 `pipeline_parallel_layout` 文档支持非均匀 layer 类型/数量。MoE、MTP、embedding、loss 的成本不同，按“层数均分”未必按时间均分。
+`megatron/core/transformer/pipeline_parallel_layer_layout.py` 和官方 `pipeline_parallel_layout` 文档支持非均匀 layer 类型/数量。MoE、MTP、embedding、loss 的成本不同，按“层数均分”未必按时间均分。
 
 合理切分流程：
 

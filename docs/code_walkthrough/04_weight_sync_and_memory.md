@@ -5,18 +5,34 @@
 
 ---
 
-## 1. 四种传输模式总览
+## 1. 先分清：CLI 是两个维度，运行时有四个 updater
 
 `slime/backends/megatron_utils/update_weight/` 目录：
 
-| 文件 | 模式 | 适用场景 |
+| 运行时类 / 文件 | 实际数据路径 | 适用场景 |
 |---|---|---|
-| `update_weight_from_distributed.py` | NCCL 广播 | 训练/推理分卡（disaggregate），跨机 |
-| `update_weight_from_tensor.py` | CUDA IPC 直传 | colocate 同卡，零网络开销 |
-| `update_weight_from_disk.py` | 共享文件系统全量 | 训推完全分离、异构 GPU（External Engines） |
-| `update_weight_from_disk_delta.py` | 共享文件系统增量 | 同上，但只传变化分片（Delta Weight Sync） |
+| `UpdateWeightFromDistributed` | 全量参数经 NCCL 广播 | 训练/推理分卡（disaggregate） |
+| `UpdateWeightFromTensor` | colocated engine 经 CUDA IPC；若同一拓扑还有远端 engine，则远端部分经 NCCL | colocate 或 colocate + remote 混合拓扑 |
+| `UpdateWeightFromDisk` | 写完整 HF checkpoint，engine 从磁盘重载 | 共享存储、external engine、`release-train` |
+| `UpdateWeightFromDiskDelta` | 写字节级 delta，各 rollout host patch 本地 checkpoint 后重载 | 非 colocate 的低带宽磁盘同步 |
 
-选择由 `--update-weight-mode`（full/delta）与 `--update-weight-transport`（nccl/ipc/disk 等）组合决定。训练侧统一入口是 `MegatronTrainRayActor.update_weights`（`slime/backends/megatron_utils/actor.py:567-628`）→ `self.weight_updater.update_weights()`，`weight_updater` 在 init 时按模式实例化。
+用户只配置两个正交参数：
+
+- `--update-weight-mode={full,delta}` 决定发完整参数还是字节增量；
+- `--update-weight-transport={nccl,disk}` 决定走通信域还是文件系统。
+
+**没有 `--update-weight-transport=ipc` 这个选项。** 当配置是默认的 `full + nccl` 且开启 `--colocate` 时，`MegatronTrainRayActor.init` 自动选择 `UpdateWeightFromTensor`，再按每个 engine 的 GPU offset 判断哪些 engine 与训练 rank 共置：共置部分用 CUDA IPC，超出 actor GPU 范围的远端部分仍用 NCCL。因此 IPC 是拓扑推导出的内部执行计划，不是第三个用户可选 transport。
+
+精确选择顺序在 `MegatronTrainRayActor.init`：
+
+```text
+mode=delta                         -> UpdateWeightFromDiskDelta（且 transport 必须是 disk）
+mode=full, transport=disk          -> UpdateWeightFromDisk
+mode=full, transport=nccl, colocate-> UpdateWeightFromTensor（可同时覆盖 colocated + remote engines）
+mode=full, transport=nccl          -> UpdateWeightFromDistributed
+```
+
+这也回答了“为什么目录里有四个类、CLI 却只有两个 transport”的问题：**类是具体执行策略，CLI 描述的是用户意图；colocate 拓扑负责把意图进一步解析成 IPC/NCCL 组合。** 训练侧统一入口仍是 `MegatronTrainRayActor.update_weights` → `self.weight_updater.update_weights()`。
 
 ---
 
@@ -65,7 +81,7 @@
 三步流水线：
 
 1. **`all_gather_param`**（common.py）：把 TP 切片的参数在 TP 组内 all-gather 成完整参数（所有 TP rank 参与计算，但只有源 rank 保留结果）；
-2. **`convert_to_hf`**（`megatron_to_hf/`）：Megatron 命名/布局 → HF 命名/布局。例如 Megatron 的 `module.decoder.layers.0.self_attention.linear_qkv.weight`（QKV 融合）要拆成 HF 的 `q_proj/k_proj/v_proj`；每个模型族一个转换模块（`deepseekv3.py`、`qwen3moe.py`、`glm4moe.py`…），FP8 量化由 `processors/quantizer_fp8.py` 等处理（06 篇详解）；
+2. **`convert_to_hf`**（`slime/backends/megatron_utils/megatron_to_hf/`）：Megatron 命名/布局 → HF 命名/布局。例如 Megatron 的 `module.decoder.layers.0.self_attention.linear_qkv.weight`（QKV 融合）要拆成 HF 的 `q_proj/k_proj/v_proj`；每个模型族一个转换模块（`deepseekv3.py`、`qwen3moe.py`、`glm4moe.py`…），FP8 量化由 `processors/quantizer_fp8.py` 等处理（06/13 篇详解）；
 3. **分桶（bucketing）**：累积到 `--update-weight-buffer-size` 就 yield 一桶。几百个小张量逐张广播会被 NCCL 启动开销拖死，合并成大桶摊薄开销——这与 SGLang 侧的 `FlattenedTensorBucket`（`slime/backends/megatron_utils/sglang.py:20-22` 引入）配合，把一桶张量 flatten 后一次传输、对端按元数据 reshape。
 
 专家参数的 EP all-gather（`_ep_gather_and_convert`，204-238）更精巧：先用 `all_gather_object` 对齐各 EP rank 的参数名清单，再异步 `all_gather` 收齐所有 rank 的专家分片，最后源 rank 把"哪个 expert 的哪层"映射回 HF 的 `experts.{i}` 命名。
@@ -97,7 +113,7 @@
 
 ## 3. IPC 与 Disk 模式（机制对比）
 
-- **CUDA IPC（`update_weight_from_tensor.py`）**：colocate 时训练与推理在同一物理机上，直接传递显存指针（`MultiprocessingSerializer` 序列化 CUDA IPC handle，配合 `FlattenedTensorBucket` 整桶共享），引擎端"按指针取用"，省掉 NCCL 拷贝。这是 slime 在 colocate 下 8×H100 同步 Qwen3-30B-A3B 约 7 秒的关键之一。
+- **CUDA IPC（`update_weight_from_tensor.py`）**：每组 colocated 训练 rank 先用 Gloo `gather_object` 把序列化后的 bucket handle 汇到与 engine 对应的源 rank；`MultiprocessingSerializer` 传的是 CUDA IPC handle 和元数据，真正的大张量不进入 Ray object store。engine 打开 handle 后拷入模型权重。这里仍有小体积控制面通信，并非“完全零通信”；省掉的是跨进程复制整份权重和远端 NCCL 传输。
 - **Disk 全量/增量（`update_weight_from_disk*.py`）**：训练侧把权重写成 HF checkpoint 目录（带版本号 `weight_v000123/`），引擎 `update_weights_from_disk` 重新加载。配套逻辑在 `slime/ray/actor_group.py:161-268`：
 
 ```226:253:slime/ray/actor_group.py
@@ -149,7 +165,7 @@
 
 ## 5. FP8 与量化链路
 
-- **FP8 cast**：`slime/backends/megatron_utils/sglang.py:1-8` 从 SGLang 引入 `quant_weight_ue8m0 / transform_scale_ue8m0`（DeepSeek 系 FP8 checkpoint 的 ue8m0 scale 格式）；`update_weight/megatron_to_hf/processors/quantizer_fp8.py` 在 `convert_to_hf` 时把 BF16 权重 cast 成 FP8 再传输——**带宽减半**，推理侧直接跑 FP8。
+- **FP8 cast**：`slime/backends/megatron_utils/sglang.py` 从 SGLang 引入 `quant_weight_ue8m0 / transform_scale_ue8m0`（DeepSeek 系 FP8 checkpoint 的 ue8m0 scale 格式）；`megatron_to_hf/processors/quantizer_fp8.py` 在 `convert_to_hf` 时把 BF16 权重 cast 成 FP8 再传输——**带宽减半**，推理侧直接跑 FP8。
 - **自研 Triton kernel**：`slime/backends/megatron_utils/kernels/fp8_kernel.py` 提供 blockwise FP8 cast。
 - **int4/fp4（compressed-tensors）**：NCCL 传输前后各有一次 `post_process_weights`（update_weight_from_distributed.py:113-132），先在引擎侧反量化恢复、传完再重新量化。
 - **数值一致性**：FP8 rollout 使推理 logprob 与 BF16 训练侧产生系统性偏差——`rollout_log_probs` 随样本回传后，训练侧用 TIS 修正（05 篇 §5），并用 `train_rollout_logprob_abs_diff` 指标持续监控偏差（loss.py:1073-1077）。`examples/train_infer_mismatch_helper/` 是配套的诊断工具。
@@ -205,7 +221,7 @@ decode0  占据 rank : [5, 6,7,8] (cumulative[2]+1=5 起，共4个)
 
 ## 6. 小结
 
-> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)；HF 转换的通用实现见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
+> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)；slime 内建 HF 转换实现见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 权重同步 = 分片 gather（TP/EP）→ HF 转换 → 分桶 → NCCL/IPC/磁盘传输 → 引擎落盘或广播加载；pause/flush/continue 保证一致性，全局锁防 NCCL 死锁；
 - 异构引擎（PD 分离）、新引擎热加入（容错）、版本对账都被一等支持；

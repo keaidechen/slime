@@ -8,13 +8,13 @@ hidden states -> router logits -> top-k/score
  -> combine/unpermute -> output
 ```
 
-EP 把 experts 分到不同 rank，token dispatcher 通过 all-to-all 或其他 backend 重排 token。性能由 expert GEMM 大小、token 不均衡、capacity/drop 策略、通信 overlap 与网络共同决定。Router 的 load-balancing loss、z-loss、dtype 和 replay/recompute 还会影响数值行为。
+EP 把 experts 分到不同 rank，token dispatcher 通过 all-to-all 或其他 backend 重排 token。性能由 expert GEMM 大小、token 不均衡、capacity/drop 策略、通信 overlap 与网络共同决定。Router 的 load-balancing loss、z-loss、dtype 和 replay/recompute 还会影响数值行为。当前实现通过 `MoEAuxLossAutoScaler` 把 auxiliary loss 自动接入 autograd；任务 loss 不应再手工重复相加，详见[源码问题详解第 15 节](../06_reference/03_source_questions.md)。
 
 关键入口：`megatron/core/transformer/moe/` 下的 `router.py`、`token_dispatcher.py`、`experts.py` 与 `moe_layer.py`。
 
 ## 2. Router replay
 
-Router replay 记录路由结果并在后续 forward/recompute 使用，目的是复现或避免重算时因动态路由产生偏差。需要区分 record、forward replay 等状态，并保证记录与 microbatch/layer 对应。它不是通用 checkpoint 替代物。
+Router replay 记录 top-k expert indices 并在后续 forward/recompute 使用，目的是固定离散 expert 选择。replay 时 probability 仍从当前 `scores` 对记录的 indices 做 gather，因此 router score 仍可有梯度；它既不冻结 router，也不保存完整 logits。需要区分 record、forward replay、backward replay，并保证记录与 microbatch/layer 对应。详见[源码问题详解第 16 节](../06_reference/03_source_questions.md)。
 
 ## 3. MLA
 
@@ -29,4 +29,3 @@ PP 下 MTP 默认靠近最后 stage，也可用自定义 layout 中的 `m` 指�
 ## 5. 组合验证
 
 对 MoE/MLA/MTP 分别验证 dense/reference 或单 rank 等价、TP/EP shard shape、PP placement、checkpoint round-trip、recompute 前后一致性，再测性能。高级结构最常见错误是“forward 能跑，但 pipeline loss、共享参数同步或恢复边界错了”。
-

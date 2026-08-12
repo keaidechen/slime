@@ -2,6 +2,8 @@
 
 > 对应综述（`00_rl_infra_survey.md`）§2.7「训练后端」。
 > slime 的训练侧只有 Megatron 一路后端，设计哲学是"**原生透传**"：不包一层自己的抽象，直接复用 Megatron 的 `get_model`、optimizer、checkpoint，并把 Megatron 参数原样传入。本篇解读这条链路。
+>
+> 文件名中的 `mbridge` 是历史遗留：slime v0.3.1 已删除 Megatron-Bridge 依赖、`--megatron-to-hf-mode bridge` 和相关 iterator。当前代码使用原生 Megatron model provider，并由 slime 内建转换器负责 HF checkpoint 加载与导出。
 
 ---
 
@@ -39,7 +41,7 @@ class _TensorBackuperNormal(TensorBackuper):
 
 **`copy()` 方法**（`copy(src_tag, dst_tag)`）：不经过 GPU，直接在两份 CPU 备份之间互拷（例如把 `actor` 备份复制成 `old_actor` 备份的初值），用于"某个 tag 需要先有一份初始快照，之后再逐步被覆盖"的场景。
 
-**`_TensorBackuperNoop` 是一个更巧妙的优化**：当调用方明确知道"这个 tag 的权重跟当前 GPU 权重完全一样"（`single_tag` 不为 `None`，例如 `kl_coef=0` 时根本不需要区分 ref 和 actor），就完全不做任何拷贝，`backup()`/`restore()` 退化成空操作——但为了防止"逻辑上以为切换了 tag，实际权重却在别处被改动"这种隐蔽 bug，它用一个廉价的 checksum 兜底：
+**`_TensorBackuperNoop` 是预留实现，不是当前 actor 的实际分支。** `TensorBackuper.create(source_getter, single_tag)` 在 `single_tag` 非空时才选它，并用廉价 checksum 验证“权重没有被改动”；但当前 `MegatronTrainRayActor.init` 明确传入 `single_tag=None`，因此总是创建 `_TensorBackuperNormal`。不要因为类存在，就推断 `kl_coef=0` 时运行中会自动跳过 CPU backup。
 
 ```python
 def backup(self, tag):
@@ -48,7 +50,7 @@ def restore(self, tag):
     assert _compute_hash_dict(...) == self._backup_hash_dict                    # 用哈希校验"权重确实没变过"
 ```
 
-`_compute_hash_tensor` 故意写了注释 `# Not a real/good hash, but pretty fast`——把 tensor 按位重解释成 `uint32` 后求和，不是密码学意义上的哈希（会漏检某些巧合的位翻转），但足够快（一次 `sum()` reduce）且能在绝大多数场景下抓到"以为没变、其实变了"的编程错误。**这是"用测试断言代替真实数据保存"的思路**：既然理论上不该有差异，那就用一个廉价检测手段验证"理论符合实践"，而不是为了保险起见真的存一份数据——用极低成本换取和 `_TensorBackuperNormal` 相同的安全性。
+`_compute_hash_tensor` 故意写了注释 `# Not a real/good hash, but pretty fast`——把 tensor 按位重解释成 `uint32` 后求和，不是密码学哈希，会漏检某些碰撞；它只适合做开发期不变量检查，不能声称与真实数据备份具有相同安全性。当前 actor 不走这条分支，阅读它应当把它当成一个尚未启用的轻量优化接口。
 
 ### 1.2 深入拆解：`StatelessAdam`（`stateless_adam.py`）——数学上等价于什么？
 
@@ -89,29 +91,74 @@ param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad 
 
 ---
 
-## 3. 三条模型构建路径
+## 3. 当前模型构建只有两条路径
 
-`_get_model_provider_func`（model_provider.py:61-242）：
+`_get_model_provider_func`（`slime/backends/megatron_utils/model_provider.py`）按语义优先级选择：
 
-| 路径 | 触发 | 说明 |
+| 路径 | 触发 | 谁负责模型结构 |
 |---|---|---|
-| 自定义 | `--custom-model-provider-path` | 用户全控 |
-| **bridge** | `--megatron-to-hf-mode bridge`（默认推荐） | 用 `megatron.bridge.AutoBridge.from_hf_pretrained(...)` 从 HF 配置生成 Megatron provider，再把 slime args 里的并行参数（TP/PP/EP/SP/CP）拷到 provider（model_provider.py:95-107） |
-| 原生 GPTModel | 传统路径 | `core_transformer_config_from_args(args)` 生成 `TransformerConfig`，按 `num_experts`/`transformer_impl` 选 layer spec，支持 MTP |
+| 自定义 provider | `--custom-model-provider-path` | 用户函数返回 Megatron `GPTModel` 兼容对象；slime 只补 critic head 与冻结规则 |
+| 原生 Megatron provider | 默认 | `core_transformer_config_from_args(args)` 构造 `TransformerConfig`，再按 `--spec`、MoE、Transformer Engine、MLA、MTP 等参数选择 layer/block spec 并实例化 `GPTModel` |
 
-**bridge 模式的意义**：HF 上新发布的模型（新架构、新配置项）可以 day-0 被 Megatron 训练，不必等人工写 Megatron 版模型定义。checkpoint 加载同理（`slime/backends/megatron_utils/checkpoint.py:97-152`）：路径是 Megatron ckpt（有 `latest_checkpointed_iteration.txt`）走原生加载，否则用 `AutoBridge.load_hf_weights` 把 HF 权重灌进 Megatron 模型。
+这里没有“HF config 自动生成 Megatron 模型结构”的 bridge 分支。**支持某个新模型需要同时满足两个条件**：
+
+1. Megatron 侧能按当前参数/`--spec` 构造出正确结构；
+2. slime 的内建 checkpoint loader 和 exporter 有该模型族的参数映射。
+
+因此“HF 上一发布新模型，slime 无需任何适配即可 day-0 训练”并不成立。自定义 provider 解决结构扩展，`hf_to_megatron/` 与 `megatron_to_hf/` 解决权重扩展；两条边界要分别实现和测试。
 
 ---
 
-## 4. 权重转换层：`megatron_to_hf/`
+## 4. 为什么需要两个方向的内建转换器
 
-训练侧存的是 Megatron 分片格式，推理引擎要 HF 格式——04 篇的 `convert_to_hf` 就来自这里：
+### 4.1 启动/恢复：`hf_to_megatron/`
 
-- **每模型族一个转换模块**：`megatron_to_hf/deepseekv3.py`、`qwen3moe.py`、`glm4moe.py` 等，负责命名映射（`module.decoder.layers.N.self_attention.linear_qkv` → `q/k/v_proj`）、融合算子拆分（QKV、gate-up）、MoE expert 重排；
-- **processors/**：`padding_remover`（去 TP padding）、`quantizer_fp8`（BF16→FP8 cast，04 篇）、`quantizer_compressed_tensors`（int4/fp4）；
-- **`hf_weight_iterator_base/bridge/direct.py`**：`update_weight_from_tensor`（IPC 模式）与 disk 模式按 HF 语义**逐参数**迭代训练侧权重时的三种实现——bridge 模式走 Megatron-Bridge 的转换 API，direct 模式走 `megatron_to_hf` 的本地转换。
+`checkpoint.load_checkpoint` 先用 `_is_megatron_checkpoint` 判断目录：存在 `latest_checkpointed_iteration.txt`（或路径本身是 `iter_XXXXXXX`）时，直接调用 Megatron 原生 loader；否则走 `_load_checkpoint_hf` → `hf_to_megatron.load_hf_weights`。
 
-这一层是 RL 特有的高频需求催生的：SFT 只需"启动时转一次"，RL 是"每步都要转"，所以转换必须与权重同步流水线深度集成（gather→转换→分桶，见 04 篇 §2.2）。
+HF 加载链路是：
+
+```text
+AutoConfig.model_type
+  -> _LOADERS 选择模型族 get_hf_tensor
+  -> SafetensorReader 按参数名从 shard 读取 CPU tensor
+  -> QKV / gate-up / MoE 等布局合并
+  -> shard_mcore_tensor 按 Megatron 参数属性切 TP/ETP shard
+  -> copy_ 到当前 rank 的 parameter/buffer
+```
+
+`SafetensorReader.get_tensor` 的 `lru_cache(maxsize=1)` 缓存的是最近一次按名称返回的 **tensor 结果**，不是 shard handle。访问过的 `safe_open` 对象会保存在 `self._files` 中，以便同一 shard 后续复用；它依靠 safetensors 的 mmap/lazy read 避免一次性把所有 shard 内容读入内存，但当前实现并不把“已打开文件数”限制为 1。FP8 checkpoint 如果带 `<name>_scale_inv`，读取时会按 128×128 block 反量化为 BF16。词表 embedding/output layer 会按 `padded_vocab_size` 补齐。HF checkpoint 不包含 Megatron optimizer、RNG 和训练迭代状态，所以 loader 返回 iteration 0，参数校验阶段也会设置 `no_load_optim/no_load_rng/finetune`。
+
+当前 `_LOADERS` 显式注册 DeepSeek、GLM、Llama/Qwen、Qwen3.5/Next、MiMo、MiniMax 等 `model_type`。未注册类型会抛 `Unsupported HuggingFace model type`，这是刻意的 fail-fast，而不是静默猜映射。
+
+### 4.2 每轮热更新/导出：`megatron_to_hf/`
+
+反方向不能简单复用上述函数，因为输入不再是一个完整 HF 文件，而是**分散在 PP/TP/EP rank 上、可能还位于 CPU backup 的 Megatron 参数**。`HfWeightIteratorDirect` 负责把分布式状态收敛成稳定的 chunk 接口：
+
+```text
+收集全局 ParamInfo 并按 --update-weight-buffer-size 分桶
+  -> 从 actor CPU backup 取本 rank 参数
+  -> PP/EP broadcast + TP/ETP all-gather 得到完整 Megatron tensor
+  -> convert_to_hf 按模型族拆 QKV/gate-up、改名、去 padding、可选量化
+  -> yield list[(hf_name, tensor)]
+```
+
+direct iterator 被 tensor/文件两类消费者复用：
+
+- `UpdateWeightFromTensor`：每轮生成 chunk；同机 engine 走 CUDA IPC，混合拓扑中的远端 engine 仍可走 NCCL；
+- `UpdateWeightFromDisk`：通过 HF checkpoint writer 消费同一 iterator，写完整 checkpoint 后再通知 engine 重载；
+- `hf_checkpoint_saver.save_hf_model_direct_to_path`：写 safetensors shard 和 index，作为真正的 HF 导出。
+
+`UpdateWeightFromDistributed` 是另一条专用流式路径：它自己遍历参数，普通参数逐个 TP gather，expert 参数先按 buffer 聚合再做 EP gather，随后调用同一个 `convert_to_hf` 并通过 NCCL 广播。`UpdateWeightFromDiskDelta` 继承的也是这套 iterator，而不是 `HfWeightIteratorDirect`。
+
+`HfWeightIteratorBase.create` 当前只在 tensor 路径创建 `HfWeightIteratorDirect`，不存在 bridge/direct 多实现选择。两条路径共享模型族转换器和 HF 命名契约，但分布式 gather 的所有权不同：colocate/hybrid 与完整文件导出使用 direct iterator；专用 NCCL/disk-delta 路径在 updater 内流式 gather。
+
+### 4.3 为什么两个方向不是一个“自动可逆”的函数
+
+- HF→Megatron 在**加载时**按目标 parameter 的 `tensor_model_parallel/partition_dim/partition_stride` 属性切片，目标结构已经存在；
+- Megatron→HF 在**热路径**必须先跨 PP/TP/EP 找齐来源、处理重复参数和 MTP virtual PP，再做拆分与量化；
+- 某些转换有额外状态，例如 Q-LoRA 的成对参数可能跨 chunk 才能一起发给 SGLang；HF 保存还要管理 shard/index/资产文件。
+
+所以两边共享的是模型布局知识，不共享相同的 I/O 和分布式控制流。强行包成一个“万能 converter”会隐藏所有权，反而更难验证。
 
 ---
 
@@ -143,10 +190,10 @@ param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad 
 
 | 维度 | slime | verl | NeMo-RL |
 |---|---|---|---|
-| Megatron 接入 | 直接复用 `megatron.training` API + bridge | 经 mbridge/Pai-Megatron-Patch | 经 Megatron Bridge |
+| Megatron 接入 | 直接复用 `megatron.training` API + 原生/自定义 provider | 经 mbridge/Pai-Megatron-Patch | 经 Megatron Bridge |
 | 参数透传 | 全量原样 | 封装后映射 | 封装后映射 |
 | 另一后端 | 无 | FSDP2 | FSDP2（AutoModel/DTensor） |
-| checkpoint | Megatron 原生 + HF bridge | 封装格式 | HF/Megatron 双格式 |
+| checkpoint | Megatron 原生 + slime 内建 HF 双向转换 | 封装格式 | HF/Megatron 双格式 |
 
 slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Megatron+SGLang 一路，把抽象层压到最薄——上游 Megatron 的并行、优化器、checkpoint 新特性可以零成本继承。
 
@@ -154,9 +201,9 @@ slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Mega
 
 ## 8. 小结
 
-> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）见 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)，Megatron-Bridge 内部（AutoBridge/CONFIG_MAPPING/ParamMapping）见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
+> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）见 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)，slime 内建转换器的模型映射、分片和导出细节见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 训练 actor = Megatron 原生 `get_model/optimizer` + RL 所需的 ref/old/teacher 多 tag 管理；
-- bridge 模式让 HF 新模型 day-0 可训；`megatron_to_hf` 让每步权重同步可转；
+- 模型结构由原生/自定义 Megatron provider 构造；`hf_to_megatron` 负责启动加载，`megatron_to_hf` 负责每步权重同步和 HF 导出；
 - routing replay、stateless Adam、critic head 重初始化是 RL 场景的三个特色增量。
 - 下一篇（07）看如何在这些机制之上写自己的 agentic RL 应用。

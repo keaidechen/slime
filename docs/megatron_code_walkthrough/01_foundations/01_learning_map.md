@@ -23,7 +23,7 @@ pretrain_gpt.py / examples
 - `torchrun`、global/local rank、world size、process group、collective 顺序一致性；
 - roofline 直觉：GEMM 往往 compute-bound，decode/小算子/通信往往 bandwidth 或 latency-bound。
 
-验收题：为什么 TP 通常优先放在节点内？为什么 EP 的 all-to-all 对网络更敏感？collective hang 为什么经常不是 NCCL 本身的 bug？
+验收题：为什么 TP 通常优先放在节点内？为什么 EP 的 all-to-all 对网络更敏感？collective hang 为什么经常不是 NCCL 本身的 bug？先独立作答，再与[源码问题详解第 9、10 节](../06_reference/03_source_questions.md)核对。
 
 ### B. Transformer 训练基础
 

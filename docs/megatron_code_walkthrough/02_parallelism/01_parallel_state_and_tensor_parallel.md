@@ -61,7 +61,7 @@ Y1 = X A1
 - `dA_i = Xᵀ dY_i` 本地计算；
 - `dX_i = dY_i A_iᵀ` 后需要跨 TP 求和得到完整 `dX`。
 
-代码中的 autograd mapping 会把这些通信隐藏在 copy/gather/reduce primitive 后面。
+代码中的 autograd mapping 会把这些通信隐藏在 copy/gather/reduce primitive 后面。例如 `copy_to_tensor_model_parallel_region` 是 forward copy、backward all-reduce；不能只检查 forward 函数体来判断通信次数。完整正反向表见[源码问题详解第 7 节](../06_reference/03_source_questions.md)。
 
 ## 3. Row Parallel Linear
 
@@ -85,7 +85,7 @@ Column→激活→Row 的组合避免在 MLP 中间巨大维度上收集完整 t
 2. 本地 token id 减去 `vocab_start`；
 3. embedding lookup；
 4. mask 位置置零；
-5. TP all-reduce 得到完整 embedding。
+5. 默认 TP all-reduce 得到完整 embedding；若 `reduce_scatter_embeddings=True`，则转为 sequence-first 后做 TP reduce-scatter，直接产出 SP layout。
 
 parallel cross entropy 同理避免收集完整 `[tokens, vocab]` logits：先做跨 shard global max，再 global sum-exp，并只从拥有 target id 的 rank 取 target logit。这是数值稳定分布式 log-sum-exp 的典型模板。
 
@@ -100,6 +100,8 @@ sequence-sharded
 ```
 
 CP 则让 attention 本身处理 context shard，目标是长序列下的 attention activation/KV。二者可以同时存在。
+
+注意 CP 的实际 batch 分片通常不是把全局序列连续等分。当前 GPT 默认 per-sequence 路径会切成 `2×CP` 个 chunk，再按首尾配对做 zigzag 负载均衡；数值例子见[源码问题详解第 8 节](../06_reference/03_source_questions.md)。
 
 ### 为什么 TP 常配 SP
 

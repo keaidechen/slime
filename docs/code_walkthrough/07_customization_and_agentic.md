@@ -17,7 +17,8 @@
 | RM | `--custom-rm-path` / `--group-rm` | reward 计算 | 见 `slime/rollout/rm_hub/` |
 | buffer 策略 | `--buffer-filter-path` | 半成品取出策略 | 03 篇 §2.3 |
 | 算法钩子 | `--custom-loss-function-path`、`--custom-advantage-function-path`、`--custom-tis-function-path`、`--custom-pg-loss-reducer-function-path` | loss/advantage/TIS/归约 | 05 篇 |
-| 样本后处理 | `--rollout-sample-filter-path`、`--rollout-all-samples-process-path` | 收工后过滤/加工 | 02 篇 §3.1 |
+| 逐样本轻量钩子 | 可重复的 `--rollout-sample-hook-path` | 生成后、reward 前加工每个 `Sample` 叶子 | 本篇 §1.2 |
+| 整轮后处理 | `--rollout-sample-filter-path`、`--rollout-all-samples-process-path` | 达到目标 batch 后过滤/加工 | 02 篇 §3.1 |
 
 加载机制统一是 `load_function(path)`（`slime/utils/misc.py`）：`path` 形如 `my_module.my_file.my_func`，动态 import。这意味着**自定义代码不需要放进 slime 仓库**——你自己的项目目录加进 `PYTHONPATH` 即可。
 
@@ -39,7 +40,44 @@
 
 两个设计：(1) **样本级覆盖**——`sample.generate_function_path` 优先于全局参数，eval 数据集可以给每条样本指定不同生成函数（sglang_rollout.py:569）；(2) 函数可以返回 `list[Sample]`——一次 agent 执行 fan-out 成多条前缀链式样本（共享 `rollout_id`，03 篇 §1.1），框架在 `generate_and_rm_group` 的 gather 中原样保留形状（sglang_rollout.py:297-303 的注释专门说明）。
 
-### 1.2 最小自定义生成函数示例
+### 1.2 只想改一点字段，为什么不必重写 generate？
+
+`--rollout-sample-hook-path` 是介于“改数据字段”和“重写生成流程”之间的轻量接口。参数可重复，hook 按命令行出现顺序串行执行：
+
+```python
+# my_project/hooks.py
+async def attach_source(args, sample, *, rollout_id=None, evaluation=False):
+    sample.metadata["source"] = "eval" if evaluation else "train"
+    sample.metadata["rollout_id_seen_by_hook"] = rollout_id
+    # 返回 None 表示原地修改；也可以返回一个新的 Sample
+```
+
+```bash
+--rollout-sample-hook-path my_project.hooks.attach_source \
+--rollout-sample-hook-path my_project.hooks.another_hook
+```
+
+实现位于 `slime/rollout/sample_hooks.py`，有四个精确合约：
+
+1. hook 可以同步或异步；
+2. 只传函数签名明确接受的可选关键字；函数有 `**kwargs` 时才全传，因此不要求每个 hook 都声明 `rollout_id/evaluation`；
+3. 返回 `None` 表示保留原对象，返回值非空时必须是 `Sample`，否则抛 `TypeError`；
+4. custom generate 可返回嵌套 `list[Sample]`，hook 会递归到每个叶子并保持原列表形状，不负责 flatten 或 regroup。
+
+执行顺序是：
+
+```text
+默认/自定义 generate
+  -> rollout sample hooks（逐叶子，按配置顺序）
+  -> 单样本 RM；若 --group-rm 则暂不打分
+  -> 同组任务完成后 group RM
+  -> dynamic sampling filter 决定整组收下/丢弃
+  -> 达到目标 batch 后 rollout-sample-filter / all-samples-process
+```
+
+所以 hook 适合规范 metadata、裁剪/修正 response、预填 reward、加采样来源标签；dynamic filter 适合基于整组 reward 决定是否重采；`rollout-sample-filter-path` 则是目标 batch 已收齐后的整体操作。三者生命周期不同，不应仅因为都叫“后处理”就混用。
+
+### 1.3 最小自定义生成函数示例
 
 ```python
 # my_project/multi_turn_generate.py
@@ -150,4 +188,4 @@ TITO（token-in-token-out）的理想情况是：外部 agent 框架第 N 轮请
 - `append_response_tokens` 的不变量体系是自定义 multi-turn 时最重要的合约；
 - `slime/agent/` 为真实 agent harness 提供 token 级轨迹捕获（TITO）与沙盒；
 - examples 是按接口组织的活教材，建议边跑边读。
-- 下一篇（08）收尾：调试、CI、容错、profiling 等工程化设施。
+- 下一篇（08）进入 reward/eval：RM 接口、group reward、动态过滤以及评估数据流。

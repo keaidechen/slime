@@ -177,12 +177,12 @@ MiniMax-M1 的做法：比率 clamp 后 **stop-gradient** 当权重，梯度从 
 
 设一个 prompt 采样 8 条（`n_samples_per_prompt=8`），规则奖励 `reward = [1,1,0,0,1,0,1,1]`（1=答对，0=答错），`kl_coef=0`（不做 KL 惩罚，纯 GRPO）：
 
-1. **组内归一化**（发生在 rollout 侧的 reward 后处理，而非 `loss.py`）：`mean=0.625, std≈0.484`，归一化后 `reward_norm ≈ [0.775, 0.775, -1.29, -1.29, 0.775, -1.29, 0.775, 0.775]`——这一步是"GRPO 省 critic"的关键：不需要学一个 value 网络，直接靠组内统计量得到一个零均值的相对优势信号；
-2. **广播到 token**（`get_grpo_returns`）：每条样本内所有 response token 的 advantage 都等于该样本的 `reward_norm`（例如样本 0 的 5 个 response token 全部 advantage=0.775）；
+1. **组内归一化**（发生在 `RolloutManager._post_process_rewards`，而非 `loss.py`）：`mean=0.625`。PyTorch `std()` 默认做 Bessel 校正，样本标准差约为 `0.518`，所以归一化后 `reward_norm ≈ [0.725, 0.725, -1.207, -1.207, 0.725, -1.207, 0.725, 0.725]`（实际分母还有 `+1e-6`）——这一步是“GRPO 省 critic”的关键；
+2. **广播到 token**（`get_grpo_returns`）：每条样本内所有 response token 的 advantage 都等于该样本的 `reward_norm`（例如样本 0 的 5 个 response token全为约 `0.725`）；
 3. **`ppo_kl = old_log_probs - log_probs`**：假设样本 0 某个 token 训练时算出 `log_probs=-0.5`，生成时记录的 `old_log_probs=-0.7`（同一份权重理论上应该相等，但因为 packing/精度/若干步内已更新过参数等原因会有细微差异），`ppo_kl = -0.7-(-0.5) = -0.2`；
 4. **`ratio = exp(-ppo_kl) = exp(0.2) ≈ 1.221`**：新策略比旧策略更倾向于生成这个 token（比值 >1）；
-5. **PPO-clip**（设 `eps_clip=0.2, eps_clip_high=0.28`，DAPO 式 clip-higher）：`ratio` 落在 `[0.8, 1.28]` 内未被裁剪，`pg_loss = -min(ratio·A, clip(ratio)·A) = -1.221 × 0.775 ≈ -0.946`（因为 advantage 为正，未裁剪分支占优，loss 取更小的负值即更大的"损失下降量"，梯度会推动模型进一步提高这个 token 的概率）；
-6. **样本 2**（答错，advantage=-1.29）：若其某 token 的 `ratio≈1.22` 同样未被裁剪，`pg_loss = -1.22 × (-1.29) ≈ 1.574`（正的 loss，梯度会*降低*这个 token 的概率——错误答案里出现的 token 被抑制）；
+5. **PPO-clip**（设 `eps_clip=0.2, eps_clip_high=0.28`）：`ratio` 落在 `[0.8, 1.28]` 内，`pg_loss = -1.221 × 0.725 ≈ -0.885`，梯度推动模型提高该 token 概率；
+6. **样本 2**（答错，advantage≈-1.207）：若其某 token 的 `ratio≈1.22` 同样未被裁剪，`pg_loss ≈ 1.473`，梯度降低该 token 概率；
 7. **归一化求和**（§6）：8 条样本的所有 token loss 按"每条样本内部先按 token 数取平均，再对样本取平均"（或反之，取决于 `--loss-agg-mode`）汇总成一个标量，反传给 Megatron 做梯度累积。
 
 **直觉**：GRPO 把"这条样本比组内平均水平好还是差"变成一个恒定的乘数，PPO-clip 再把"这一步参数更新是不是走得太快"这件事通过 ratio 裁剪限制住——两者一个负责"往哪个方向走"，一个负责"这一步别走太远"。

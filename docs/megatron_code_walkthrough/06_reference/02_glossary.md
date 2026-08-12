@@ -12,7 +12,7 @@
 | MBS/GBS | micro/global batch size | `GBS=MBS×DP×microbatches`（常规情形） |
 | ModuleSpec | 模块结构与实现选择的描述 | 不是序列化 checkpoint schema |
 | Distributed Optimizer | 在 DP 组分片 optimizer/主参数等状态 | 不等同完整 FSDP 生命周期 |
-| FSDP | 参数、梯度、optimizer state 的 fully-sharded 生命周期 | unit 粒度决定峰值和通信 |
+| FSDP | 可配置分片 optimizer、gradient 与 training parameter | 参数也分片时，unit 粒度决定 materialize 峰值和通信 |
 | DCP | Distributed Checkpointing | 重点是 global state 到 shard 的映射 |
 | TE | NVIDIA Transformer Engine | 提供 kernel/FP8 等实现，不负责完整训练循环 |
 | recompute | backward 前重算 activation | 与把 activation 搬到 CPU 的 offload 不同 |
@@ -20,4 +20,3 @@
 | MLA | Multi-Latent Attention | 与 MoE/MTP 是不同架构维度 |
 | MTP | Multi-Token Prediction | 训练目标/额外模块，不是推理 speculative decoding 本身 |
 | critical path | 决定 step 完成时间的暴露路径 | profiler 中累计耗时最大者未必在关键路径 |
-

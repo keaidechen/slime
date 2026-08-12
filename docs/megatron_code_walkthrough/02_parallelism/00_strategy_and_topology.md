@@ -11,7 +11,7 @@
 | CP | attention context | ring/P2P/AG | 支持长序列 |
 | EP | experts | token all-to-all | 扩展稀疏参数 |
 
-DP 是剩余副本维度，但不能机械套用一个乘法式。EP 可能与其他维度形成不同 rank 轴，真实分组以 `megatron/core/parallel_state.py` 和 `RankGenerator` 为准。
+DP 是 dense/attention 网格中的剩余副本维度，但不能机械套用一个乘法式。当前实现分别建立包含 CP 的 decoder grid 和包含 EP 的 expert grid；EP 会改变 expert DP 的解释，而不是在同一 world size 外再乘一次。真实分组以 `megatron/core/parallel_state.py` 和 `RankGenerator` 为准，公式推导见[源码问题详解第 1 节](../06_reference/03_source_questions.md)。
 
 ## 2. 选择顺序
 
@@ -41,4 +41,3 @@ GBS = MBS × DP × num_microbatches
 ## 5. 方案评审的输出
 
 一份可执行方案必须包含拓扑图、并行组、每 rank 状态/activation 估算、microbatch 和 bubble、主要 collective、checkpoint 恢复策略、correctness baseline 与失败回滚。可直接使用[配置评审清单](../05_practice/02_configuration_review.md)。
-
