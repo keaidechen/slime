@@ -133,7 +133,35 @@ def last_boxed_only_string(string: str) -> str | None:
 
 ---
 
-## 2. Dynamic Filter：整组丢弃机制
+## 2. 生成、hook、RM、filter 的准确顺序
+
+这几类扩展点都能改 `Sample`，但调用时机不同。默认 rollout 的真实顺序是：
+
+```text
+generate_and_rm
+  1. 默认 generate 或 custom generate
+  2. apply_rollout_sample_hooks（每个 Sample 叶子）
+  3. reward 已由 generate/hook 填好？是：保留；否：调用 RM
+  4. --group-rm 时跳过单样本 RM，等同 prompt 的所有采样完成后批量打分
+
+generate_rollout_async
+  5. dynamic sampling filter 看完整 group，决定接收还是重采
+  6. 收齐 rollout_batch_size 个 group 后执行 rollout-sample-filter
+  7. all-samples-process 同时拿到全部已完成组和最终采用组
+```
+
+由此可得几个实用结论：
+
+- hook 可以修正 response/metadata 后再让 RM 评分，也可以直接填 `sample.reward` 跳过单样本 RM；
+- dynamic filter 看到的一定是已经打完 reward 的完整组；
+- `rollout-sample-filter-path` 执行时目标 batch 已经收齐，不会因为它 mask 某条样本而自动再生成一条补位；
+- 当前 `--group-rm` 路径在拿到 rewards 后执行 `for sample, reward in zip(group, rewards): sample.reward = reward`，因此实际要求外层 `group` 的元素就是 `Sample`。custom generate 的 fan-out 会形成 `list[list[Sample]]`；虽然生成与 hook 保留了该形状，但这里会对 list 写 `.reward`，二者目前不能直接组合。需要先由自定义 rollout 展平/重组，或在框架侧补齐嵌套 reward 回填逻辑。
+
+这也是为什么逐样本 hook、RM、dynamic filter 和最终 sample filter 不能合并成一个“万能后处理函数”：它们拥有的数据视野和是否会触发重采都不同。
+
+---
+
+## 3. Dynamic Filter：整组丢弃机制
 
 02/03 篇提到"dynamic filter 丢弃全对/全错组"，具体实现在 `slime/rollout/filter_hub/`：
 
@@ -158,9 +186,9 @@ def check_reward_nonzero_std(args, samples: list[Sample], **kwargs):
 
 ---
 
-## 3. 评测（Eval）Pipeline：与训练共用生成代码，但采样参数独立
+## 4. 评测（Eval）Pipeline：与训练共用生成代码，但采样参数独立
 
-### 3.1 `EvalDatasetConfig`：每个评测集的独立配置
+### 4.1 `EvalDatasetConfig`：每个评测集的独立配置
 
 `slime/utils/eval_config.py:120` 起，字段远比想象中丰富：
 
@@ -196,7 +224,7 @@ class EvalDatasetConfig:
 
 **Early stop 机制**（`eval_early_stop_remaining` + `eval_early_stop_idle_timeout`）很值得注意：评测和训练一样会遇到长尾问题（某几条评测样本特别难/特别长，卡住整个评测的收尾），这两个参数**必须同时设置才生效**——"剩余样本数已经很少（比如 <5）"且"已经有一段时间（比如 30 秒）没有新结果进来"，才判定为"大概是卡住了/没必要等了"，提前结束评测并用已收集到的结果计算指标。两个条件同时要求是为了避免误判：只看"剩余数量少"可能是正常的收尾阶段（马上就出结果），只看"空闲时间长"可能是评测集本身就很大还有很多在跑——两者叠加才能较可靠地识别"真正卡住的长尾"。
 
-### 3.2 `eval` 与训练共用生成代码，靠参数覆盖区分
+### 4.2 `eval` 与训练共用生成代码，靠参数覆盖区分
 
 `eval_rollout_single_dataset`（`sglang_rollout.py:486` 起）与训练路径共用同一个 `generate_and_rm`/`generate_and_rm_group`，不是重新写一套生成逻辑——这是"评测只是换了一组采样参数和数据源的特殊 rollout"这一设计理念的体现，好处是训练路径里的所有机制（partial rollout 之外，因为评测不需要）、abort、trace 埋点、多模态支持等，评测路径全部免费获得，不需要重复实现和重复测试。
 
@@ -204,13 +232,13 @@ class EvalDatasetConfig:
 
 `EVAL_PROMPT_DATASET` 全局缓存（按 `cache_key` = 数据集路径 + tokenizer + chat template 配置等组合）避免每个 rollout 都重新加载和 tokenize 一遍评测数据集——评测数据集在整个训练过程中内容不变，只需要加载一次。
 
-### 3.3 结果聚合
+### 4.3 结果聚合
 
 `RolloutManager.eval(rollout_id)`（`slime/ray/rollout.py`）调用 `eval_rollout`，按数据集名字聚合 rewards/truncated 等指标，交给 `_log_eval_rollout_data` 记录到 wandb/tensorboard——每个评测集的指标独立打点（如 `eval/math500/reward`、`eval/gpqa/reward`），可以在训练曲线里分别观察不同能力维度的变化趋势，而不会被混在一起看不出哪个能力在退化。
 
 ---
 
-## 4. 一个具体例子：从生成到 reward=1 的完整判定
+## 5. 一个具体例子：从生成到 reward=1 的完整判定
 
 设某数学题 prompt，`rm_type="boxed_math"`，模型生成的 response 里包含 `...因此答案是 \boxed{42}。`：
 
@@ -223,7 +251,7 @@ class EvalDatasetConfig:
 
 ---
 
-## 5. 小结
+## 6. 小结
 
 - reward 的产生是一条"细粒度覆盖优先级链"：单样本 `custom_rm_path` > 全局 `custom_rm_path` > 单样本 `metadata["rm_type"]` > 全局 `rm_type`，这套设计让混合多数据源、多打分方式训练成为可能；
 - 内置规则奖励覆盖数学（sympy 语义等价）、QA（F1/EM）、多选题（GPQA）、指令遵循（IFBench）、外部服务（remote_rm 带指数退避重试）；`last_boxed_only_string` 的手写括号计数是"正则表达式解决不了嵌套结构"的典型反例；

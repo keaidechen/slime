@@ -27,5 +27,4 @@ Null tokenizer 适合 mock benchmark、无外部文件的测试、以及已经�
 
 ## 5. 源码阅读路线
 
-`core/tokenizers/` → `training/tokenizer/` 的应用适配 → preprocessing tool → `GPTDataset` → `GPTModel` embedding。沿这条线能解释“文本如何最终成为某个 vocab shard 上的 embedding lookup”。
-
+`megatron/core/tokenizers/` → `megatron/training/global_vars.py:_build_tokenizer` 的应用启动 → preprocessing tool → `GPTDataset` → `GPTModel` embedding。沿这条线能解释“文本如何最终成为某个 vocab shard 上的 embedding lookup”。

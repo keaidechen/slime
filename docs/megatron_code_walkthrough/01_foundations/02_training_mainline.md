@@ -74,7 +74,7 @@ if update_successful:
 M = global_batch / (micro_batch × DP)
 ```
 
-每次 optimizer update 调用一次 `forward_backward_func`，内部跑 M 个 microbatch。ramp-up batch size 会让 M 随 consumed samples 改变；PP schedule、loss scale、LR scheduler 的 sample increment 都依赖它。
+每次 optimizer update 调用一次 `forward_backward_func`，内部跑 M 个 microbatch。当前快照的 step batch-size schedule 会让 M 随 consumed samples 改变；旧 `rampup_batch_size` 参数已被 calculator 标为 deprecated 并忽略。PP schedule、loss scale、LR scheduler 的 sample increment 都依赖当前 M。
 
 例：GBS=512、MBS=2、DP=32，则 M=8。PP=8 时只有 8 个 microbatch，恰好能填满但 bubble 仍明显；若 M=1，绝大多数 stage 会等待。
 
@@ -91,7 +91,7 @@ infra 排障时要确认：
 
 ## 6. 一次 step 的状态提交边界
 
-mixed precision 下 `optimizer.step()` 可能因 overflow 失败。只有成功时才应推进 LR schedule、consumed samples 语义和某些日志计数。checkpoint 最安全的语义是保存一个完整提交后的 iteration，而不是半个 accumulation window。
+mixed precision 下 `optimizer.step()` 可能因 overflow 失败。只有成功时才推进 LR/WD schedule 和参数更新计数；但外层 `train()` 无论本轮是否因 overflow 跳过参数更新，都会推进 iteration 与 `consumed_train_samples`，因为 batch 已从 iterator 消费。日志会用 `skipped_iter` 区分两种状态。checkpoint 最安全的语义是保存完整 iteration 边界上的整组状态，而不是半个 accumulation window。逐项状态表见[源码问题详解第 3 节](../06_reference/03_source_questions.md)。
 
 ## 7. 动手走读
 
@@ -163,7 +163,7 @@ num_microbatches = 64 / (2×4) = 8
 每个 TP rank 只持有其 layer shard，但看到相同 microbatch token
 ```
 
-loss 若先对每 microbatch token 求平均、schedule 再除 microbatch 数，最终是全局 batch 平均；如果自定义 loss 已除以 8 又被 schedule 再除一次，gradient 会缩小 8 倍。
+默认路径若先对每个 microbatch 的有效 token 求平均、schedule 再除 microbatch 数，得到的是“microbatch mean 的平均”。只有各 microbatch 有效 token 数相同，它才等于全局 token mean；packed/变长数据应核对 `calculate_per_token_loss` 路径。若自定义 loss 已除以 8 又被 schedule 再除一次，gradient 会缩小 8 倍。完整推导见[源码问题详解第 5 节](../06_reference/03_source_questions.md)。
 
 ## 9. 推荐打断点顺序
 

@@ -35,11 +35,13 @@ distributed optimizer：
 ```text
 完整逻辑 grad buffer
   → reduce-scatter
-每 rank 只保留其 optimizer shard 对应的 reduced grad
+每 rank 的 optimizer 只消费其 shard 对应的 reduced grad view
   → 本地更新 master param / moments shard
   → all-gather 更新后的 param shard
 每个 DP replica 获得下一次 forward 需要的参数
 ```
+
+这里“optimizer 只消费 local shard”不等于完整 grad backing storage 已消失。当前 DDP buffer 路径通常先分配完整 `bucket.grad_data`，reduce-scatter 的输出写入其中属于本 rank 的 local view；因此官方显存公式仍计入未按 DP 除掉的 gradient bytes。要同时区分通信结果的逻辑 ownership 与 buffer 的物理分配。
 
 主类位于 `megatron/core/optimizer/distrib_optimizer.py:113`。它与 ZeRO-1 思路相近，但深度集成 Megatron 的 buffer、TP/PP 参数布局、mixed precision 和 overlap。
 
@@ -48,7 +50,7 @@ distributed optimizer：
 DP=2，逻辑参数/grad 展平后 8 元素。rank0 管 optimizer index `[0:4)`，rank1 管 `[4:8)`：
 
 1. 两 rank backward 得到各自样本的 8 元素 grad；
-2. reduce-scatter 求和后 rank0 只得前 4，rank1 只得后 4；
+2. reduce-scatter 求和后，rank0 的 optimizer view 是前 4，rank1 的 optimizer view 是后 4；完整 grad buffer 通常仍作为通信/累积 backing storage 分配；
 3. 各自更新自己的 FP32 master weight 与 Adam m/v；
 4. all-gather 新 param，恢复 forward 所需完整 DP replica。
 

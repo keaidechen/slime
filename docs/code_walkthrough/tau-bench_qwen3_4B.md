@@ -24,10 +24,10 @@
                        ▼                                       ▼
               RolloutManager (Actor)                    MegatronTrainRayActor (Actor)
               ├─ 启动 2 个 sglang engine                  ├─ actor 模型 (TP=2)
-              │   engine0 → GPU0                          ├─ 可选 ref 模型 (kl_loss_coef=0 仍会加载)
+              │   engine0 → GPU0                          ├─ ref 权重 tag（pinned CPU，前向时换入 GPU；coef=0 仍加载）
               │   engine1 → GPU1                          └─ weight_updater = UpdateWeightFromTensor
               ├─ 启动 sglang_router (端口写回 args)                │
-              ├─ 调度 generate_with_tau.generate           权重同步 │ (colocate: GPU→CPU→Ray→sglang)
+              ├─ 调度 generate_with_tau.generate           权重同步 │ (colocate: GPU CUDA IPC → sglang)
               │   (agent↔env↔sglang 多轮交互)  ◄──HTTP──┐    │
               └─ 收集/转换样本 ────────────────────────┘    ▼
                                                         sglang engine0/1 (GPU0/1)
@@ -44,7 +44,7 @@ rollout_id:
         └─ 转成 train_data, 按 DP 切分, ray.put → 返回 rollout_data_ref (list[Box])
   2) (offload_rollout) rollout_manager.offload()        # sglang 释放 GPU (release_memory_occupation)
   3) actor_model.async_train(rollout_id, rollout_data_ref)
-        └─ 重算 old/ref log_probs → 计算 GRPO advantage → 16 步梯度累积 → optimizer.step
+        └─ 重算 old/ref log_probs → 计算 GRPO advantage → 动态 micro-batch 梯度累积 → optimizer.step
   4) actor_model.save_model(rollout_id)
   5) (offload_train) actor 释放 GPU
   6) rollout_manager.onload_weights()                   # sglang 重新加载(旧)权重
@@ -53,7 +53,7 @@ rollout_id:
   9) (eval_interval) rollout_manager.eval(rollout_id)   # 用 dev 集评估 (n_samples_per_eval_prompt=1, top_k=1)
 ```
 
-> **时序要点**：权重同步 `actor_model.update_weights()` 发生在**本次迭代末尾、下一次 `generate` 之前**（步骤 7），所以它推送的就是「步骤 3 刚训练出来的最新权重」。下一轮 rollout 用的正是这组新权重，**不存在滞后一拍**（这也是 `--colocate` 下的标准做法）。脚本未启用 rollout logprobs（`--use-rollout-log-probs` 并未设置，见 §4.4），但本例 on-policy 训练无需 off-policy 修正。
+> **时序要点**：权重同步 `actor_model.update_weights()` 发生在**本次迭代末尾、下一次 `generate` 之前**（步骤 7），所以它推送的就是步骤 3 刚训练出来的最新权重。下一轮 rollout 用这组新权重，不存在额外滞后一拍。脚本未启用真正的参数 `--use-rollout-logprobs`（见 §4.4），本例由训练侧在更新前重算旧策略 logprob。
 
 ---
 
@@ -98,7 +98,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1                    # 限制每个设备的 
 
 要点：
 - **三套权重、三种格式**：sglang 用 HF 格式（`--hf-checkpoint`）；训练/参考用 Megatron 格式（`--load`/`--ref-load`）。`UpdateWeightFromTensor` 的核心工作就是把「Megatron 格式 actor 权重」转成「HF 格式张量」再喂给 sglang（§5.3）。
-- `--ref-load` 指向 `_torch_dist`（Megatron/torch.distributed 格式）。虽然本脚本 `kl-loss-coef=0.00`，但 `--use-kl-loss` 会让 slime 仍然加载一个 **冻结的参考模型**（来自该 checkpoint），用于计算 `ref_log_probs`（§4.4）。
+- `--ref-load` 指向 `_torch_dist`（Megatron/torch.distributed 格式）。虽然本脚本 `kl-loss-coef=0.00`，但 `--use-kl-loss` 会让 slime 仍然加载该 checkpoint 并把它备份为冻结的 `ref` 权重 tag，用于计算 `ref_log_probs`（§4.4）。它与 actor 复用同一套 Megatron module：前向前从 CPU backup 切换权重，不是额外常驻一组 ref GPU。
 
 ### 1.5 Rollout / 数据集（`ROLLOUT_ARGS`）
 
@@ -208,7 +208,7 @@ for rollout_id in range(args.start_rollout_id, args.num_rollout):
 关键函数：
 
 - **`parse_args()`**（`slime/utils/arguments.py`）：聚合 Megatron + slime + sglang 的所有参数，末尾调用 `slime_validate_args` 做一致性校验。其中与本例强相关的校验：`if args.kl_coef != 0 or args.use_kl_loss:` 要求 `--ref-load` 路径必须存在（本例满足，因为开了 `--use-kl-loss`）；`assert not (args.kl_coef != 0 and args.kl_loss_coef != 0)` 保证两种 KL 不共存。
-- **`create_placement_groups(args)`**（`slime/ray/placement_group.py`）：按 `with_ref = kl_coef != 0 or use_kl_loss` 决定是否给 actor 额外预留一个「参考模型」的 GPU 资源（本例 `with_ref=True`）。它返回各角色的 placement group，actor 与 rollout 据此拿到各自的 GPU。
+- **`create_training_models(args, ...)`**（`slime/ray/placement_group.py`）：用 `with_ref = kl_coef != 0 or use_kl_loss` 告诉 actor 是否需要 reference tag（本例为真）。它**不会额外预留一组 reference GPU**；ref 权重由同一训练 actor 的 `TensorBackuper` 存在 pinned CPU，前向时覆盖到同一份活跃 GPU model。
 - **`create_rollout_manager` / `create_training_models`**：都返回 Ray Actor 的「未来句柄」，真正的初始化在各自 `create()` 里异步完成（sglang 启动慢，故异步等待）。
 - **`actor_model.update_weights()`**（`slime/backends/megatron_utils/actor.py`）：训练侧触发权重同步（不是 `rollout_manager.update_weights`）。它调用 `weight_updater.update_weights(...)`，把 actor 的 Megatron 权重转 HF 后推给所有 sglang engine（见 §5.3）。在 `train.py` 里每轮迭代末尾调用一次，并把最初一次放在训练循环之前，保证 sglang 冷启动就有正确权重。
 
@@ -235,7 +235,7 @@ def generate(self, rollout_id):
     return self._split_train_data_by_dp(data)           # 切分+张量化+ray.put → 返回 list[Box(ref)]
 ```
 
-- **`_get_rollout_data(rollout_id)`**：内部 `data = call_rollout_fn(self.generate_rollout, self.args, rollout_id, self.data_source, evaluation=False)`，得到 `RolloutFnTrainOutput`，取 `.samples`（即 `list[list[Sample]]`，32 组 × 8），再用 `itertools.chain.from_iterable` **展平**成 256 条 `Sample`，并强制给每条 `Sample` 打上 `rollout_id`（供后续 loss reducer 按「一次 rollout」聚合，而不是按 256 条样本计数）。返回 `(data, metrics)`。
+- **`_get_rollout_data(rollout_id)`**：调用 `call_rollout_fn(...)` 得到 `RolloutFnTrainOutput`，取 `.samples`（32 组 × 8），先用 `_validate_rollout_id_annotated` 校验 compact/fan-out 输出的 sibling 合约，再循环 flatten 成 256 条 `Sample`。这里不会替样本强制改写 `rollout_id`；默认样本的标识来自 data source，custom compact rollout 必须自己给同一执行拆出的 sibling 设置相同非空值。
 - **`call_rollout_fn(func, args, rollout_id, data_source, evaluation)`**（`slime/rollout/base_types.py`）：统一封装「调用 rollout 函数」。非评估签名 `func(args, rollout_id, data_source)`；评估签名 `func(args, rollout_id)`。这里 `func = self.generate_rollout`（默认 `slime.rollout.sglang_rollout.generate_rollout`）。
 - `generate` 的返回值就是 `_split_train_data_by_dp` 的结果：**一个 `list[Box]`**（每个 DP rank 一个 `ray.put` 出来的引用）。`train.py` 直接 `ray.get` 得到它，作为 `async_train` 的输入。**`generate` 内部并不做 offload/update_weights/resume**——这些由 `train.py` 主循环在 `generate` 之后驱动（见 §0.2 / §5.5）。
 
@@ -260,7 +260,7 @@ while len(data) < target_data_size:
         data.append(group)
 ```
 
-- **`over_sampling_batch_size`** = `rollout_batch_size × n_samples_per_prompt`（=32×8=256）。`data_source` 是一个可调用对象：`data_source(over_sampling_batch_size)` 返回 `list[list[Sample]]`（32 组 × 8 条），每组内 8 条共享同一任务（GRPO 组）。
+- **`over_sampling_batch_size` 的单位是 prompt group，不是 Sample 条数。** 本脚本未显式设置它，参数校验会令其等于 `rollout_batch_size=32`。因此 `data_source(32)` 返回 32 组，每组再含 `n_samples_per_prompt=8` 条，共 256 条 `Sample`。如果把它设成 256，含义会变成一次取 256 组，而不是 256 条样本。
 - 数据集底层读取 `retail_train_tasks.jsonl`，`--input-key index` 决定每行用哪个字段作为任务索引。此刻每条 `Sample` 的初始字段：`index`（全局序号）、`prompt`（任务索引，如 `"42"`）、`group_index`、`metadata`，但**还没有** `tokens/reward/loss_mask`。
 - **动态采样过滤 `check_reward_nonzero_std`**：这是 `--dynamic-sampling-filter-path` 指定的过滤器。GRPO 要求组内 8 条轨迹的奖励有方差；若某组 8 条奖励全相同（std=0），则该组 advantage 全为 0、无学习信号，`call_dynamic_filter` 判定 `keep=False`，该组被丢弃并触发一次重采样（`remaining_batch_size -= 1`）。这是 GRPO 能学到「组内相对好坏」的关键保障。
 
@@ -282,7 +282,7 @@ if sample.reward is None:                              # tau-bench 已在 genera
 
   - **`load_function(path)`**（`slime/utils/misc.py`）：按 `"module.func"` 字符串动态 `importlib` 导入。`--custom-generate-function-path generate_with_tau.generate` → 导入本例目录下的 `generate_with_tau.generate`。
   - tau-bench 的 `generate` **自行把 reward 写进 Sample**，所以 `if sample.reward is None` 分支被跳过（不会走通用 reward-model `async_rm`）。
-  - `generate_rollout_async` 在 `rollout_id == 0` 时会 `await asyncio.gather(*[engine.initialize_weight_update_group.remote(...) for engine in sglang_engines])`，建立首次 actor↔sglang 的权重同步 NCCL 组（见 §5.4）。
+  - 权重 updater 与 engine 的连接在 actor 初始化/恢复阶段建立。本例 colocated engine 走 CUDA IPC，不是在第一次 rollout 内临时建立 actor↔SGLang NCCL 广播组（见 §5.4）。
 
 > 注意区分两个「generate」：
 > - `generate_rollout`（来自默认 `slime.rollout.sglang_rollout.generate_rollout`，因为脚本未设 `--rollout-function-path`）—— 顶层 rollout 函数，负责「要样本 + 提交各组 + 收集 + 动态过滤」。
@@ -359,7 +359,7 @@ def _convert_samples_to_train_data(self, samples):   # samples: 256 条 Sample(�
     raw_rewards, rewards = self._post_process_rewards(samples)   # rewards 为标量列表
     train_data = defaultdict(list)
     for sample in samples:
-        train_data["tokens"].append(sample.tokens)              # 已 pad 到统一长度
+        train_data["tokens"].append(sample.tokens)              # 保持每条序列原始变长 list
         train_data["response_lengths"].append(sample.response_length)
         train_data["loss_masks"].append(sample.loss_mask)
         if sample.rollout_log_probs is not None:                # 本例为 None → 不加入
@@ -374,7 +374,8 @@ def _convert_samples_to_train_data(self, samples):   # samples: 256 条 Sample(�
 
 字段含义：
 - `tokens`：每条轨迹的完整 token id 序列（prompt + 所有轮次）。
-- `rewards`：**标量**列表（256 个），每组 8 个共享同一任务的最终 reward（`_post_process_rewards` 可能做归一化/裁剪，本例是原始成败值）。
+- `raw_reward`：256 个原始成败标量；每组 8 条轨迹共享任务身份，但每条轨迹各有自己的成败值。
+- `rewards`：**标量**列表（256 个），本例已经由 `_post_process_rewards` 做逐组减均值和样本标准差归一化，不再是原始 0/1。
 - `loss_masks`：与 `tokens` 等长，1=模型生成、0=环境/工具/提示。
 - `response_lengths`：每条轨迹的 response 长度，用于打包 micro-batch。
 - `rollout_log_probs`：本例为 None（tau-bench 未记录），故不加入；若记录则会成为 off-policy 旧策略概率。
@@ -405,7 +406,7 @@ def _split_train_data_by_dp(self, data):
     return rollout_data_refs                                      # list[Box]
 ```
 
-- **`build_dp_schedule(args, train_parallel_config, lengths, global_batch_size, rollout_indices)`**（`slime/utils/data.py`）：把 256 条样本按 `total_length` 打包成若干个 micro-batch，使每个 micro-batch 的 token 数尽量不超过 `max_tokens_per_gpu`(=9216)、且序列数均衡；同时返回 `micro_batch_indices`（每个 DP rank 内 micro-batch 的下标）与 `num_microbatches`。本例 `global_batch_size=256, micro_batch_size=16, dp_size=1` → **16 个 micro-batch，每批 16 条**。
+- **`build_dp_schedule(args, train_parallel_config, lengths, global_batch_size, rollout_indices)`**（`slime/utils/dp_schedule.py`）：先按 rollout id 组成训练 step，再把真实 `total_length` first-fit packing 成动态 micro-batch，使每个 bin 尽量不超过 `max_tokens_per_gpu × cp_size`；最后对齐并分发给 DP rank。返回的 `num_microbatches` 随本轮轨迹长度变化，不能仅凭 256 条样本预先断言为 16。
 - **`ray.put`**：把张量字典放入 Ray 的共享内存 object store，返回一个 `ObjectRef`；外层再包一个 `Box`（slime 用于标记「这是一段 rollout 训练数据」的轻量容器）。训练 actor 之后用 `ray.get(ref)` 取回，避免跨进程大拷贝。
 - 返回 `list[Box]`（每个 DP rank 一个；本例 `dp_size=1` 故长度为 1）。`train.py` 把这个列表直接作为 `async_train` 的输入。
 
@@ -417,7 +418,7 @@ def _split_train_data_by_dp(self, data):
 
 `create_actor_model` → `MegatronTrainRayActor.create()`（异步）里：
 
-- `init(args, ...)`：建立分布式进程组、加载 tokenizer、`initialize_model_and_optimizer` 构建 actor（TP=2）与可选 ref 模型。因为 `use_kl_loss=True`，会加载 `--ref-load` 指定的冻结参考模型。
+- `init(args, ...)`：建立分布式进程组、加载 tokenizer、`initialize_model_and_optimizer` 构建 actor（TP=2）。因为 `use_kl_loss=True`，还会把 `--ref-load` checkpoint 依次装入同一 module 并备份成 `ref` tag；actor/ref 通过 `TensorBackuper` 切换，ref 不是另一套常驻 GPU module。
 - `weight_updater = UpdateWeightFromTensor(...)`（colocate 默认）：负责后续把训练权重同步给 sglang（§5.3）。
 - `weights_backuper = TensorBackuper()`：保存训练前权重，便于可能的回滚/对比。
 
@@ -487,15 +488,15 @@ def compute_advantages_and_returns(args, rollout_data, log_probs, old_log_probs,
         kl = [torch.zeros_like(lp) for lp in log_probs]     # kl 全 0
     else:
         kl = [compute_approx_kl(log_probs[i], ref_log_probs[i], kl_loss_type) for i ...]
-    returns = get_grpo_returns(rewards, kl)                 # 标量 reward 广播到每条 token
-    returns = distributed_masked_whiten(returns, loss_masks, group=group_sizes, ...)  # 组内 whitening
+    returns = get_grpo_returns(rewards, kl)                 # 已归一化的标量 reward 广播到每条 token
     advantages = returns
     return advantages, returns, full_kl
 ```
 
-- **`get_grpo_returns(rewards, kl)`**（`slime/utils/ppo_utils.py`）：对第 i 条样本，`returns[i] = torch.ones_like(kl[i]) * rewards[i]`。因为 `kl` 形状是 `[L_i]`（与 token 对齐），`ones_like` 就把**标量 reward 复制成长度 L_i 的向量**——这就是 reward 从「标量」变「逐 token」的地方。
-- **`distributed_masked_whiten`**：在**同一 GRPO 组（8 条轨迹）内**做 whitening：`advantage = (r - mean(r)) / std(r)`，且只在 `loss_mask=1` 的 token 上算、其余置 0。`mean/std` 用 `dist.all_reduce` 跨 DP rank 聚合，保证组内统计量一致。
-  - 例：某任务 8 条轨迹 reward = `[1,0,1,0,1,0,0,1]`，均值 0.5、标准差≈0.5 → advantage ≈ `[+1,-1,+1,-1,+1,-1,-1,+1]`（组内相对优劣）。
+- **组内 reward normalization 实际发生得更早**：`RolloutManager._post_process_rewards` 在 `Sample → train_data` 时把 256 个 raw reward reshape 成 `[32, 8]`，每组减均值；默认 `grpo_std_normalization=True`，还除以该组标准差加 `1e-6`。`train_data` 同时保留 `raw_reward` 和归一化后的 `rewards`。
+- **`get_grpo_returns(rewards, kl)`**（`slime/utils/ppo_utils.py`）：对第 i 条样本，`returns[i] = torch.ones_like(kl[i]) * rewards[i]`，把已经组内归一化的标量复制到 response token 形状。这是标量变逐 token 的位置，不是组内统计的计算位置。
+- 脚本没有 `--normalize-advantages`，所以训练侧不会再调用 `distributed_masked_whiten` 做一次跨 DP 的全局 advantage whitening。若开启该参数，那是对所有 masked advantage 的额外全局归一化，不等同于 shape 为 `32 × 8` 的 GRPO 逐组 normalization。
+  - 例：某组 reward = `[1,0,1,0,1,0,0,1]`，均值 0.5；PyTorch `std()` 默认用样本标准差，约为 0.535，因此归一化值约为 `±0.935`，不是精确的 `±1`。
 
 #### 4.4.2 策略损失（`policy_loss_function` / `compute_grpo_loss`）
 
@@ -534,7 +535,7 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean, ...):
       return loss, clipfrac
   ```
 
-  - `coef_1 = exp(old - new) = π_old/π_new`；而 PPO 通常用 `π_new/π_old`，二者互为倒数，但配合 `advantages` 与 `torch.min` 的写法等价（slime 采用 `old-new` 的约定）。
+  - `ppo_kl = old_log_probs - new_log_probs`，但代码取 `ratio = exp(-ppo_kl)`，所以 `ratio = exp(new-old) = π_new/π_old`，正是 PPO 的标准重要性比率。不能只看 `ppo_kl` 的符号而漏掉指数前的负号。
   - 裁剪区间 `[1-eps_clip, 1+eps_clip_high] = [0.8, 1.28]`：概率比超过 1.28 或低于 0.8 的部分被截掉，防止单步更新过大。`eps_clip_high=0.28` 让「概率升高」更容易被接受。
 - **`compute_approx_kl(new, ref, kl_loss_type)`**（`slime/utils/ppo_utils.py`）：估计 `KL(π_new ‖ π_ref)`。`kl_loss_type="low_var_kl"` 用 `k3/low_var_kl` 公式（非负、低方差的 KL 估计）。本例因 `kl_loss_coef=0`，该项乘 0，不影响梯度，但 `ref_log_probs` 仍被计算（因为 `use_kl_loss=True` 要求 ref 模型存在）。
 
@@ -542,8 +543,9 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean, ...):
 
 ### 4.5 优化与梯度累积
 
-- `global_batch_size=256`，`micro_batch_size=16`，`dp_size=1`（`--actor-num-gpus-per-node 2` 全用于 TP，无 DP）→ **梯度累积步数 = 256 / (16×1) = 16**。即 16 个 micro-batch 前向/反向后做一次 `optimizer.step()`。
-- `model.forward_backward(...)` 走 Megatron 的 pipeline 调度（`pipeline-model-parallel-size=1` 退化为普通 TP 前向），每个 micro-batch 累加梯度，累积满 16 步后：`opt_param_scheduler.step()`（本例 `lr-decay-style constant` → 学习率恒为 `1e-6`）+ `optimizer.step()`。
+- `dp_size=1`（2 张训练卡全用于 TP=2），但本脚本开启了 `--use-dynamic-batch-size`，所以 **micro-batch 数不是 `256 / 16` 这种固定公式**。`micro_batch_size` 默认值即使是 1，在动态路径也不用于切 batch；`build_dp_schedule` 根据每条轨迹的真实 `total_length` 做 first-fit packing，使每个 bin 尽量不超过 `max_tokens_per_gpu × cp_size = 9216` token。
+- 因此某轮究竟有多少个 micro-batch 只能在 rollout 长度已知后确定，并记录在 `rollout_data["num_microbatches"]`。256 条都约 285 token 时，理论上一个 9,216-token bin 可容纳约 32 条，远不是“每批固定 16 条”；真实多轮轨迹长度差异也会改变 bin 数。
+- `model.forward_backward(...)` 走 Megatron pipeline 调度（PP=1 时退化为无流水线版本），对调度器给出的全部动态 micro-batch 累积梯度，然后执行一次 `optimizer.step()` 和 scheduler step。
 - 优化器：`adam`，`weight-decay 0.1`，`adam-beta1 0.9 / beta2 0.98`。
 
 ### 4.6 保存与权重备份
@@ -586,38 +588,41 @@ sglang 支持 `enable_memory_saver`：可以把权重/KV cache 从 GPU 临时搬
 
 ### 5.3 权重同步：`UpdateWeightFromTensor`（colocate 默认）
 
-这是「训练 → 推理」权重传递的核心。流程（colocate 且 `update_weights_method` 默认 `from_tensor`）：
+这是“训练 → 推理”权重传递的核心。CLI 仍是默认的 `--update-weight-mode=full --update-weight-transport=nccl`；因为开启了 `--colocate`，actor 在内部选择 `UpdateWeightFromTensor`。不存在 `update_weights_method=from_tensor` 这个当前参数。
 
 ```text
 actor 训练完一步
    │
    ▼ weight_updater.update_weights()
-   │  weights = weights_getter()                       # 取 actor 当前 Megatron 权重(分片在各 rank)
-   │  hf_weights = convert_to_hf(weights, ...)         # Megatron 分片 → 完整 HF 张量
-   │  bucket = FlattenedTensorBucket(hf_weights)       # 扁平化成一段连续缓冲区
-   │  all_weights = dist.gather_object(bucket, group=gloo_group)  # Gloo 收集全量 HF 权重到各 rank
-   │  for engine in sglang_engines:
-   │      engine.update_weights_from_tensor.remote(all_weights, ...)   # Ray 调用推送到 engine
+   │  weights = weights_getter()                       # actor 的 pinned-CPU backup
+   │  HfWeightIteratorDirect                           # PP/EP broadcast + TP all-gather + HF 转换
+   │  bucket = FlattenedTensorBucket(hf_named_tensors) # GPU 连续缓冲区 + offset/shape 元数据
+   │  handle = MultiprocessingSerializer.serialize(bucket)
+   │  dist.gather_object(handle, group=engine_gloo_group) # 只汇总 IPC handle/元数据
+   │  engine.update_weights_from_tensor.remote(handles, load_format="flattened_bucket")
    ▼
 sglang engine.update_weights_from_tensor(...)
-   │  self.resume_memory_occupation(model_name)         # 先把权重搬回 GPU
-   │  # 通过 NCCL 组(_distribute_weights)把 HF 张量加载进 sglang 模型
-   │  self.release_memory_occupation()                 # 同步完再释放(回 colocate 状态)
+   │  HTTP 控制请求把 handle 交给 SGLang server
+   │  server 打开 CUDA IPC handle，按元数据还原 tensor 并拷进模型权重
+   │  返回后 producer 才清理长生命周期 buffer / IPC cache
 ```
 
 关键函数解释：
 
-- **`convert_to_hf(weights, ...)`**（`slime/backends/megatron_utils/weight_convert.py` 一类）：Megatron 为了 TP 把权重切成了多块（如 `column/row parallel` 的 `weight` 分片），`convert_to_hf` 按层名把它们聚合成 HuggingFace 格式的完整张量（如 `model.layers.{i}.self_attention.qkv.weight`）。这是「训练格式→推理格式」的关键转换。
-- **`FlattenedTensorBucket`**：把一个「嵌套张量字典」压平成「一段连续内存 + 形状/偏移元数据」，方便通过 IPC/NCCL 高效传输，接收端再按元数据还原。
-- **`dist.gather_object(bucket, group=gloo_group)`**：用 **Gloo**（CPU 通信后端）把所有 actor rank 的权重片段收集到各 rank，使每个 rank 都持有**完整** HF 权重（因为接下来要各自推给对应的 engine，且 engine 是 TP=1 的完整副本）。
-- **`update_weights_from_tensor`**（`sglang_engine.py`）：sglang 侧真正实现加载的接口。它先用 `resume_memory_occupation` 让权重回到 GPU，再通过初始化时建立的 **NCCL 组**（`connect_rollout_engines` / `initialize_weight_update_group`）把张量广播/分发到 sglang 进程内的模型，最后 `release_memory_occupation` 释放多余显存。
+- **`HfWeightIteratorDirect`**（`update_weight/hf_weight_iterator_direct.py`）：先依据全局 `ParamInfo` 找到源 rank，再用 GPU collective 重建完整 Megatron tensor，最后调用 `megatron_to_hf.convert_to_hf` 拆 QKV/gate-up、改成 HF 名称。不是 `gather_object` 在重建权重。
+- **`FlattenedTensorBucket`**：把一桶同 dtype 的 HF tensor 压成 GPU 连续缓冲区，并记录名称、shape、dtype、offset；旧版 SGLang 不支持 mixed dtype bucket 时会按 dtype 分桶。
+- **Gloo `gather_object`**：收集的是序列化后的 CUDA IPC handle 字符串，不是整份 tensor payload。本例每个 engine 只有 1 张 GPU，对应的 gather group 也只有 1 个训练 rank，但该 rank 上的 tensor 已在前一步 TP all-gather 完整。
+- **`update_weights_from_tensor`**（`sglang_engine.py`）：Ray actor 发起控制请求，SGLang server 按 `flattened_bucket` 打开 handle 并加载。训练侧会保留 producer buffer，直到请求返回，避免 consumer 异步拷贝尚未完成时复用缓冲区造成权重损坏。
 
-> 与「落盘同步」(`update_weights_from_disk`) 的区别：`from_tensor` 全程在 GPU/CPU/Ray object store 内存里流转，**不经过磁盘**，延迟低，是 colocate 的默认选择。
+> 与磁盘同步的区别：tensor 本体留在 GPU，并通过 CUDA IPC 共享；Ray/HTTP 只走控制信息，**tensor 不进入 Ray object store，也不落盘**。
 
-### 5.4 NCCL 同步与 TP 组
+### 5.4 本例哪里用了 NCCL，哪里没有？
 
-- `initialize_weight_update_group(backend, group_ranks, ...)`：在 actor 与 sglang engine 之间建立用于权重同步的 NCCL 通信组。rollout_id=0 时 `generate_rollout_async` 会 `await asyncio.gather(*[engine.initialize_weight_update_group.remote(...) for engine in sglang_engines])` 完成首次建组。
-- `connect_rollout_engines`：actor 侧据此拿到与各 engine 通信的句柄。`_distribute_weights` 利用该 NCCL 组把 HF 张量下发到每个 engine（本例每个 engine TP=1，所以下发是「一份完整权重给一个 engine」）。
+- actor 的 TP=2 参数重建使用训练侧已有的 NCCL process group（`all_gather_params_async`）；
+- actor 与 colocated SGLang engine 之间**不建立远端权重广播 NCCL 组**，而是 CUDA IPC；
+- `UpdateWeightFromTensor.connect_rollout_engines` 为每个 colocated engine 建 Gloo gather group，用来汇总 handle；只有拓扑里还包含超出 actor GPU 范围的 remote engine 时，同一个 updater 才为那部分 engine 建权重更新 NCCL 组。
+
+因此“训练侧内部用了 NCCL”不能推出“actor→本例 SGLang 的最后一跳也用了 NCCL”。
 
 ### 5.5 触发时机与一次迭代的权重流
 
@@ -643,8 +648,8 @@ eval(rollout_id)
 关键点：
 
 - **没有「滞后一拍」**。`actor_model.update_weights()` 在 `async_train` **之后、下一次 `generate` 之前**执行，推送的就是本轮刚训练出的权重。因此 `generate(rollout_id+1)` 使用的 sglang 权重 = `W_{rollout_id}`，即最新策略。这正是 colocate 的标准做法。
-- `update_weights` 内部（`UpdateWeightFromTensor`）会先 `resume_memory_occupation`（把 sglang 权重搬回 GPU）再同步、最后 `release_memory_occupation`（释放多余显存），与 `train.py` 里 `onload_weights`（line 84）/`onload_kv`（line 88）配合，保证 sglang 在「被推新权重」和「对外服务」两个状态间正确切换。
-- 之所以先 `onload_weights` 再 `update_weights`：前者让 sglang 先恢复成可服务(旧权重)状态，`update_weights` 再用新权重覆盖它。两者都涉及显存 occupation 的切换，但顺序保证了下一步 `generate` 时 sglang 既在 GPU 上、又是新权重。
+- `onload_weights` 由 `train.py` 在 updater 之前调用，把 SGLang 模型权重恢复到 GPU；`UpdateWeightFromTensor` 自己负责 `pause_generation → flush_cache → 覆盖权重 → continue_generation`，不会在传完后再次 release 权重。
+- `onload_kv` 放在权重覆盖之后，最后恢复 KV pool。下一次 `generate` 开始时，SGLang 同时具备新权重和可用 KV cache。
 
 ---
 
@@ -696,8 +701,9 @@ Sample:
 256 条 Sample 汇总成 `train_data` 字典（本例条目）：
 
 ```
-train_data["tokens"]          = [tensor(285), ...]     # 256 条, 已 pad 到统一长度
-train_data["rewards"]         = [1.0, 0.0, 1.0, ...]  # 256 个标量 (同组 8 个共享任务 reward)
+train_data["tokens"]          = [tensor(285), ...]     # 256 个变长一维 tensor，不做全局 padding
+train_data["raw_reward"]      = [1.0, 0.0, 1.0, ...]  # 256 个原始轨迹成败标量
+train_data["rewards"]         = [0.94, -0.94, ...]     # 32 组内分别归一化后的 256 个标量（示意）
 train_data["loss_masks"]      = [tensor(285), ...]
 train_data["response_lengths"]= [75, ...]
 # 注意: 无 "rollout_log_probs"(为 None 未加入); 无 "advantages"(训练期才算)
@@ -707,12 +713,12 @@ train_data["response_lengths"]= [75, ...]
 ### 阶段 3：切分（`_split_train_data_by_dp`）
 
 ```
-schedule = build_dp_schedule(...)   # 把 256 条按长度打包成 16 个 micro-batch
-train_data["partition"]        = [[0..15],[16..31],...,[240..255]]   # 16 组, 每组 16 条
-train_data["num_microbatches"] = [16]
-train_data["global_batch_sizes"]=[256]
-tensorized = {k: tensor(v) for k,v in train_data.items()}
-ref = ray.put(tensorized)           # 放入 Ray object store
+schedule = build_dp_schedule(...)   # 依 256 条真实长度做 first-fit 动态 packing
+rollout_data["partition"]          # 本 DP rank 持有的全局样本位置；dp_size=1 时为全部样本
+rollout_data["micro_batch_indices"]# 每个动态 micro-batch 在本 rank partition 中的局部下标
+rollout_data["num_microbatches"]   # 运行时才确定，取决于本轮长度分布
+rollout_data["global_batch_sizes"] = [256]
+ref = ray.put(rollout_data)         # 默认 object-store transport；值仍保留变长 tensor list
 返回 list[Box]（dp_size=1，故只含一个 Box）
 ```
 
@@ -726,27 +732,26 @@ ref = ray.put(tensorized)           # 放入 Ray object store
    ```
 3. `compute_advantages_and_returns`：
    ```
-   rewards = [[1.0]] × 256
-   returns = get_grpo_returns(rewards, kl=zeros)   # 每条样本: ones(L)*1.0 → 长度 285 的向量
-   advantages = distributed_masked_whiten(returns, loss_masks, group=同组8条)
-             # 例: 若同组 reward=[1,0,1,0,1,0,0,1] → advantage≈[+1,-1,+1,-1,+1,-1,-1,+1](组内 whitening)
-             # 仅 loss_mask=1 处非零
+   rewards = 32 组内已归一化的 256 个标量
+   returns = get_grpo_returns(rewards, kl=zeros)   # 每条样本: ones(L)*reward_norm
+   advantages = returns                           # 本脚本未开启 --normalize-advantages
    ```
+   组内减均值/除样本标准差早已在 rollout 侧 `_post_process_rewards` 完成；训练侧这里只把每条轨迹的归一化标量广播成逐 token 向量。loss 最终仍由 `loss_mask` 选择 assistant token。
 4. `policy_loss_function`（每个 micro-batch）：
    ```
    log_probs     = 当前正在更新的 actor 对 tokens 的 logprob
    old_log_probs = rollout_data["log_probs"]          # 重算值(on-policy)
    ppo_kl        = old_log_probs - log_probs
-   ratio         = exp(-ppo_kl) = π_old/π_new
+   ratio         = exp(-ppo_kl) = π_new/π_old
    pg_loss       = -min(ratio*adv, clamp(ratio,0.8,1.28)*adv).mean()   # 非对称裁剪
    kl_loss       = kl_loss_coef(=0) * KL(new‖ref)     # 0, 不影响
    loss          = pg_loss (+ 0)
    ```
-   16 个 micro-batch 累积梯度后 `optimizer.step()`，actor 权重更新。
+   本轮动态 schedule 的全部 micro-batch 累积梯度后 `optimizer.step()`，actor 权重更新。
 
 ### 阶段 5：权重同步（`update_weights`）
 
-**本迭代末尾**（`async_train` 之后，`train.py` 调用 `actor_model.update_weights()`），`UpdateWeightFromTensor` 把刚训练完的 actor 权重（经 `convert_to_hf` → `FlattenedTensorBucket` → Gloo `gather_object` → `update_weights_from_tensor`）推送到 2 个 sglang engine；下一轮 `generate` 即用这组新权重（见 §5.5，无滞后）。
+**本迭代末尾**（`async_train` 之后，`train.py` 调用 `actor_model.update_weights()`），`UpdateWeightFromTensor` 经 `HfWeightIteratorDirect` 重建/转换权重，构造 `FlattenedTensorBucket`，用 Gloo 汇总 CUDA IPC handle，再调用 `update_weights_from_tensor` 推给 2 个 SGLang engine；下一轮 `generate` 使用这组新权重（见 §5.5）。
 
 ### 字段演变总表
 
@@ -754,9 +759,9 @@ ref = ray.put(tensorized)           # 放入 Ray object store
 |------|------|----------|----------|-------------|----------------|
 | 0 采样 | `Sample` | — | — | — | `index, prompt(="42"), group_index` |
 | 1 生成 | `Sample` | `[285 int]` | `1.0`(标量) | `[285 个 0/1]` | `tokens, reward, loss_mask, response_length, status`；`rollout_log_probs=None` |
-| 2 转换 | `train_data` | list[tensor] | list[标量×256] | list[tensor] | 汇总为字典；`response_lengths`（total_lengths 在下一步算） |
-| 3 切分 | `train_data` | tensorized | 同 | tensorized | `partition`, `num_microbatches=16`, `global_batch_sizes=256`；`ray.put` → `Box([ref])` |
-| 4 训练 | `rollout_data` | 同 | 标量→广播 | 同 | `log_probs`, `ref_log_probs`(重算)；`advantages/returns`(组内 whitening) |
+| 2 转换 | `train_data` | list[tensor] | `raw_reward` 原值；`rewards` 组内归一化 | list[tensor] | 汇总为字典；`response_lengths`（total_lengths 在下一步算） |
+| 3 切分 | `train_data` | tensorized | 同 | tensorized | `partition`、随长度计算的 `num_microbatches`、`global_batch_sizes`；`ray.put` → `Box(ref)` |
+| 4 训练 | `rollout_data` | 同 | 已归一化标量→逐 token 广播 | 同 | `log_probs`、`ref_log_probs`（重算）、`advantages/returns` |
 | 4 训练 | 反向 | — | — | — | 由 `log_probs/old_log_probs/advantages` 算 `pg_loss` → 更新权重 |
 | 5 同步 | sglang | — | — | — | 新权重经 `convert_to_hf`+`update_weights_from_tensor` 推入 sglang |
 
@@ -797,30 +802,30 @@ ref = ray.put(tensorized)           # 放入 Ray object store
 
 | 函数 / 类 | 位置 | 作用 |
 |-----------|------|------|
-| `RolloutManager.generate` | `slime/ray/rollout.py` | rollout 总入口：调生成函数→展平→转换→切分→(offload/update/resume) |
+| `RolloutManager.generate` | `slime/ray/rollout.py` | rollout 总入口：调生成函数→校验/展平→转换→按 DP 切分；显存切换和权重更新由 `train.py` 驱动 |
 | `call_rollout_fn` | `slime/rollout/base_types.py` | 统一封装 rollout 函数调用(区分训练/评估签名) |
 | `generate_rollout_async` | `slime/rollout/sglang_rollout.py` | 顶层 rollout：要样本→分组→并发生成→收集 metrics→返回 `RolloutFnTrainOutput` |
 | `generate_and_rm_group` / `generate_and_rm` | `slime/rollout/sglang_rollout.py` | 组内并发生成；`generate_and_rm` 通过 `load_function(custom_generate_function_path)` 注入 tau-bench 的 `generate` |
-| `load_function(path)` | `slime/utils/load.py` | 按 `"module.func"` 动态导入函数(插件式扩展点) |
+| `load_function(path)` | `slime/utils/misc.py` | 按 `"module.func"` 动态导入函数（插件式扩展点） |
 | `GenerateState(rollout_args)` | `slime/rollout/sglang_rollout.py` | 持有 tokenizer，供 agent 侧自行 tokenize |
 | `_get_token_delta(tokenizer, messages)` | `examples/tau-bench/trainable_agents.py` | 多轮对话下计算「本轮新增 token」与对应 `loss_mask`(assistant=1, 环境=0) |
 | `_build_final_result` | `examples/tau-bench/trainable_agents.py` | 拼出最终 `InteractionResult`(tokens/loss_mask/reward/response_length) |
 | `res_to_sample` | `examples/tau-bench/generate_with_tau.py` | `InteractionResult` → slime `Sample` |
 | `_convert_samples_to_train_data` | `slime/ray/rollout.py` | `list[Sample]` → 训练张量字典(tokens/rewards/loss_masks/...) |
-| `build_dp_schedule` | `slime/utils/data.py` | 按长度把样本打包成 micro-batch(返回每个 DP rank 的样本下标) |
+| `build_dp_schedule` | `slime/utils/dp_schedule.py` | 先按 rollout id 分 step，再按长度动态打包并分发给 DP rank |
 | `_maybe_compute_logprob` / `compute_log_prob` | `slime/backends/megatron_utils/actor.py` | 对 rollout tokens 重算 `log_probs`/`ref_log_probs`(on-policy 旧策略) |
-| `compute_advantages_and_returns` | `slime/backends/megatron_utils/loss.py` | 算 GRPO returns + 组内 whitening advantage |
+| `compute_advantages_and_returns` | `slime/backends/megatron_utils/loss.py` | 把 `_post_process_rewards` 已归一化的 GRPO reward 广播成逐 token returns/advantages |
 | `get_grpo_returns` | `slime/utils/ppo_utils.py` | 把标量 reward 广播成逐 token 向量(`ones_like(kl)*reward`) |
-| `distributed_masked_whiten` | `slime/utils/ppo_utils.py` | 组内 whitening，仅 `loss_mask=1` 处有效，跨 DP `all_reduce` 聚合统计量 |
+| `distributed_masked_whiten` | `slime/utils/distributed_utils.py` | 开启 `--normalize-advantages` 时做 masked 全局 whitening；本脚本未开启 |
 | `get_log_probs_and_entropy` | `slime/backends/megatron_utils/loss.py` | 当前策略前向，取 logprob/entropy(只在 loss_mask=1 处) |
-| `compute_policy_loss` | `slime/utils/ppo_utils.py` | PPO clipped surrogate，`ratio=exp(old-new)`，非对称裁剪 `[1-eps_clip,1+eps_clip_high]` |
+| `compute_policy_loss` | `slime/utils/ppo_utils.py` | PPO clipped surrogate，输入 `ppo_kl=old-new`，内部 `ratio=exp(-ppo_kl)=new/old` |
 | `compute_approx_kl` | `slime/utils/ppo_utils.py` | 估计 `KL(π_new‖π_ref)`，`low_var_kl` 为低方差估计 |
 | `sleep` / `wake_up` | `slime/backends/megatron_utils/actor.py` | colocate 显存分时：`torch_memory_saver.pause/resume` + 进程组 destroy/reinit |
-| `UpdateWeightFromTensor` | `slime/backends/megatron_utils/update_weight/` | 训练权重→HF 格式→Gloo 收集→推送到 sglang(colocate 默认) |
-| `convert_to_hf` | `slime/backends/megatron_utils/weight_convert.py` | Megatron 分片权重 → 完整 HF 张量 |
-| `FlattenedTensorBucket` | `slime/backends/megatron_utils/update_weight/` | 把嵌套张量字典压成连续缓冲区以便 IPC/NCCL 传输 |
+| `UpdateWeightFromTensor` | `slime/backends/megatron_utils/update_weight/update_weight_from_tensor.py` | colocate 默认 updater：HF chunk → CUDA IPC；混合拓扑的远端 engine 可走 NCCL |
+| `convert_to_hf` | `slime/backends/megatron_utils/megatron_to_hf/__init__.py` | 完整 Megatron tensor → HF 命名/layout tensor 列表 |
+| `FlattenedTensorBucket` | `slime/backends/megatron_utils/sglang.py`（从 SGLang 引入） | 把一桶 tensor 压成连续 GPU buffer + metadata，供 IPC 还原 |
 | `release/resume_memory_occupation` | `slime/backends/sglang_utils/sglang_engine.py` | sglang 显存占用切换(配合 colocate) |
-| `initialize_weight_update_group` / `connect_rollout_engines` | `slime/backends/sglang_utils/` | 建立 actor↔sglang 的 NCCL 权重同步组 |
+| `connect_rollout_engines` | `UpdateWeightFromTensor` | 按 GPU offset 划分 colocated/remote engine，分别建立 Gloo IPC group 或远端 NCCL group |
 | `_start_router` | `slime/ray/rollout.py` | 启动 sglang_router 并把 `sglang_router_ip/port` 写回 `args`(agent 连接用) |
 
 ---
@@ -830,4 +835,4 @@ ref = ray.put(tensorized)           # 放入 Ray object store
 - **Q：为什么 reward 直到训练期才变成逐 token？** A：rollout 期 tau-bench 只产出「整条轨迹的成败标量」，存进 `Sample.reward`（标量）。真正广播到每个 token 发生在训练的 `get_grpo_returns`（用与 token 对齐的 `kl` 形状做 `ones_like*k`）。
 - **Q：old_log_probs 来自哪里？** A：脚本未启用 `--use-rollout-logprobs`，所以由训练引擎对 rollout 序列重新前向计算得到（on-policy）。tau-bench 的 `generate` 也没有记录逐 token logprob。
 - **Q：开了 `--use-kl-loss` 却 `kl-loss-coef 0.00` 有何意义？** A：保证参考模型被加载、`ref_log_probs` 被计算（代码结构要求），但 KL 对梯度的实际权重为 0，等价于「有参考模型但不加 KL 惩罚」。
-- **Q：rollout 用的权重是不是最新的？** A：不是，比 actor 落后一次迭代（§5.5）。这是 colocate 下权重同步时序决定的标准行为。
+- **Q：rollout 用的权重是不是最新的？** A：以生成开始时为准，是最近一次已完成训练并同步的权重。`generate(rollout_id)` 先用当前策略采样，随后 actor 才用这批数据更新；更新完成立刻同步，因此 `generate(rollout_id+1)` 使用 `W_rollout_id`。如果把“正在训练后尚未产生的权重”也叫最新，它当然不可能被当前 rollout 使用，但这里没有额外一轮同步滞后。

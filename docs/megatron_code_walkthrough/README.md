@@ -18,7 +18,7 @@
 | 3. 状态与显存 | [DDP/Optimizer/Checkpoint](03_state_and_memory/01_data_parallel_optimizer_checkpoint.md) · [Megatron-FSDP](03_state_and_memory/02_megatron_fsdp.md) · [显存、确定性与 CUDA Graph](03_state_and_memory/03_memory_determinism_cuda_graph.md) | 参数、梯度、优化器和 activation 由谁持有，怎样保存与复现 |
 | 4. 模型与高级特性 | [模型与 Tokenizer](04_models_and_features/01_models_and_tokenizers.md) · [MoE/MLA/MTP](04_models_and_features/02_moe_mla_mtp.md) · [Hybrid/多模态/RL](04_models_and_features/03_hybrid_multimodal_rl.md) · [CP/MoE/低精度深读](04_models_and_features/04_context_moe_precision_deep_dive.md) | 新架构怎样落到模块、路由、布局和精度状态 |
 | 5. 实战 | [性能与排障](05_practice/01_performance_debugging.md) · [配置评审清单](05_practice/02_configuration_review.md) | 如何从 OOM、hang 或吞吐下降定位到正确层次 |
-| 6. 参考 | [覆盖矩阵](06_reference/01_official_docs_coverage.md) · [术语表](06_reference/02_glossary.md) | 去哪里继续查，术语如何统一 |
+| 6. 参考 | [覆盖矩阵](06_reference/01_official_docs_coverage.md) · [术语表](06_reference/02_glossary.md) · [源码问题详解](06_reference/03_source_questions.md) | 去哪里继续查，术语如何统一，跨章节问题如何从源码回答 |
 
 ## 推荐路线
 
@@ -28,6 +28,7 @@
 - collective hang：TP/SP 进程组 → PP P2P → 性能排障。
 - 新模型：ModuleSpec → 模型与 Tokenizer → 对应高级特性。
 - 改并行度后恢复：DDP/Optimizer/Checkpoint → FSDP → 配置评审。
+- 直接带着问题读：先查[源码问题索引与详解](06_reference/03_source_questions.md)，再沿每个答案的符号锚点回到主题章节。
 
 每章建议三遍：第一遍只画控制流；第二遍记录 tensor 的 global/local shape、所属 group 与 dtype；第三遍做最小实验并用日志或 profiler 验证。
 

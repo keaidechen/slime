@@ -1,7 +1,7 @@
 # 12 训练侧内部实现：Megatron-LM 篇
 
 > 衔接 [06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md)。
-> 06 篇讲 slime 如何调用 Megatron；本篇深入仓库根目录 vendored 的 `Megatron-LM/` 源码，回答"slime 调的那几个入口背后发生了什么"。姊妹篇 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md) 讲格式转换层 Megatron-Bridge——两个库体量和主题差异较大（Megatron-LM 是训练执行引擎，Megatron-Bridge 是 HF↔Megatron 的转换/建模层），故拆成两篇分别讲透，避免一篇文档被迫在"引擎"和"转换器"两个话题间来回切换。
+> 06 篇讲 slime 如何调用 Megatron；本篇深入仓库根目录 vendored 的 `Megatron-LM/` 源码，回答“slime 调的入口背后发生了什么”。姊妹篇 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md) 讲 slime 内建 HF↔Megatron 转换层。Megatron-LM 负责训练执行，转换器负责参数命名/布局与分布式 gather/shard，二者职责不同。
 
 ---
 
@@ -73,7 +73,7 @@ PP 组（mask=[F,T,F]）：[[0,2],[1,3],[4,6],[5,7]]     跨度为 TP=2 的两�
 
 ## 4. 配置与 checkpoint
 
-- **`core_transformer_config_from_args`**（`megatron/training/arguments.py`）：把命令行 args 映射成 `TransformerConfig`（`megatron/core/transformer/transformer_config.py`）——slime 原生 GPTModel 路径用；bridge 路径则由 Megatron-Bridge 生成 provider（13 篇）；
+- **`core_transformer_config_from_args`**（`megatron/training/arguments.py`）：把命令行 args 映射成 `TransformerConfig`（`megatron/core/transformer/transformer_config.py`）。slime 默认 provider 直接使用它；特殊结构通过 `--spec` 或 `--custom-model-provider-path` 扩展，不再有 bridge provider 分支；
 - **checkpointing**（`megatron/training/checkpointing.py`）：dist-ckpt 格式（每个 rank 存自己分片 + 全局元数据），目录下 `latest_checkpointed_iteration.txt` 记录最新 iteration——slime 的 `checkpoint.py:97-152` 靠这个文件判断"是 Megatron ckpt 还是 HF 目录"（06 篇 §3）。
 
 ## 5. MoE 与流水线调度（训练一步的执行面）
@@ -100,4 +100,4 @@ PP 组（mask=[F,T,F]）：[[0,2],[1,3],[4,6],[5,7]]     跨度为 TP=2 的两�
 - `parallel_state` 的确定性 rank 排布是 slime"DP0/TP0 当权重源"等约定的前提；
 - DistributedOptimizer 的 `init_state_fn` 钩子是 stateless Adam 的落点；
 - 三种流水线调度函数的核心是安排 micro-batch 前向/反向的执行顺序以压缩气泡，同时天然承担了"梯度累积"的职责；
-- 下一篇（13）看 Megatron-Bridge 如何在 HF 与 Megatron 之间做双向转换。
+- 下一篇（13）看 slime 内建转换器如何在 HF 与 Megatron 之间做双向转换。

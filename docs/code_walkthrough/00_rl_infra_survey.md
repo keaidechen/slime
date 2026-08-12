@@ -143,7 +143,7 @@ server 模式下的关键组件：
 - **Megatron-LM**：NVIDIA 的大规模训练框架，支持 TP/PP/EP/CP/SP 五维并行，大模型（百亿→万亿）标配。slime、NeMo-RL（经 Megatron Bridge）走此路。
 - **FSDP2 / DTensor**：PyTorch 原生分片，HF 生态亲和，中小规模与快速迭代友好。verl、NeMo-RL（AutoModel 路径）、TorchForge、PrimeRL 走此路。
 - **DeepSpeed ZeRO-3**：OpenRLHF 的经典后端（其新后端 Molt 基于 Automodel 进一步扩展）。
-- **格式转换层**：Megatron 参数命名/切分与 HuggingFace 完全不同，RL 场景需要高频互转 → 转换层成为独立组件：slime 用 mbridge（Megatron-Bridge 系），NeMo-RL 用 Megatron Bridge，Pai-Megatron-Patch 服务 verl。
+- **格式转换层**：Megatron 参数命名/切分与 HuggingFace 完全不同，RL 场景需要高频互转 → 转换层成为独立组件。slime v0.3.1 起使用仓库内建的 `hf_to_megatron/` 与 `megatron_to_hf/`；NeMo-RL 使用 NVIDIA Megatron Bridge，Pai-Megatron-Patch 服务 verl。不要把它们误认为同一条实现路径。
 - **训练侧优化**：sequence packing、stateless Adam（省优化器状态显存）、CPU offload、梯度 checkpointing。
 
 ### 2.8 Agentic RL → 走读文档 07
@@ -268,7 +268,7 @@ server 模式下的关键组件：
 | APRIL | RLsys Foundation | 主动 partial rollout，rollout 吞吐 +22.5%（最高 44%） |
 | SpecForge | SGLang | 投机解码训练框架（EAGLE3），用于 rollout 加速 |
 | TransferQueue | Ascend | RL 系统独立数据平面（AsyncFlow 论文）：控制面 Ray actor 维护样本×字段生产状态与样本×任务消费状态，数据面可插拔存储（Mooncake/元戎/RayRDT）；verl 集成（PR #5401）后 e2e 吞吐 +49.1%，被 ROLL（RemoteBatch）、UniRL（KV 接口）、Relax 采用。源码已随本仓库提供，走读见 [10_transferqueue.md](10_transferqueue.md) |
-| mbridge / Megatron-Bridge | THUDM / NVIDIA | HF ↔ Megatron 权重/配置转换层 |
+| slime native converter / Megatron Bridge | THUDM / NVIDIA | 两套独立的 HF ↔ Megatron 权重/配置转换方案；slime 当前使用前者 |
 | verifiers + PrimeRL | Prime Intellect | 去中心化跨集群 RL（SHARDCAST 权重分发 + TOPLOC 计算验证） |
 | Miles / vime / Relax | RadixArk / vLLM / RedAI | 基于 slime 的企业级 / vLLM-native / omni-modal 衍生框架 |
 
@@ -310,13 +310,13 @@ server 模式下的关键组件：
 | 数据流 / Data Buffer / 长尾 / 异步 | `slime/rollout/data_source.py`、`fully_async_rollout.py`、`sglang_streaming_rollout.py`、`slime_plugins/rollout_buffer/` | 03 |
 | 权重同步与显存管理 | `slime/backends/megatron_utils/update_weight/`、`sglang.py`（FlattenedTensorBucket）、`kernels/fp8_kernel.py` | 04 |
 | RL 算法 | `slime/backends/megatron_utils/loss.py`、`slime/utils/ppo_utils.py`（如存在） | 05 |
-| 训练后端与格式转换 | `slime/backends/megatron_utils/`（model.py / model_provider.py / data.py）、`megatron_to_hf/`、`slime_plugins/` | 06 |
+| 训练后端与格式转换 | `slime/backends/megatron_utils/`（`model.py` / `model_provider.py` / `hf_to_megatron/` / `megatron_to_hf/`） | 06 / 13 |
 | Agentic RL 与自定义接口 | `slime/agent/`、`examples/`（search-r1 / fully_async / multi_agent / coding_agent_rl） | 07 |
 | 奖励模型与评估 | `slime/rollout/rm_hub/`、`slime/rollout/filter_hub/`、`slime/utils/eval_config.py` | 08 |
 | 工程化、可观测与 Profiling | `slime/utils/`（timer / trace_utils / profile_utils / tracking）、`slime/ray/rollout.py` 健康监控、`tests/` | 09 |
 | 独立数据平面（第三方） | `TransferQueue/`（仓库根目录下的 Ascend 开源源码，非 slime 组件） | 10 |
 | 推理引擎内部（第三方） | `sglang/`（仓库根目录 vendored 源码）：RL 端点服务端实现 | 11 |
 | 训练引擎内部（第三方，Megatron-LM） | `Megatron-LM/`（仓库根目录 vendored 源码） | 12 |
-| 训练引擎内部（第三方，Megatron-Bridge） | `Megatron-Bridge/`（仓库根目录 vendored 源码） | 13 |
+| HF↔Megatron 转换内部（slime 自身） | `slime/backends/megatron_utils/hf_to_megatron/`、`megatron_to_hf/`、`update_weight/hf_weight_iterator_direct.py` | 13 |
 
 > 注：行号引用以写作时仓库快照为准，上游演进后可能漂移；阅读时建议用符号名搜索定位。

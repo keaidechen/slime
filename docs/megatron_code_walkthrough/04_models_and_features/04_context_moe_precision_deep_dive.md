@@ -55,7 +55,7 @@ router 不只是 `topk(softmax(xW))`：
 - expert choice 或 node-limited routing；
 - deterministic routing 与 tie-breaking。
 
-训练 loss 中忘记加入 auxiliary loss 会让 expert 负载塌缩；加权或缩放错误又会改变主任务梯度。
+配置中关闭或错误缩放 auxiliary loss 可能让 expert 负载塌缩。当前实现通过 `MoEAuxLossAutoScaler` 把 auxiliary loss 自动挂到 activation 的 autograd 边上，并由 schedule 设置 accumulation scale；任务 closure 再手工相加会双计。完整调用链见[源码问题详解第 15 节](../06_reference/03_source_questions.md)。
 
 ### token permutation 为什么难
 
@@ -127,14 +127,16 @@ scale 通常来自 amax 历史或 current scaling recipe。工程关键：
 
 ## 8. CP 的局部与全局坐标
 
-假设 sequence=8、CP=2，rank0 持 token `[0,1,2,3]`，rank1 持 `[4,5,6,7]`。对 causal attention：
+先用“连续切半”只解释全局 mask 语义。假设 sequence=8、CP=2，逻辑上 rank A 处理 query `[0,1,2,3]`、rank B 处理 `[4,5,6,7]`，对 causal attention：
 
 ```text
 rank0 query 0..3 只能看全局 key <= query
 rank1 query 4..7 可看 rank0 全部 KV + rank1 对应前缀
 ```
 
-如果 rank1 把本地 query 0 当作全局 0，它会错误 mask 掉 rank0 KV。packed sequence 时还必须防止一个 sample 的 token 看见相邻 sample。
+如果 rank B 把本地 query 0 当作全局 0，它会错误 mask 掉前半 KV。packed sequence 时还必须防止一个 sample 的 token 看见相邻 sample。
+
+但这不是当前 batch helper 的实际 placement。`_get_batch_on_this_cp_rank_per_sequence_balancing` 会把序列切成 `2×CP` 个 chunk 并 zigzag 分配；`S=8, CP=2` 时 rank0 得 `[0,1,6,7]`，rank1 得 `[2,3,4,5]`，用首尾配对均衡 causal work。实现与 mask 坐标的完整区分见[源码问题详解第 8 节](../06_reference/03_source_questions.md)。
 
 官方 CP 图指出：CP 会切所有 activation；非 attention module 不做跨 token 运算，可直接处理 local sequence，只有 attention 必须交换 KV。
 
