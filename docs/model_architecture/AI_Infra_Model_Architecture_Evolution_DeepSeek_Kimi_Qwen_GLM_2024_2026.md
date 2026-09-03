@@ -251,15 +251,15 @@ x
 
 对于 SwiGLU FFN，可以粗略写作：
 
-\[
+```math
 \operatorname{FFN}(x)
 =
 W_2\left(
 \operatorname{SiLU}(W_gx)\odot W_ux
 \right)
-\]
+```
 
-如果 hidden size 为 \(d\)，intermediate size 为 \(d_{ff}\)，那么 FFN 中是几个非常大的 GEMM。
+如果 hidden size 为 $d$，intermediate size 为 $d_{ff}$，那么 FFN 中是几个非常大的 GEMM。
 
 Dense 模型的问题是：
 
@@ -267,17 +267,17 @@ Dense 模型的问题是：
 
 如果总参数从：
 
-\[
+```math
 70B \rightarrow 400B \rightarrow 1T
-\]
+```
 
 那么在 Dense 架构中，模型容量和 active compute 基本绑在一起：
 
-\[
+```math
 P_{\text{total}}
 \approx
 P_{\text{active}}
-\]
+```
 
 因此：
 
@@ -313,31 +313,31 @@ token ──► Router ────────┼── Expert 2
                          └── Expert N-1
 ```
 
-Router 对 token \(x\) 计算：
+Router 对 token $x$ 计算：
 
-\[
+```math
 s = W_r x
-\]
+```
 
 然后：
 
-\[
+```math
 p = \operatorname{softmax}(s)
-\]
+```
 
 选 Top-K experts：
 
-\[
+```math
 \mathcal{E}(x)=\operatorname{TopK}(p)
-\]
+```
 
 最终：
 
-\[
+```math
 y =
 \sum_{e\in \mathcal{E}(x)}
 p_e E_e(x)
-\]
+```
 
 如果：
 
@@ -353,15 +353,15 @@ Active per token:        8
 
 激活比例只有：
 
-\[
+```math
 8/256=3.125\%
-\]
+```
 
 这就是 MoE 的核心：
 
-\[
+```math
 P_{\text{total}}\gg P_{\text{active}}
-\]
+```
 
 ---
 
@@ -450,12 +450,12 @@ DeepSeekMoE 因此把 expert 分为：
 
 输出可以理解成：
 
-\[
+```math
 y =
 E_{\text{shared}}(x)
 +
 \sum_{e\in TopK}p_e E_e(x)
-\]
+```
 
 这样：
 
@@ -526,13 +526,13 @@ output
 
 所以从 Dense 到 MoE 后：
 
-\[
+```math
 \boxed{\text{FLOPs bottleneck}}
-\]
+```
 
 被部分转换成：
 
-\[
+```math
 \boxed{
 \text{Communication}
 +
@@ -542,7 +542,7 @@ output
 +
 \text{Small GEMM}
 }
-\]
+```
 
 ---
 
@@ -550,25 +550,25 @@ output
 
 假设 batch 中有：
 
-\[
+```math
 N=4096
-\]
+```
 
 个 tokens。
 
 256 experts、Top-8 后，每个 expert 平均收到：
 
-\[
+```math
 4096\times 8/256=128
-\]
+```
 
 个 token。
 
 如果 experts 再增加到 896，而每 token 激活 16：
 
-\[
+```math
 4096\times16/896\approx73
-\]
+```
 
 平均每 expert 只有几十 token。
 
@@ -659,9 +659,9 @@ Expert 23 几乎没 token
 
 传统做法加入 auxiliary balancing loss：
 
-\[
+```math
 L = L_{\text{LM}}+\lambda L_{\text{balance}}
-\]
+```
 
 让 expert usage 尽量均匀。
 
@@ -669,14 +669,14 @@ L = L_{\text{LM}}+\lambda L_{\text{balance}}
 
 > balance objective 和 language modeling objective 不完全一致。
 
-\(\lambda\) 太大：
+$\lambda$ 太大：
 
 ```text
 Router 被强迫均匀
 → 破坏真正最优 expert specialization
 ```
 
-\(\lambda\) 太小：
+$\lambda$ 太小：
 
 ```text
 load balance 失效
@@ -688,21 +688,21 @@ DeepSeek-V3 使用 **auxiliary-loss-free load balancing**：
 
 概念上：
 
-\[
+```math
 s'_e(x)=s_e(x)+b_e
-\]
+```
 
 如果某 expert 最近负载过高：
 
-\[
+```math
 b_e \downarrow
-\]
+```
 
 负载太低：
 
-\[
+```math
 b_e \uparrow
-\]
+```
 
 因此：
 
@@ -736,9 +736,9 @@ GPU63: 8ms
 
 整个 layer latency：
 
-\[
+```math
 T\approx 8ms
-\]
+```
 
 所以负载均衡直接决定集群 MFU。
 
@@ -770,13 +770,13 @@ Combine All-to-All
 
 如果完全串行：
 
-\[
+```math
 T =
 T_{attn}
 +T_{dispatch}
 +T_{expert}
 +T_{combine}
-\]
+```
 
 理论上 MoE 省下的 FLOPs 会部分被通信吃掉。
 
@@ -811,17 +811,17 @@ compute
 
 理想目标：
 
-\[
+```math
 T_{\text{compute+comm}}
 \rightarrow
 \max(T_{\text{compute}},T_{\text{comm}})
-\]
+```
 
 而不是：
 
-\[
+```math
 T_{\text{compute}}+T_{\text{comm}}
-\]
+```
 
 所以要把 DeepSeek-V3 看成一个整体：
 
@@ -865,20 +865,20 @@ Inference 还有另一个独立瓶颈：
 
 标准 Multi-Head Attention：
 
-\[
+```math
 Q=XW_Q,\quad
 K=XW_K,\quad
 V=XW_V
-\]
+```
 
 注意力：
 
-\[
+```math
 A=\operatorname{softmax}
 \left(
 \frac{QK^T}{\sqrt{d_h}}
 \right)V
-\]
+```
 
 在 autoregressive decode 中，以前 token 的 K/V 不变，因此保存起来：
 
@@ -903,11 +903,11 @@ Q_new
 
 KV Cache 大致：
 
-\[
+```math
 M_{KV}
 \propto
 L\times N_{layer}\times N_{KV-head}\times d_{head}
-\]
+```
 
 因此上下文：
 
@@ -923,9 +923,9 @@ KV Cache 线性爆炸。
 
 因此 decoder 常常不是 FLOPs-bound，而是：
 
-\[
+```math
 \boxed{\text{HBM bandwidth bound}}
-\]
+```
 
 ---
 
@@ -958,9 +958,9 @@ MQA：
 
 所以：
 
-\[
+```math
 N_{KV-head}\downarrow
-\]
+```
 
 KV Cache 直接下降。
 
@@ -1009,17 +1009,17 @@ c_t^KV
 
 可以近似理解为：
 
-\[
+```math
 c_t^{KV}=W_{DKV}x_t
-\]
+```
 
-\[
+```math
 K_t=W_{UK}c_t^{KV}
-\]
+```
 
-\[
+```math
 V_t=W_{UV}c_t^{KV}
-\]
+```
 
 真实 MLA 还会把 RoPE 部分和 non-RoPE 内容拆开，以保证低秩吸收和位置编码兼容，但心智模型就是：
 
@@ -1041,15 +1041,15 @@ MLA 并不是“免费压缩”。
 
 它本质上是：
 
-\[
+```math
 \boxed{\text{更多 projection compute}}
-\]
+```
 
 换：
 
-\[
+```math
 \boxed{\text{更少 KV memory + HBM traffic}}
-\]
+```
 
 现代 GPU：
 
@@ -1085,26 +1085,26 @@ MLA 并不是“免费压缩”。
 
 MLA 让：
 
-\[
+```math
 \text{bytes/token}
 \downarrow
-\]
+```
 
 但 attention 仍然要与历史位置交互。
 
 decode：
 
-\[
+```math
 T_{\text{attention}}
 \propto L
-\]
+```
 
 prefill：
 
-\[
+```math
 T_{\text{attention}}
 \propto L^2
-\]
+```
 
 所以 1M context 下，即使每个 token 的 KV 很小：
 
@@ -1154,35 +1154,35 @@ Sparse Attention only on Top-K
 
 可写成：
 
-\[
+```math
 I(q,K)=\operatorname{TopK}
 \left(
 s(q,k_1),...,s(q,k_L)
 \right)
-\]
+```
 
 然后：
 
-\[
+```math
 \operatorname{Attn}(q)
 =
 \operatorname{softmax}
 \left(
 qK_{I}^T
 \right)V_I
-\]
+```
 
 如果：
 
-\[
+```math
 L=1,000,000
-\]
+```
 
 而：
 
-\[
+```math
 K=2048
-\]
+```
 
 真正高成本 attention 的工作量就从百万级候选减少到 2048。
 
@@ -1230,7 +1230,7 @@ Sparse MLA Attention Kernel
 
 总时间：
 
-\[
+```math
 T
 =
 T_{\text{index}}(L)
@@ -1238,19 +1238,19 @@ T_{\text{index}}(L)
 T_{\text{topk}}(L)
 +
 T_{\text{sparse-attn}}(K)
-\]
+```
 
 随着 K 变小：
 
-\[
+```math
 T_{\text{sparse-attn}}\downarrow
-\]
+```
 
 但 indexer 仍然可能扫描：
 
-\[
+```math
 L=1M
-\]
+```
 
 于是：
 
@@ -1310,25 +1310,25 @@ t0 t1 t2 t3 t4 t5 t6 t7 ...
 
 如果 compression ratio：
 
-\[
+```math
 m=4
-\]
+```
 
 则：
 
-\[
+```math
 L
 \rightarrow
 L/m
-\]
+```
 
 1M token：
 
-\[
+```math
 1,000,000
 \rightarrow
 250,000
-\]
+```
 
 然后才运行 sparse index：
 
@@ -1347,9 +1347,9 @@ Sparse Attention
 
 因此：
 
-\[
+```math
 T_{\text{index}}
-\]
+```
 
 也大约随 candidate 数量一起下降。
 
@@ -1379,13 +1379,13 @@ Recent sliding-window raw KV
 
 概念上：
 
-\[
+```math
 KV_{\text{used}}
 =
 KV_{\text{sparse-compressed}}
 \cup
 KV_{\text{recent-raw}}
-\]
+```
 
 所以它同时保留：
 
@@ -1412,15 +1412,15 @@ HCA：
 
 例如：
 
-\[
+```math
 m'=128
-\]
+```
 
 1M tokens：
 
-\[
+```math
 1,000,000 / 128 \approx 7812
-\]
+```
 
 也就是说把非常长的历史压成几千个“memory slots”。
 
@@ -1508,7 +1508,7 @@ Hybrid Memory Hierarchy
 
 这是一条非常完整的瓶颈迁移链：
 
-\[
+```math
 \text{KV bytes}
 \rightarrow
 \text{Attention FLOPs}
@@ -1516,7 +1516,7 @@ Hybrid Memory Hierarchy
 \text{Indexer FLOPs}
 \rightarrow
 \text{Memory hierarchy design}
-\]
+```
 
 ---
 
@@ -1536,56 +1536,56 @@ Linear / Recurrent Attention 更激进：
 
 标准 softmax attention：
 
-\[
+```math
 \operatorname{Attn}(Q,K,V)
 =
 \operatorname{softmax}(QK^T)V
-\]
+```
 
 存在：
 
-\[
+```math
 QK^T
-\]
+```
 
 所以需要 token-to-token interaction。
 
 一些 linear attention 通过 feature map：
 
-\[
+```math
 \phi(Q), \phi(K)
-\]
+```
 
 改写为：
 
-\[
+```math
 \phi(Q)
 \left(
 \phi(K)^T V
 \right)
-\]
+```
 
 可以维护 recurrent state：
 
-\[
+```math
 S_t
 =
 S_{t-1}
 +
 \phi(k_t)v_t^T
-\]
+```
 
 query：
 
-\[
+```math
 y_t=\phi(q_t)S_t
-\]
+```
 
 于是历史被压成：
 
-\[
+```math
 S_t
-\]
+```
 
 而不是：
 
@@ -1598,9 +1598,9 @@ Kt,Vt
 
 相对于 sequence length：
 
-\[
+```math
 M_{\text{state}}=O(1)
-\]
+```
 
 decode 也不需要每次扫全部历史。
 
@@ -1610,9 +1610,9 @@ decode 也不需要每次扫全部历史。
 
 简单 linear state：
 
-\[
+```math
 S_t=S_{t-1}+\Delta_t
-\]
+```
 
 最大的问题：
 
@@ -1622,18 +1622,18 @@ DeltaNet 一类方法引入类似 delta-rule 的更新，让新的 key/value 可
 
 Gated DeltaNet 再加入可学习 gate：
 
-\[
+```math
 S_t =
 \alpha_t \odot S_{t-1}
 +
 \Delta_t
-\]
+```
 
 其中：
 
-\[
+```math
 0\le\alpha_t\le1
-\]
+```
 
 可以理解为：
 
@@ -1664,15 +1664,15 @@ Kimi 的 KDA 可以理解为对 DeltaNet 进一步细粒度化。
 
 概念上：
 
-\[
+```math
 S_t
 =
 D_t \odot S_{t-1}
 +
 \Delta_t
-\]
+```
 
-其中 \(D_t\) 可以针对不同 channel 有不同衰减。
+其中 $D_t$ 可以针对不同 channel 有不同衰减。
 
 直觉：
 
@@ -1691,9 +1691,9 @@ state channel 2: 几乎覆盖
 
 看到 recurrence：
 
-\[
+```math
 S_t=f(S_{t-1},x_t)
-\]
+```
 
 很容易以为：
 
@@ -1772,9 +1772,9 @@ Gated MLA
 
 即大约：
 
-\[
+```math
 3:1
-\]
+```
 
 ### KDA 层
 
@@ -1794,13 +1794,13 @@ full / exact token-level retrieval
 
 所以 hybrid attention 的本质是：
 
-\[
+```math
 \boxed{
 \text{Compressed State}
 +
 \text{Exact Retrieval}
 }
-\]
+```
 
 而不是：
 
@@ -1812,19 +1812,19 @@ full / exact token-level retrieval
 
 普通 MLA：
 
-\[
+```math
 y=\operatorname{MLA}(x)
-\]
+```
 
 Gated MLA：
 
-\[
+```math
 g=\sigma(W_gx)
-\]
+```
 
-\[
+```math
 y=g\odot\operatorname{MLA}(x)
-\]
+```
 
 它让模型对 attention 输出进行 data-dependent control：
 
@@ -1892,13 +1892,13 @@ Global Attention
 
 所以：
 
-\[
+```math
 \text{Hybrid}
 =
 \text{cheap memory}
 +
 \text{exact memory}
-\]
+```
 
 ---
 
@@ -1934,9 +1934,9 @@ K
 
 然后：
 
-\[
+```math
 s_i=q_{index}k_{index,i}
-\]
+```
 
 indexer GEMM 本身变小。
 
@@ -1963,10 +1963,10 @@ indexer GEMM 本身变小。
 
 假设每 block 32 token：
 
-\[
+```math
 1M/32
 \approx31250
-\]
+```
 
 Indexer candidate 数大幅下降。
 
@@ -1980,13 +1980,13 @@ Micro-block Sparse:
 Indexer O(L/B)
 ```
 
-其中 \(B\) 是 block size。
+其中 $B$ 是 block size。
 
 所以 QSA 优化的是：
 
-\[
+```math
 \boxed{\text{Sparse Attention 的 Index Cost}}
-\]
+```
 
 ---
 
@@ -2018,9 +2018,9 @@ GLM-5.2 的 IndexShare：
 
 所以：
 
-\[
+```math
 T_{index}
-\]
+```
 
 按 layer 数进一步摊薄。
 
@@ -2052,17 +2052,17 @@ Sparse Attention
 
 解决：
 
-\[
+```math
 \text{long-context memory/compute}
-\]
+```
 
 ### Sparse exact retrieval
 
 解决：
 
-\[
+```math
 \text{information loss}
-\]
+```
 
 因此可以把这类架构理解成：
 
@@ -2117,13 +2117,13 @@ Query
 
 标准 PreNorm Transformer：
 
-\[
+```math
 x_{l+1}
 =
 x_l
 +
 F_l(\operatorname{Norm}(x_l))
-\]
+```
 
 每层 output 都固定系数 1 加入 residual：
 
@@ -2165,15 +2165,15 @@ Residual 开始暴露两个问题：
 
 标准 residual：
 
-\[
+```math
 h_l = h_{l-1}+f_l(h_{l-1})
-\]
+```
 
 虽然数学展开后包含所有过去层：
 
-\[
+```math
 h_l=x_0+\sum_{i<l}f_i
-\]
+```
 
 但所有信息以固定累加方式混合。
 
@@ -2183,21 +2183,21 @@ AttnRes 的核心是：
 
 概念上：
 
-\[
+```math
 h_l
 =
 \sum_{i<l}
 \alpha_{i\rightarrow l}v_i
-\]
+```
 
 其中：
 
-\[
+```math
 \alpha_{i\rightarrow l}
 =
 \operatorname{softmax}
 (q_l^Tk_i)
-\]
+```
 
 因此：
 
@@ -2220,7 +2220,7 @@ Layer 12
 
 # 34. Full AttnRes 为什么很贵？
 
-如果第 \(l\) 层都要存所有过去层：
+如果第 $l$ 层都要存所有过去层：
 
 ```text
 v0
@@ -2321,27 +2321,27 @@ branch3
 
 概念上：
 
-\[
+```math
 X_{l+1}
 =
 A_lX_l
 +
 B_lF(C_lX_l)
-\]
+```
 
 其中：
 
-- \(C_l\)：layer input 如何从 residual branches 读；
-- \(B_l\)：layer output 如何写回；
-- \(A_l\)：原 residual state 如何混合传播。
+- $C_l$：layer input 如何从 residual branches 读；
+- $B_l$：layer output 如何写回；
+- $A_l$：原 residual state 如何混合传播。
 
 问题：
 
 动态 mixing matrix 很容易造成：
 
-\[
+```math
 \|X_l\|
-\]
+```
 
 随深度爆炸或衰减。
 
@@ -2367,17 +2367,17 @@ non-negative
 
 如果 residual width：
 
-\[
+```math
 n_{hc}=4
-\]
+```
 
 则边界 residual state：
 
-\[
+```math
 d
 \rightarrow
 4d
-\]
+```
 
 这意味着：
 
@@ -2422,26 +2422,26 @@ R3
 
 概念上：
 
-\[
+```math
 x_l=
 \sum_i g^{read}_{l,i}\odot R_i
-\]
+```
 
 layer output：
 
-\[
+```math
 u_l=F_l(x_l)
-\]
+```
 
 写回：
 
-\[
+```math
 R_i'
 =
 R_i
 +
 g^{write}_{l,i}\odot u_l
-\]
+```
 
 因此 residual 不再是一条固定高速公路，而变成：
 
@@ -2468,9 +2468,9 @@ R3 ────┴───┴───────┘
 
 虽然数学不同，它们都在解决：
 
-\[
+```math
 \boxed{\text{Depth-wise Information Routing}}
-\]
+```
 
 过去：
 
@@ -2592,9 +2592,9 @@ Quantile Balancing 的思路是：
 
 从 Infra 角度，还是为了避免：
 
-\[
+```math
 \boxed{\text{Expert Straggler}}
-\]
+```
 
 ---
 
@@ -2655,13 +2655,13 @@ FP4 :  4 bit
 
 如果只看 storage：
 
-\[
+```math
 M_{FP8}\approx\frac12M_{BF16}
-\]
+```
 
-\[
+```math
 M_{FP4}\approx\frac14M_{BF16}
-\]
+```
 
 但更重要的是：
 
@@ -2716,11 +2716,11 @@ QAT：
 
 因此：
 
-\[
+```math
 W_{quant}=Q(W)
-\]
+```
 
-forward 里直接让模型适应 \(Q(W)\)。
+forward 里直接让模型适应 $Q(W)$。
 
 Kimi K3 从较早 post-training/SFT 阶段就开始 QAT，说明：
 
@@ -2732,9 +2732,9 @@ Kimi K3 从较早 post-training/SFT 阶段就开始 QAT，说明：
 
 标准 token embedding：
 
-\[
+```math
 e_t=E[token_t]
-\]
+```
 
 Qwen3.8-Next 增加基于 local n-gram 的 lookup：
 
@@ -2803,17 +2803,17 @@ CPU/PCIe:
 
 这意味着：
 
-\[
+```math
 \text{Model Capacity}
-\]
+```
 
 开始可以来自：
 
-\[
+```math
 P_{GPU}
 +
 P_{CPU-memory}
-\]
+```
 
 而不是所有参数都在 GPU。
 
@@ -2860,18 +2860,18 @@ cold prefix / long-term cache
 
 AdamW：
 
-\[
+```math
 m_t=\beta_1m_{t-1}+(1-\beta_1)g_t
-\]
+```
 
-\[
+```math
 v_t=\beta_2v_{t-1}+(1-\beta_2)g_t^2
-\]
+```
 
-\[
+```math
 W\leftarrow
 W-\eta\frac{m_t}{\sqrt{v_t}+\epsilon}
-\]
+```
 
 它基本是 elementwise normalization。
 
@@ -2918,9 +2918,9 @@ Muon:
 
 所以：
 
-\[
+```math
 \boxed{\text{Token Efficiency}=\text{Compute Efficiency}}
-\]
+```
 
 这就是为什么 Kimi K2/K3、DeepSeek-V4、Qwen3.8 都开始认真研究 Muon。
 
@@ -2940,15 +2940,15 @@ attention logits
 
 Attention：
 
-\[
+```math
 S=\frac{QK^T}{\sqrt d}
-\]
+```
 
 如果 Q/K norm 不受控：
 
-\[
+```math
 |S|\rightarrow very\ large
-\]
+```
 
 softmax：
 
@@ -2992,11 +2992,11 @@ Muon
 
 传统 next-token prediction：
 
-\[
+```math
 x_1,...,x_t
 \rightarrow
 x_{t+1}
-\]
+```
 
 MTP 增加辅助 head：
 
@@ -3011,7 +3011,7 @@ shared hidden
 
 训练目标：
 
-\[
+```math
 L
 =
 L_{t+1}
@@ -3020,7 +3020,7 @@ L_{t+1}
 +
 \lambda_3L_{t+3}
 +\cdots
-\]
+```
 
 它既可能增强 representation，也可以为 speculative decoding 提供 draft 信息。
 
@@ -3042,13 +3042,13 @@ whole model
 token 3
 ```
 
-token \(t+1\) 必须等 token \(t\)。
+token $t+1$ 必须等 token $t$。
 
 所以即使单次模型 forward 已经非常快：
 
-\[
+```math
 \text{serial dependency}
-\]
+```
 
 仍然不可消失。
 
@@ -3065,15 +3065,15 @@ t+1, t+2, t+3, t+4
 
 如果 average accepted length：
 
-\[
+```math
 a>1
-\]
+```
 
 完整 sequential model steps 近似减少：
 
-\[
+```math
 1/a
-\]
+```
 
 这就是 Train–Serve Co-design：
 
@@ -3091,9 +3091,9 @@ MTP 不是：
 
 真正服务收益取决于：
 
-\[
+```math
 \text{acceptance rate / acceptance length}
-\]
+```
 
 如果 draft 4 tokens：
 
@@ -3419,27 +3419,27 @@ host/offload hierarchy
 
 Roofline 模型：
 
-\[
+```math
 \text{Performance}
 =
 \min(
 \text{Peak FLOPs},
 \text{Bandwidth}\times \text{Arithmetic Intensity}
 )
-\]
+```
 
 Arithmetic Intensity：
 
-\[
+```math
 AI=
 \frac{\text{FLOPs}}{\text{Bytes moved}}
-\]
+```
 
 Dense large GEMM：
 
-\[
+```math
 AI
-\]
+```
 
 通常高。
 
@@ -3454,9 +3454,9 @@ AI
 
 因此越来越多模型变成：
 
-\[
+```math
 \boxed{\text{Memory/Communication Bound}}
-\]
+```
 
 而不是 Compute Bound。
 
@@ -3800,7 +3800,7 @@ Sparse Attention 成为唯一答案
 
 更有可能是：
 
-\[
+```math
 \boxed{
 \text{Hierarchical Memory}
 +
@@ -3808,7 +3808,7 @@ Sparse Attention 成为唯一答案
 +
 \text{Hardware-aware Scheduling}
 }
-\]
+```
 
 模型同时存在：
 
