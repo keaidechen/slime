@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "baseline_documents": 158,
   "documents": [
     {
@@ -7,11 +7,12 @@
       "stage": "A0",
       "level": "导航",
       "plan": "升级总入口",
-      "scope": "统一全库课程、前置依赖、进度与查阅入口；原专题入口保留",
+      "scope": "统一全库课程、前置依赖、进度与查阅入口",
       "current": [
         "learn_docs/README.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
@@ -24,23 +25,11 @@
         "learn_docs/reference/GPU架构演进与历史资料.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
         "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
         "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
         "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
@@ -50,7 +39,8 @@
         "docs/performance_analysis_guide/04_megatron.md",
         "learn_docs/00_Foundations/00_课程与系统地图.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md",
@@ -61,7 +51,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
@@ -72,7 +63,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md",
@@ -83,7 +75,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
@@ -94,7 +87,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
@@ -105,7 +99,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
@@ -116,7 +111,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md",
@@ -127,7 +123,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
@@ -138,7 +135,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
@@ -149,7 +147,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md",
@@ -160,7 +159,8 @@
       "current": [
         "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md",
@@ -171,7 +171,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
@@ -182,7 +183,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
@@ -193,7 +195,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
@@ -204,7 +207,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
@@ -215,7 +219,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
@@ -226,7 +231,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
@@ -237,7 +243,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
@@ -248,7 +255,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
@@ -259,7 +267,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
@@ -270,7 +279,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
@@ -281,7 +291,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
@@ -292,7 +303,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
@@ -303,7 +315,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
@@ -314,7 +327,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
@@ -325,7 +339,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md",
@@ -336,7 +351,8 @@
       "current": [
         "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/00_专题总览.md",
@@ -347,7 +363,8 @@
       "current": [
         "learn_docs/03_Parallelism/00_专题总览.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/01_统一切分语言.md",
@@ -358,7 +375,8 @@
       "current": [
         "learn_docs/03_Parallelism/01_统一切分语言.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/02_DP与DDP.md",
@@ -369,7 +387,8 @@
       "current": [
         "learn_docs/03_Parallelism/02_DP与DDP.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
@@ -380,7 +399,8 @@
       "current": [
         "learn_docs/03_Parallelism/03_ZeRO与FSDP.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/04_TensorParallelism.md",
@@ -391,7 +411,8 @@
       "current": [
         "learn_docs/03_Parallelism/04_TensorParallelism.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/05_SequenceParallelism.md",
@@ -402,7 +423,8 @@
       "current": [
         "learn_docs/03_Parallelism/05_SequenceParallelism.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/06_PipelineParallelism.md",
@@ -413,7 +435,8 @@
       "current": [
         "learn_docs/03_Parallelism/06_PipelineParallelism.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/07_ContextParallelism.md",
@@ -424,7 +447,8 @@
       "current": [
         "learn_docs/03_Parallelism/07_ContextParallelism.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/08_ExpertParallelism.md",
@@ -435,7 +459,8 @@
       "current": [
         "learn_docs/03_Parallelism/08_ExpertParallelism.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
@@ -446,7 +471,8 @@
       "current": [
         "learn_docs/03_Parallelism/09_Embedding与词表并行.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
@@ -457,7 +483,8 @@
       "current": [
         "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/11_训练并行方案设计.md",
@@ -468,7 +495,8 @@
       "current": [
         "learn_docs/03_Parallelism/11_训练并行方案设计.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/12_推理并行方案设计.md",
@@ -479,7 +507,8 @@
       "current": [
         "learn_docs/03_Parallelism/12_推理并行方案设计.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/13_RL角色级并行.md",
@@ -490,7 +519,8 @@
       "current": [
         "learn_docs/03_Parallelism/13_RL角色级并行.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
@@ -501,7 +531,8 @@
       "current": [
         "learn_docs/03_Parallelism/14_自动并行与代价模型.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
@@ -512,7 +543,8 @@
       "current": [
         "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/03_Parallelism/16_实验与配置工作表.md",
@@ -523,7 +555,8 @@
       "current": [
         "learn_docs/03_Parallelism/16_实验与配置工作表.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md",
@@ -534,7 +567,8 @@
       "current": [
         "docs/performance_analysis_guide/README.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md",
@@ -545,7 +579,8 @@
       "current": [
         "docs/performance_analysis_guide/00_concepts.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/02_GPU指标与遥测.md",
@@ -556,7 +591,8 @@
       "current": [
         "docs/performance_analysis_guide/01_baseline.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/03_NsightSystems时间线.md",
@@ -567,7 +603,8 @@
       "current": [
         "docs/performance_analysis_guide/03_cuda_kernels.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/04_NsightCompute_Kernel分析.md",
@@ -578,7 +615,8 @@
       "current": [
         "docs/performance_analysis_guide/03_cuda_kernels.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/05_PyTorchProfiler.md",
@@ -589,7 +627,8 @@
       "current": [
         "docs/performance_analysis_guide/02_pytorch.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/06_Roofline与瓶颈分类.md",
@@ -600,7 +639,8 @@
       "current": [
         "docs/performance_analysis_guide/03_cuda_kernels.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md",
@@ -611,7 +651,8 @@
       "current": [
         "docs/performance_analysis_guide/02_pytorch.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/08_显存与OOM.md",
@@ -622,7 +663,8 @@
       "current": [
         "docs/performance_analysis_guide/02_pytorch.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md",
@@ -633,7 +675,8 @@
       "current": [
         "docs/performance_analysis_guide/04_megatron.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/10_并行策略与Bubble.md",
@@ -644,7 +687,8 @@
       "current": [
         "docs/performance_analysis_guide/04_megatron.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/11_训练性能指标.md",
@@ -655,7 +699,8 @@
       "current": [
         "docs/performance_analysis_guide/04_megatron.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/12_推理性能分析.md",
@@ -666,7 +711,8 @@
       "current": [
         "docs/performance_analysis_guide/05_inference.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/13_专项负载_MoE_长上下文_RL.md",
@@ -677,7 +723,8 @@
       "current": [
         "docs/performance_analysis_guide/09_dynamic_workloads.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md",
@@ -688,7 +735,8 @@
       "current": [
         "docs/performance_analysis_guide/10_observability.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md",
@@ -699,7 +747,8 @@
       "current": [
         "docs/performance_analysis_guide/11_case_gpu_idle.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/16_实验与排查工作表.md",
@@ -710,7 +759,8 @@
       "current": [
         "docs/performance_analysis_guide/experiment_worksheet.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
@@ -721,7 +771,8 @@
       "current": [
         "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/model_arc/MLA.md",
@@ -732,7 +783,8 @@
       "current": [
         "learn_docs/model_arc/MLA.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/model_arc/MoE-Infra.md",
@@ -743,7 +795,8 @@
       "current": [
         "learn_docs/model_arc/MoE-Infra.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/model_arc/Sparse-Attention.md",
@@ -754,7 +807,8 @@
       "current": [
         "learn_docs/model_arc/Sparse-Attention.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/model_arc/Linear-Attention.md",
@@ -765,7 +819,8 @@
       "current": [
         "learn_docs/model_arc/Linear-Attention.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "learn_docs/model_arc/Residual-Evolution.md",
@@ -776,7 +831,8 @@
       "current": [
         "learn_docs/model_arc/Residual-Evolution.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/README.md",
@@ -787,7 +843,8 @@
       "current": [
         "docs/code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/00_rl_infra_survey.md",
@@ -798,7 +855,8 @@
       "current": [
         "docs/code_walkthrough/00_rl_infra_survey.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/01_architecture_and_ray_orchestration.md",
@@ -809,7 +867,8 @@
       "current": [
         "docs/code_walkthrough/01_architecture_and_ray_orchestration.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/02_rollout_sglang_server_mode.md",
@@ -820,7 +879,8 @@
       "current": [
         "docs/code_walkthrough/02_rollout_sglang_server_mode.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md",
@@ -831,7 +891,8 @@
       "current": [
         "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/04_weight_sync_and_memory.md",
@@ -842,7 +903,8 @@
       "current": [
         "docs/code_walkthrough/04_weight_sync_and_memory.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/05_rl_algorithms.md",
@@ -853,7 +915,8 @@
       "current": [
         "docs/code_walkthrough/05_rl_algorithms.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
@@ -864,7 +927,8 @@
       "current": [
         "docs/code_walkthrough/06_megatron_backend_and_mbridge.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/07_customization_and_agentic.md",
@@ -875,7 +939,8 @@
       "current": [
         "docs/code_walkthrough/07_customization_and_agentic.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/08_rm_hub_and_eval.md",
@@ -886,7 +951,8 @@
       "current": [
         "docs/code_walkthrough/08_rm_hub_and_eval.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/09_engineering_observability.md",
@@ -897,7 +963,8 @@
       "current": [
         "docs/code_walkthrough/09_engineering_observability.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/10_transferqueue.md",
@@ -908,7 +975,8 @@
       "current": [
         "docs/code_walkthrough/10_transferqueue.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/11_engine_internals_sglang.md",
@@ -922,7 +990,8 @@
         "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md",
         "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
@@ -938,7 +1007,8 @@
         "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
         "docs/megatron_code_walkthrough/06_reference/03_source_questions.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/code_walkthrough/13_megatron_bridge_internals.md",
@@ -949,7 +1019,8 @@
       "current": [
         "docs/code_walkthrough/13_megatron_bridge_internals.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/code_walkthrough/tau-bench_qwen3_4B.md",
@@ -960,7 +1031,8 @@
       "current": [
         "docs/code_walkthrough/tau-bench_qwen3_4B.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/README.md",
@@ -971,7 +1043,8 @@
       "current": [
         "docs/megatron_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/01_foundations/00_ecosystem_install_and_data.md",
@@ -982,7 +1055,8 @@
       "current": [
         "docs/megatron_code_walkthrough/01_foundations/00_ecosystem_install_and_data.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/01_foundations/01_learning_map.md",
@@ -993,7 +1067,8 @@
       "current": [
         "docs/megatron_code_walkthrough/01_foundations/01_learning_map.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md",
@@ -1004,7 +1079,8 @@
       "current": [
         "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/01_foundations/03_model_and_transformer.md",
@@ -1015,7 +1091,8 @@
       "current": [
         "docs/megatron_code_walkthrough/01_foundations/03_model_and_transformer.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/02_parallelism/00_strategy_and_topology.md",
@@ -1026,7 +1103,8 @@
       "current": [
         "docs/megatron_code_walkthrough/02_parallelism/00_strategy_and_topology.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md",
@@ -1037,7 +1115,8 @@
       "current": [
         "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md",
@@ -1048,7 +1127,8 @@
       "current": [
         "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md",
@@ -1059,7 +1139,8 @@
       "current": [
         "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/03_state_and_memory/02_megatron_fsdp.md",
@@ -1070,7 +1151,8 @@
       "current": [
         "docs/megatron_code_walkthrough/03_state_and_memory/02_megatron_fsdp.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/03_state_and_memory/03_memory_determinism_cuda_graph.md",
@@ -1081,7 +1163,8 @@
       "current": [
         "docs/megatron_code_walkthrough/03_state_and_memory/03_memory_determinism_cuda_graph.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/04_models_and_features/01_models_and_tokenizers.md",
@@ -1092,7 +1175,8 @@
       "current": [
         "docs/megatron_code_walkthrough/04_models_and_features/01_models_and_tokenizers.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/04_models_and_features/02_moe_mla_mtp.md",
@@ -1103,7 +1187,8 @@
       "current": [
         "docs/megatron_code_walkthrough/04_models_and_features/02_moe_mla_mtp.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/04_models_and_features/03_hybrid_multimodal_rl.md",
@@ -1114,7 +1199,8 @@
       "current": [
         "docs/megatron_code_walkthrough/04_models_and_features/03_hybrid_multimodal_rl.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/04_models_and_features/04_context_moe_precision_deep_dive.md",
@@ -1125,7 +1211,8 @@
       "current": [
         "docs/megatron_code_walkthrough/04_models_and_features/04_context_moe_precision_deep_dive.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/05_practice/01_performance_debugging.md",
@@ -1136,7 +1223,8 @@
       "current": [
         "docs/megatron_code_walkthrough/05_practice/01_performance_debugging.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/05_practice/02_configuration_review.md",
@@ -1147,7 +1235,8 @@
       "current": [
         "docs/megatron_code_walkthrough/05_practice/02_configuration_review.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/06_reference/01_official_docs_coverage.md",
@@ -1158,7 +1247,8 @@
       "current": [
         "docs/megatron_code_walkthrough/06_reference/01_official_docs_coverage.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/06_reference/02_glossary.md",
@@ -1169,7 +1259,8 @@
       "current": [
         "docs/megatron_code_walkthrough/06_reference/02_glossary.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/megatron_code_walkthrough/06_reference/03_source_questions.md",
@@ -1180,7 +1271,8 @@
       "current": [
         "docs/megatron_code_walkthrough/06_reference/03_source_questions.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
@@ -1193,7 +1285,8 @@
         "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
         "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/paper_read/01_FlashAttention论文详解.md",
@@ -1204,7 +1297,8 @@
       "current": [
         "docs/paper_read/01_FlashAttention论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/02_PagedAttention-vLLM论文详解.md",
@@ -1215,7 +1309,8 @@
       "current": [
         "docs/paper_read/02_PagedAttention-vLLM论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/03_SGLang-RadixAttention论文详解.md",
@@ -1226,7 +1321,8 @@
       "current": [
         "docs/paper_read/03_SGLang-RadixAttention论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/04_FlashAttention-2论文详解.md",
@@ -1237,7 +1333,8 @@
       "current": [
         "docs/paper_read/04_FlashAttention-2论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/05_FlashAttention-3论文详解.md",
@@ -1248,7 +1345,8 @@
       "current": [
         "docs/paper_read/05_FlashAttention-3论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/06_Orca与Continuous-Batching论文详解.md",
@@ -1259,7 +1357,8 @@
       "current": [
         "docs/paper_read/06_Orca与Continuous-Batching论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/07_DistServe与Prefill-Decode分离论文详解.md",
@@ -1270,7 +1369,8 @@
       "current": [
         "docs/paper_read/07_DistServe与Prefill-Decode分离论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/08_TensorRT-LLM_Runtime架构详解.md",
@@ -1281,7 +1381,8 @@
       "current": [
         "docs/runtime_comparisons/TensorRT-LLM.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/paper_read/09_vLLM-V1_Runtime架构详解.md",
@@ -1292,7 +1393,8 @@
       "current": [
         "docs/runtime_comparisons/vLLM-V1.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/paper_read/10_SGLang_Runtime架构详解.md",
@@ -1303,7 +1405,8 @@
       "current": [
         "docs/sglang_code_walkthrough/01_foundations/00_runtime_concepts.md"
       ],
-      "kind": "兼容入口"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/paper_read/11_LLM推理Runtime技术演化总览.md",
@@ -1314,7 +1417,8 @@
       "current": [
         "docs/paper_read/11_LLM推理Runtime技术演化总览.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/paper_read/FlashInfer 论文详解.md",
@@ -1325,7 +1429,8 @@
       "current": [
         "docs/paper_read/FlashInfer 论文详解.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/README.md",
@@ -1336,7 +1441,8 @@
       "current": [
         "docs/performance_analysis_guide/README.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/00_concepts.md",
@@ -1347,7 +1453,8 @@
       "current": [
         "docs/performance_analysis_guide/00_concepts.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/01_baseline.md",
@@ -1358,7 +1465,8 @@
       "current": [
         "docs/performance_analysis_guide/01_baseline.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/02_pytorch.md",
@@ -1369,7 +1477,8 @@
       "current": [
         "docs/performance_analysis_guide/02_pytorch.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/03_cuda_kernels.md",
@@ -1380,7 +1489,8 @@
       "current": [
         "docs/performance_analysis_guide/03_cuda_kernels.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/04_megatron.md",
@@ -1391,7 +1501,8 @@
       "current": [
         "docs/performance_analysis_guide/04_megatron.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/05_inference.md",
@@ -1402,7 +1513,8 @@
       "current": [
         "docs/performance_analysis_guide/05_inference.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/06_slime.md",
@@ -1413,7 +1525,8 @@
       "current": [
         "docs/performance_analysis_guide/06_slime.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/07_labs.md",
@@ -1424,7 +1537,8 @@
       "current": [
         "docs/performance_analysis_guide/07_labs.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/08_toolbox_and_sources.md",
@@ -1435,7 +1549,8 @@
       "current": [
         "docs/performance_analysis_guide/08_toolbox_and_sources.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/glossary.md",
@@ -1446,7 +1561,8 @@
       "current": [
         "docs/performance_analysis_guide/glossary.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/performance_report_template.md",
@@ -1457,7 +1573,8 @@
       "current": [
         "docs/performance_analysis_guide/performance_report_template.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/performance_analysis_guide/software_tutorials.md",
@@ -1468,7 +1585,8 @@
       "current": [
         "docs/performance_analysis_guide/software_tutorials.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/README.md",
@@ -1479,7 +1597,8 @@
       "current": [
         "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/01_foundations/README.md",
@@ -1488,9 +1607,10 @@
       "plan": "保留",
       "scope": "进程/请求基础入口，补 A1/A2 前置链接",
       "current": [
-        "docs/sglang_code_walkthrough/01_foundations/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/01_foundations/01_learning_map.md",
@@ -1501,7 +1621,8 @@
       "current": [
         "docs/sglang_code_walkthrough/01_foundations/01_learning_map.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/01_foundations/02_process_topology_and_request_path.md",
@@ -1512,7 +1633,8 @@
       "current": [
         "docs/sglang_code_walkthrough/01_foundations/02_process_topology_and_request_path.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/02_runtime_core/README.md",
@@ -1521,9 +1643,10 @@
       "plan": "保留",
       "scope": "按 scheduler→KV→runner→生成控制顺序",
       "current": [
-        "docs/sglang_code_walkthrough/02_runtime_core/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/02_runtime_core/01_scheduler_and_batch.md",
@@ -1534,7 +1657,8 @@
       "current": [
         "docs/sglang_code_walkthrough/02_runtime_core/01_scheduler_and_batch.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/02_runtime_core/02_kv_cache_and_radix_attention.md",
@@ -1545,7 +1669,8 @@
       "current": [
         "docs/sglang_code_walkthrough/02_runtime_core/02_kv_cache_and_radix_attention.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/02_runtime_core/03_model_runner_attention_cuda_graph.md",
@@ -1556,7 +1681,8 @@
       "current": [
         "docs/sglang_code_walkthrough/02_runtime_core/03_model_runner_attention_cuda_graph.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/02_runtime_core/04_speculative_structured_sampling.md",
@@ -1567,7 +1693,8 @@
       "current": [
         "docs/sglang_code_walkthrough/02_runtime_core/04_speculative_structured_sampling.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md",
@@ -1576,9 +1703,10 @@
       "plan": "保留",
       "scope": "单实例正确后再进入多副本、TP 与 PD",
       "current": [
-        "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/01_distributed_and_pd_disaggregation.md",
@@ -1589,7 +1717,8 @@
       "current": [
         "docs/sglang_code_walkthrough/03_scaling_and_deployment/01_distributed_and_pd_disaggregation.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md",
@@ -1600,7 +1729,8 @@
       "current": [
         "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/03_hardware_platforms.md",
@@ -1611,7 +1741,8 @@
       "current": [
         "docs/sglang_code_walkthrough/03_scaling_and_deployment/03_hardware_platforms.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md",
@@ -1620,9 +1751,10 @@
       "plan": "保留",
       "scope": "采样、模型支持与控制面按依赖串联",
       "current": [
-        "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md",
@@ -1633,7 +1765,8 @@
       "current": [
         "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/02_model_support_and_multimodal.md",
@@ -1644,7 +1777,8 @@
       "current": [
         "docs/sglang_code_walkthrough/04_interfaces_and_models/02_model_support_and_multimodal.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md",
@@ -1655,7 +1789,8 @@
       "current": [
         "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/05_production_engineering/README.md",
@@ -1664,9 +1799,10 @@
       "plan": "保留",
       "scope": "链接统一实验和 SGLang 专属运维/扩展",
       "current": [
-        "docs/sglang_code_walkthrough/05_production_engineering/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/05_production_engineering/01_benchmark_profiling_observability.md",
@@ -1677,7 +1813,8 @@
       "current": [
         "docs/sglang_code_walkthrough/05_production_engineering/01_benchmark_profiling_observability.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/05_production_engineering/02_extension_and_correctness.md",
@@ -1688,7 +1825,8 @@
       "current": [
         "docs/sglang_code_walkthrough/05_production_engineering/02_extension_and_correctness.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/05_production_engineering/03_reliability_capacity_operations.md",
@@ -1699,7 +1837,8 @@
       "current": [
         "docs/sglang_code_walkthrough/05_production_engineering/03_reliability_capacity_operations.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/06_diffusion/README.md",
@@ -1708,9 +1847,10 @@
       "plan": "保留专题入口",
       "scope": "作为扩展方向，不设为当前 LLM RL 主线前置",
       "current": [
-        "docs/sglang_code_walkthrough/06_diffusion/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/06_diffusion/01_pipeline_architecture_and_serving.md",
@@ -1721,7 +1861,8 @@
       "current": [
         "docs/sglang_code_walkthrough/06_diffusion/01_pipeline_architecture_and_serving.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/06_diffusion/02_parallelism_cache_and_quantization.md",
@@ -1732,7 +1873,8 @@
       "current": [
         "docs/sglang_code_walkthrough/06_diffusion/02_parallelism_cache_and_quantization.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/06_diffusion/03_profiling_extension_and_correctness.md",
@@ -1743,7 +1885,8 @@
       "current": [
         "docs/sglang_code_walkthrough/06_diffusion/03_profiling_extension_and_correctness.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/07_reference/README.md",
@@ -1752,9 +1895,10 @@
       "plan": "保留",
       "scope": "官方覆盖与局部术语索引",
       "current": [
-        "docs/sglang_code_walkthrough/07_reference/README.md"
+        "docs/sglang_code_walkthrough/README.md"
       ],
-      "kind": "主文档"
+      "kind": "已合并并删除旧页",
+      "source_status": "removed"
     },
     {
       "source": "docs/sglang_code_walkthrough/07_reference/01_official_docs_coverage.md",
@@ -1765,7 +1909,8 @@
       "current": [
         "docs/sglang_code_walkthrough/07_reference/01_official_docs_coverage.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     },
     {
       "source": "docs/sglang_code_walkthrough/07_reference/02_glossary.md",
@@ -1776,7 +1921,42 @@
       "current": [
         "docs/sglang_code_walkthrough/07_reference/02_glossary.md"
       ],
-      "kind": "主文档"
+      "kind": "主文档",
+      "source_status": "present"
     }
+  ],
+  "removed_files": [
+    "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md",
+    "learn_docs/04_Profiling_Performence_Analysis/02_GPU指标与遥测.md",
+    "learn_docs/04_Profiling_Performence_Analysis/03_NsightSystems时间线.md",
+    "learn_docs/04_Profiling_Performence_Analysis/04_NsightCompute_Kernel分析.md",
+    "learn_docs/04_Profiling_Performence_Analysis/05_PyTorchProfiler.md",
+    "learn_docs/04_Profiling_Performence_Analysis/06_Roofline与瓶颈分类.md",
+    "learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md",
+    "learn_docs/04_Profiling_Performence_Analysis/08_显存与OOM.md",
+    "learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md",
+    "learn_docs/04_Profiling_Performence_Analysis/10_并行策略与Bubble.md",
+    "learn_docs/04_Profiling_Performence_Analysis/11_训练性能指标.md",
+    "learn_docs/04_Profiling_Performence_Analysis/12_推理性能分析.md",
+    "learn_docs/04_Profiling_Performence_Analysis/13_专项负载_MoE_长上下文_RL.md",
+    "learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md",
+    "learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md",
+    "learn_docs/04_Profiling_Performence_Analysis/16_实验与排查工作表.md",
+    "learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md",
+    "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+    "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+    "docs/paper_read/10_SGLang_Runtime架构详解.md",
+    "docs/code_walkthrough/11_engine_internals_sglang.md",
+    "docs/code_walkthrough/12_megatron_lm_internals.md",
+    "docs/paper_read/08_TensorRT-LLM_Runtime架构详解.md",
+    "docs/paper_read/09_vLLM-V1_Runtime架构详解.md",
+    "docs/sglang_code_walkthrough/01_foundations/README.md",
+    "docs/sglang_code_walkthrough/02_runtime_core/README.md",
+    "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md",
+    "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md",
+    "docs/sglang_code_walkthrough/05_production_engineering/README.md",
+    "docs/sglang_code_walkthrough/06_diffusion/README.md",
+    "docs/sglang_code_walkthrough/07_reference/README.md",
+    "learn_docs/RL_Infra_文档映射清单.md"
   ]
 }

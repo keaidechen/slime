@@ -1,6 +1,6 @@
 # Megatron-LM / Megatron Core 中文系统导读与代码走读
 
-> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。旧引擎摘要已归入对应源码章节，兼容页无需重复阅读。
+> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。引擎机制统一在对应的完整源码章节中维护。
 
 这不是 NVIDIA 文档的逐句镜像，而是一套基于本仓库固定版本重写的中文教材。它把官方 User Guide、关键 API Guide 与 `Megatron-LM` 源码按工程问题重新组织：先跑通训练，再理解并行和状态，最后进入高级模型与性能排障。
 

@@ -208,7 +208,7 @@ slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Mega
 
 ## 8. 小结
 
-> 本篇讲的是 slime 的调用方式；Megatron-LM 内部（get_model/parallel_state/DistributedOptimizer/流水线调度）见 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)，slime 内建转换器的模型映射、分片和导出细节见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
+> 本篇讲的是 slime 的调用方式；Megatron-LM 内部分别见[训练主线](../megatron_code_walkthrough/01_foundations/02_training_mainline.md)、[并行状态与 TP](../megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md)、[分布式优化器](../megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md)和[流水线调度](../megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md)。slime 内建转换器的模型映射、分片和导出细节见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 训练 actor = Megatron 原生 `get_model/optimizer` + RL 所需的 ref/old/teacher 多 tag 管理；
 - 模型结构由原生/自定义 Megatron provider 构造；`hf_to_megatron` 负责启动加载，`megatron_to_hf` 负责每步权重同步和 HF 导出；

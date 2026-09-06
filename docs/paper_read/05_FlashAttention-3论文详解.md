@@ -40,7 +40,7 @@
 > 论文：Jay Shah et al., **FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision**，2024，NeurIPS 2024。
 >
 > 推荐前置：
-> - `00_共享基础_GPU与LLM推理硬件基础.md`，尤其 Hopper/TMA/WGMMA 部分
+> - [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)，再读 [Hopper 异步硬件专题](../../learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md)中的 TMA/WGMMA 部分
 > - `01_FlashAttention论文详解.md`
 > - `04_FlashAttention-2论文详解.md`
 >

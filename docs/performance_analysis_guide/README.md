@@ -1,6 +1,6 @@
 # 训练、推理与 RL 性能分析：统一教材
 
-本目录同时负责原理、逐步操作、框架实验与报告。原 learn_docs 的 Profiling 17 篇已整合到这里，旧路径仅作为兼容入口。初学者从 00/01/02 开始；GPU/进程前置见[基础课](../../learn_docs/00_Foundations/README.md)。
+本目录同时负责原理、逐步操作、框架实验与报告。原 learn_docs 的 Profiling 17 篇已整合到这里，旧目录和跳转页已删除，原理与操作统一在本目录维护。初学者从 00/01/02 开始；GPU/进程前置见[基础课](../../learn_docs/00_Foundations/README.md)。
 
 ## 主线与首读范围
 

@@ -45,7 +45,7 @@
 > 论文：Yinmin Zhong et al., **DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving**，OSDI 2024。
 >
 > 推荐前置：
-> - `00_共享基础_GPU与LLM推理硬件基础.md`
+> - [Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)
 > - `06_Orca与Continuous-Batching论文详解.md`
 > - `02_PagedAttention-vLLM论文详解.md`
 >

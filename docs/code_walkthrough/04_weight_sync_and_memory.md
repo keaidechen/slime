@@ -228,7 +228,7 @@ decode0  占据 rank : [5, 6,7,8] (cumulative[2]+1=5 起，共4个)
 
 ## 6. 小结
 
-> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)；slime 内建 HF 转换实现见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
+> 本篇讲的是训练侧视角；引擎侧（SGLang）的接收实现（NCCL 组管理、读写锁、torch_memory_saver、IPC 还原）见 [SGLang 控制面与在线换权](../sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md)；slime 内建 HF 转换实现见 [13_megatron_bridge_internals.md](13_megatron_bridge_internals.md)。
 
 - 权重同步 = 分片 gather（TP/EP）→ HF 转换 → 分桶 → NCCL/IPC/磁盘传输 → 引擎落盘或广播加载；pause/flush/continue 保证一致性，全局锁防 NCCL 死锁；
 - 异构引擎（PD 分离）、新引擎热加入（容错）、版本对账都被一等支持；

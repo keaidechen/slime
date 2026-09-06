@@ -59,7 +59,7 @@
 >
 > 发表：SOSP 2023，arXiv:2309.06180
 >
-> **前置阅读**：`00_共享基础_GPU与LLM推理硬件基础.md`。本文默认你已经知道 HBM、KV Cache、prefill/decode、page、internal/external fragmentation 的基本含义。
+> **前置阅读**：[GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)和[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)。本文默认你已经知道 HBM、KV Cache、prefill/decode、page、internal/external fragmentation 的基本含义。
 
 ---
 

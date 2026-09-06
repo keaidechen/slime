@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "routes": {
     "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md": [
       {
@@ -357,6 +357,61 @@
         "path": "docs/runtime_comparisons/vLLM-V1.md",
         "label": "vLLM V1 架构对比",
         "anchor": ""
+      }
+    ],
+    "docs/sglang_code_walkthrough/01_foundations/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-1",
+        "label": "第一部分：基础与请求链路"
+      }
+    ],
+    "docs/sglang_code_walkthrough/02_runtime_core/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-2",
+        "label": "第二部分：Runtime 核心"
+      }
+    ],
+    "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-3",
+        "label": "第三部分：扩展、分布式与部署"
+      }
+    ],
+    "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-4",
+        "label": "第四部分：接口、模型与控制面"
+      }
+    ],
+    "docs/sglang_code_walkthrough/05_production_engineering/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-5",
+        "label": "第五部分：生产工程"
+      }
+    ],
+    "docs/sglang_code_walkthrough/06_diffusion/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-6",
+        "label": "第六部分：SGLang Diffusion"
+      }
+    ],
+    "docs/sglang_code_walkthrough/07_reference/README.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/README.md",
+        "anchor": "part-7",
+        "label": "第七部分：参考资料"
+      }
+    ],
+    "learn_docs/RL_Infra_文档映射清单.md": [
+      {
+        "path": "learn_docs/重构说明与迁移索引.md",
+        "label": "当前清理结果与迁移记录"
       }
     ]
   },
@@ -990,7 +1045,57 @@
       "anchor": "notebook-recap",
       "scope": "学习复盘：八个系统问题",
       "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/01_foundations/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-1",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-2",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-3",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-4",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/05_production_engineering/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-5",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/06_diffusion/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-6",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/07_reference/README.md",
+      "destination": "docs/sglang_code_walkthrough/README.md",
+      "anchor": "part-7",
+      "scope": "完整分组介绍、章节导航与阅读边界",
+      "action": "合入 SGLang 总目录，删除重复分组目录页"
     }
   ],
-  "deduplicated_exact_paragraphs": []
+  "deduplicated_exact_paragraphs": [],
+  "note": "source 和 routes 的键是已删除的历史路径；path/destination 是当前正文，不生成兼容页。"
 }

@@ -385,7 +385,7 @@ async def abort(args, rollout_id):
 
 ## 7. 小结
 
-> 本篇讲的是客户端视角；服务端（SGLang 内部）如何实现这些端点，见 [11_engine_internals_sglang.md](11_engine_internals_sglang.md)。
+> 本篇讲的是客户端视角；服务端（SGLang 内部）如何实现这些端点，见 [SGLang 控制面与在线换权](../sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md)。
 
 - server 模式 = 训练侧只面对一个 router URL + 一组 HTTP 控制端点；
 - model/server_group/engine 三层结构支持多模型部署（actor/ref/reward 各自独立一整套 SGLang），GPU 分配从 placement group 探测重排到 `base_gpu_id` 全程可追踪；

@@ -1,8 +1,8 @@
 # 从 0 系统学习 RL Infra：slime 代码走读系列
 
-> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。旧引擎摘要已归入对应源码章节，兼容页无需重复阅读。
+> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。引擎机制统一在对应的完整源码章节中维护。
 
-本系列面向零基础读者，以本仓库（THUDM/slime）为教材系统学习 RL 基础设施。**00-09 是 slime 主线，10-12 是数据平面/第三方引擎专题，13 回到 slime 自己的 HF↔Megatron 转换实现**。每篇尽量遵循“问题 → 调用链 → 源码符号 → 例子 → 边界条件”的结构。
+本系列面向零基础读者，以本仓库（THUDM/slime）为教材系统学习 RL 基础设施。**00-09 是 slime 主线，10 是数据平面对比专题，13 讲解 slime 自己的 HF↔Megatron 转换实现**。每篇尽量遵循“问题 → 调用链 → 源码符号 → 例子 → 边界条件”的结构。
 
 > **版本说明（重要）**：本文档已按 slime v0.3.1 代码重新核对。v0.3.1 已移除 Megatron-Bridge 与 `bridge` mode，HF checkpoint 的加载、导出和 rollout 热更新均由 `slime/backends/megatron_utils/{hf_to_megatron,megatron_to_hf}/` 内建实现。旧文件名 `06_megatron_backend_and_mbridge.md`、`13_megatron_bridge_internals.md` 为避免外部链接失效而保留，内容讲的是当前实现。
 
@@ -23,22 +23,20 @@
 | 08 | [奖励模型与评估体系](08_rm_hub_and_eval.md) | reward/评估 | RM Hub 分发架构、数学答案等价性判断、Dynamic Filter、EvalDatasetConfig、eval early stop |
 | 09 | [工程化与可观测性](09_engineering_observability.md) | 工程化 | 分离调试、权重对账、容错（健康监控状态机）、trace、**手把手 profiling 五步法**、CI、可复现 |
 
-### 专题深入（10-13，按需查阅，非必读路径）
+### 专题深入（10、13，按需查阅）
 
 | # | 文档 | 定位 | 一句话内容 |
 |---|---|---|---|
 | 10 | [TransferQueue：独立数据平面](10_transferqueue.md) | **对比参考**（slime 未采用） | Ascend TransferQueue 源码走读：BatchMeta、Controller 账本、Sampler、存储后端、与 slime 数据流对照 |
-| 11 | [引擎内部实现（SGLang 篇）](11_engine_internals_sglang.md) | slime 真实依赖 | `sglang/` 源码走读：RL 端点三层调用链、NCCL 组管理、IPC 还原、torch_memory_saver、abort、router 一致性哈希 |
-| 12 | [训练侧内部实现：Megatron-LM 篇](12_megatron_lm_internals.md) | slime 真实依赖 | `Megatron-LM/` 源码走读：get_model/mpu 通信组/DistributedOptimizer/1F1B 流水线调度 |
 | 13 | [训练侧内部实现：内建权重转换篇](13_megatron_bridge_internals.md) | **slime 自身实现** | `hf_to_megatron/`、`megatron_to_hf/`、`HfWeightIteratorDirect`：加载、热更新、HF 导出的三条路径 |
 
-> 12 讲 Megatron-LM 训练执行引擎；13 讲 slime 自己维护的格式转换层。两者一边负责“怎么训练”，一边负责“同一份参数如何在 HF/Megatron 命名和并行布局之间移动”。
+> 训练执行机制直接读 [Megatron 完整走读](../megatron_code_walkthrough/README.md)，推理调度与控制面直接读 [SGLang 完整走读](../sglang_code_walkthrough/README.md)。第 13 篇保留 slime 自己的格式转换实现，负责 HF/Megatron 命名与并行布局之间的参数映射。编号 11、12 已随摘要合并删除，其余章节保持原编号。
 
 ### 综合实战篇（独立示例，贯穿主线多篇知识点）
 
 - **[tau-bench_qwen3_4B.md](tau-bench_qwen3_4B.md)**：以 tau-bench 客服 agent benchmark 为例，走一遍从启动脚本、资源配置、GRPO 算法参数到训练循环的完整端到端实践，是检验你是否吃透 01/02/05/07 篇的最佳练习——建议在读完主线后回来对照这篇，而不是当作"补充笔记"随便翻翻。
 
-每篇 00-13 都包含「深入拆解」小节——针对该篇最复杂的机制（如 Ray 探测重排、TP 下的分布式 logsumexp、TensorBackuper 的 pinned-memory 影子权重、TrajectoryManager 的 re-tokenization drift、GRPOGroupNSampler 的连续段扫描、Megatron RankGenerator 的 rank 网格公式、HF↔Megatron 的 QKV/TP 转换）给出可以用符号名回到源码验证的例子。
+主线与专题正文包含「深入拆解」小节——针对该篇最复杂的机制（如 Ray 探测重排、TP 下的分布式 logsumexp、TensorBackuper 的 pinned-memory 影子权重、TrajectoryManager 的 re-tokenization drift、GRPOGroupNSampler 的连续段扫描、HF↔Megatron 的 QKV/TP 转换）给出可以用符号名回到源码验证的例子。
 
 ## 常见问题索引
 
@@ -59,7 +57,7 @@
 
 - PyTorch 基础与张量并行（TP）的直觉即可起步；流水线（PP）、专家并行（EP）、上下文并行（CP）在各篇用到处均有解释；
 - 了解 PPO/GRPO 的算法概念有助于读第 05 篇，但篇内从公式到代码都有展开；
-- Ray 不需要先学——01 篇用"可远程调用的有状态进程"一个模型就够用了。
+- 初次接触 Infra，先完成[进程与异步](../../learn_docs/00_Foundations/03_进程线程与四种异步.md)和 [Ray 与队列调度](../../learn_docs/00_Foundations/07_Ray与队列调度.md)的小实验，再读 01 篇的资源编排。
 
 ## 约定
 

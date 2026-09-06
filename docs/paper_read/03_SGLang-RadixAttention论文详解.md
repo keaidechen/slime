@@ -63,7 +63,7 @@
 >
 > arXiv:2312.07104；后发表于 NeurIPS 2024
 >
-> **前置阅读**：建议先读 `00_共享基础_GPU与LLM推理硬件基础.md` 和 `02_PagedAttention-vLLM论文详解.md`。本文默认你已经理解 KV Cache、continuous batching 和 paged KV 的基本概念。
+> **前置阅读**：先读[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)和[PagedAttention 论文详解](02_PagedAttention-vLLM论文详解.md)。本文默认你已经理解 KV Cache、continuous batching 和 paged KV 的基本概念。
 
 ---
 

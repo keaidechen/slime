@@ -41,7 +41,7 @@
 >
 > 这一篇在历史上非常重要：现代 LLM serving 里随处可见的 **continuous batching / in-flight batching（在途批处理：运行过程中动态加入/移出请求） / iteration-level scheduling**，都可以沿着这条思想线理解。
 >
-> 推荐前置：`00_共享基础_GPU与LLM推理硬件基础.md` 中 Prefill / Decode、KV Cache、batch、GPU memory 相关章节。
+> 推荐前置：[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)中的 Prefill / Decode、KV Cache、batch，以及 [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)中的显存部分。
 
 ---
 

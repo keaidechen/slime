@@ -7,7 +7,7 @@
 > **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
-> 衔接 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)、[06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)。
+> 衔接 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)、[06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [Megatron 训练主线](../megatron_code_walkthrough/01_foundations/02_training_mainline.md)。
 >
 > **历史说明**：文件名为兼容旧链接而保留。slime v0.3.1 已删除 `Megatron-Bridge/`、`AutoBridge`、`--megatron-to-hf-mode bridge` 与 bridge iterator。本篇只解释当前仓库内的 `hf_to_megatron/`、`megatron_to_hf/` 和 `HfWeightIteratorDirect`。
 

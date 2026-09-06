@@ -1,6 +1,6 @@
 # SGLang 系统学习与源码走读
 
-> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。旧引擎摘要已归入对应源码章节，兼容页无需重复阅读。
+> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。引擎机制统一在对应的完整源码章节中维护。
 
 这套中文文档基于本仓库的 SGLang 快照 `f5155d960286db25952217f343ee0d3c358f7f77`。它不是官方参数手册的翻译，而是一套面向代码阅读和故障定位的工程地图：从一个问题出发，找到入口、状态所有者、跨进程消息、核心分支、失败清理和观测点。
 
@@ -18,7 +18,7 @@
 07_reference/                官方文档覆盖索引与术语表
 ```
 
-目录编号只表示推荐学习顺序，不表示进程调用顺序。为了避免重命名造成外部链接失效，现有文件路径保持稳定；每个章节内部改用“问题 → 结论 → 源码链路 → 边界/失败 → 排查”的结构。
+目录编号只表示推荐学习顺序，不表示进程调用顺序。完整章节保留原文件名，分组介绍与导航集中在本页；每个章节内部改用“问题 → 结论 → 源码链路 → 边界/失败 → 排查”的结构。
 
 ## 2. 先按问题找文档
 
@@ -43,13 +43,91 @@
 
 ## 3. 完整学习路线
 
-1. [基础与请求链路](01_foundations/README.md)
-2. [Runtime 核心](02_runtime_core/README.md)
-3. [扩展、分布式与部署](03_scaling_and_deployment/README.md)
-4. [接口、模型与控制面](04_interfaces_and_models/README.md)
-5. [生产工程](05_production_engineering/README.md)
-6. [SGLang Diffusion](06_diffusion/README.md)
-7. [参考资料](07_reference/README.md)
+<a id="part-1"></a>
+
+### 第一部分：基础与请求链路
+
+这一部分先建立性能、内存和状态机心智模型，再跟踪一个请求穿过 HTTP、Tokenizer、Scheduler、模型执行和 Detokenizer 的完整路径。
+
+0. [Runtime 概念与算例](01_foundations/00_runtime_concepts.md)
+1. [Infra 工程师的学习地图](<01_foundations/01_learning_map.md>)
+2. [进程拓扑与端到端请求路径](<01_foundations/02_process_topology_and_request_path.md>)
+
+读完后应能画出进程与 IPC 拓扑，区分 TTFT、ITL、TPOT、E2E、throughput 和 goodput，并说清 request、batch、KV 三种生命周期。
+
+<a id="part-2"></a>
+
+### 第二部分：Runtime 核心
+
+这一部分从调度、内存、执行、生成控制四条主线解释 `sglang.srt`。建议按顺序阅读，因为后一篇会使用前一篇建立的 request/batch/KV 状态。
+
+1. [Scheduler、请求状态机与连续批处理](<02_runtime_core/01_scheduler_and_batch.md>)
+2. [KV Cache、RadixAttention 与引用锁](<02_runtime_core/02_kv_cache_and_radix_attention.md>)
+3. [ModelRunner、Attention Backend 与 CUDA Graph](<02_runtime_core/03_model_runner_attention_cuda_graph.md>)
+4. [推测解码、约束输出与采样正确性](<02_runtime_core/04_speculative_structured_sampling.md>)
+
+<a id="part-3"></a>
+
+### 第三部分：扩展、分布式与部署
+
+这一部分回答三个不同问题：单个实例如何跨设备执行、多个实例如何组成服务、不同硬件平台如何验证能力边界。
+
+1. [分布式执行与 Prefill-Decode 解耦](<03_scaling_and_deployment/01_distributed_and_pd_disaggregation.md>)
+2. [部署拓扑、多节点与路由](<03_scaling_and_deployment/02_deployment_topology_and_routing.md>)
+3. [硬件平台与安装选择](<03_scaling_and_deployment/03_hardware_platforms.md>)
+
+<a id="part-4"></a>
+
+### 第四部分：接口、模型与控制面
+
+这一部分专门解释 runtime 两侧的边界：左侧是外部协议怎样变成内部请求，右侧是模型/权重怎样成为可执行状态。三章各自回答一组不同的问题，避免把 HTTP、模型加载和在线换权混成一条模糊的“serving 流程”。
+
+#### 章节职责
+
+| 章节 | 核心问题 | 主要状态所有者 |
+|---|---|---|
+| [4.1 API、请求规范化与采样](<04_interfaces_and_models/01_api_request_and_sampling.md>) | 用户参数最后变成什么？采样与 stop 在哪里生效？ | OpenAI serving、`GenerateReqInput`、`SamplingParams`、`SamplingBatchInfo` |
+| [4.2 模型支持、多模态与 Fallback](<04_interfaces_and_models/02_model_support_and_multimodal.md>) | 模型类如何选择？媒体如何变成 LLM 输入？不同 task 在哪里分流？ | `ModelRegistry`、model loader、multimodal processor、task serving |
+| [4.3 控制面、在线权重更新与后训练](<04_interfaces_and_models/03_control_plane_and_post_training.md>) | 换权如何隔离请求？失败是否可回滚？LoRA 如何安全上下线？ | `TokenizerManager`、weight updater、scheduler、`LoRARegistry` |
+
+#### 推荐阅读顺序
+
+先完成 [1.2 进程拓扑与请求链路](<01_foundations/02_process_topology_and_request_path.md>)，再读 4.1。模型接入或 VLM 问题读 4.2；RL、在线换权、动态 LoRA 和运维控制面读 4.3。
+
+下面三个判断贯穿本部分：
+
+1. 外部协议对象不是 scheduler 直接消费的对象，中间至少经历协议转换、输入规范化和 tokenization；
+2. “模型可由 Transformers 加载”不等于“模型已走 SGLang 原生高性能路径”；
+3. “控制面操作被串行化”不等于“跨 rank 更新具备事务回滚”。
+
+每章末尾都有源码定位清单，路径相对仓库的 `sglang/python/sglang/`。
+
+<a id="part-5"></a>
+
+### 第五部分：生产工程
+
+这一部分不再按功能开关组织，而是按生产工作的三个闭环组织：测量、变更和运行。
+
+1. [Benchmark、Profiling 与可观测性](<05_production_engineering/01_benchmark_profiling_observability.md>)
+2. [模型与 Backend 扩展、正确性验证](<05_production_engineering/02_extension_and_correctness.md>)
+3. [可靠性、容量保护与发布运维](<05_production_engineering/03_reliability_capacity_operations.md>)
+
+<a id="part-6"></a>
+
+### 第六部分：SGLang Diffusion
+
+Diffusion 与自回归 LLM 的主循环不同，单独成篇：
+
+1. [Pipeline 架构、服务接口与动态批处理](<06_diffusion/01_pipeline_architecture_and_serving.md>)
+2. [并行、Backend、缓存与量化](<06_diffusion/02_parallelism_cache_and_quantization.md>)
+3. [Profiling、新模型接入与正确性](<06_diffusion/03_profiling_extension_and_correctness.md>)
+
+<a id="part-7"></a>
+
+### 第七部分：参考资料
+
+- [官方文档完整覆盖索引](<07_reference/01_official_docs_coverage.md>)：官方正文、Advanced Features 和 Cookbook 到本系列章节的映射。
+- [中英文术语表](<07_reference/02_glossary.md>)：统一 serving、并行、生成和 Diffusion 术语。
 
 ## 4. 按角色选择路线
 

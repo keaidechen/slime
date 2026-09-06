@@ -46,7 +46,7 @@
 > 论文：Tri Dao, **FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning**，2023，后发表于 ICLR 2024。
 >
 > 推荐前置：
-> - `00_共享基础_GPU与LLM推理硬件基础.md`
+> - [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)
 > - `01_FlashAttention论文详解.md`
 >
 > 本文重点不是重复 FlashAttention-1，而是回答：**FA1 已经把 Attention 从 IO 角度优化得很漂亮了，为什么仍只能利用 GPU 峰值算力的一部分？FA2 到底把剩下的性能浪费在哪里找了回来？**

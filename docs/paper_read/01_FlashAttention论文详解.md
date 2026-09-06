@@ -52,7 +52,7 @@
 >
 > 发表：NeurIPS 2022，arXiv:2205.14135
 >
-> **前置阅读**：建议先读同目录的 `00_共享基础_GPU与LLM推理硬件基础.md`。本文不再重复解释 HBM、SRAM、kernel、tiling、memory-bound 等基础概念。
+> **前置阅读**：先读[GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)。本文不再重复解释 HBM、SRAM、kernel、tiling、memory-bound 等基础概念。
 
 ---
 

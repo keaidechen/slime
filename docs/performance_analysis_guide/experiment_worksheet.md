@@ -158,6 +158,6 @@ rollback:
 
 ## 资料入口
 
-- [专题总览](../../learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md)
-- [方法论与测量陷阱](../../learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md)
-- [案例：GPU 利用率低](../../learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md)
+- [专题总览](README.md)
+- [方法论与测量陷阱](00_concepts.md#concept-01)
+- [案例：GPU 利用率低](11_case_gpu_idle.md)

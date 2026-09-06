@@ -103,13 +103,36 @@ def audit():
         docs = manifest['documents']
         if len(docs) != manifest['baseline_documents'] or len({d['source'] for d in docs}) != len(docs):
             errors.append({'kind': 'manifest-coverage'})
+        removed = manifest.get('removed_files', [])
+        if len(removed) != len(set(removed)):
+            errors.append({'kind': 'duplicate-removal'})
+        for path in removed:
+            if (ROOT/path).exists():
+                errors.append({'kind': 'removed-file-still-exists', 'target': path})
         for doc in docs:
-            for path in [doc['source'], *doc['current']]:
+            expected = 'removed' if doc['source'] in removed else 'present'
+            if doc.get('source_status', 'present') != expected:
+                errors.append({'kind': 'manifest-source-status', 'target': doc['source']})
+            if not doc['current']:
+                errors.append({'kind': 'manifest-no-destination', 'target': doc['source']})
+            paths = doc['current'] if expected == 'removed' else [doc['source'], *doc['current']]
+            for path in paths:
                 if not (ROOT/path).is_file():
                     errors.append({'kind': 'manifest-missing-file', 'target': path})
     routes_path = ROOT/'learn_docs/document_routes.json'
     if routes_path.exists():
         routes = json.loads(routes_path.read_text(encoding='utf-8'))
+        if manifest_path.exists() and set(routes['routes']) != set(manifest.get('removed_files', [])):
+            errors.append({'kind': 'removal-route-coverage'})
+        for source, targets in routes['routes'].items():
+            if not targets:
+                errors.append({'kind': 'route-no-destination', 'target': source})
+            for row in targets:
+                target = ROOT/row['path']
+                if not target.is_file():
+                    errors.append({'kind': 'route-missing-file', 'target': row['path']})
+                elif row.get('anchor') and row['anchor'] not in anchors(target.read_text(encoding='utf-8')):
+                    errors.append({'kind': 'route-missing-anchor', 'target': row['path'], 'anchor': row['anchor']})
         for row in routes['merges']:
             target = ROOT/row['destination']
             if not target.is_file():

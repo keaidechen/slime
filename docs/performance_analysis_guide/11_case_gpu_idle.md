@@ -109,6 +109,6 @@ sequenceDiagram
 
 ## 延伸阅读
 
-- [CPU 与数据加载](../../learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md)
-- [分布式通信 Profiling](../../learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md)
-- [线上可观测性](../../learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md)
+- [CPU 与数据加载](02_pytorch.md#concept-07)
+- [分布式通信 Profiling](04_megatron.md#concept-09)
+- [线上可观测性](10_observability.md)
