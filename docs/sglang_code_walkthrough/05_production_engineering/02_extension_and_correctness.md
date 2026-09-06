@@ -1,5 +1,24 @@
 # 5.2 模型与 Backend 扩展、正确性验证
 
+<!-- learning-position -->
+> **学习定位**：A7 · 必修。
+> **前置**：[对应系统的基础实践](<../../../learn_docs/学习清单.md>)。
+> **首读/二读**：模型/backend 契约、数值容差与回归，供首次代码改动使用。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：先定义一个 backend 的输入输出契约
+
+更换 attention backend 时，数值公式相同仍可能在 mask、KV layout、page size、causal 边界和 dtype 上不兼容。列出输入 shape/stride、有效长度、缓存 owner、输出形状，以及是否写入 KV。
+
+验证顺序：小 tensor 与参考实现对照 → 单请求 prefill/decode → 混合长度 batch → finish/abort → 多卡与特殊特性。误差阈值要匹配 dtype、累积与任务需求，不用一个固定阈值覆盖所有层。
+
+验收：一个失败用例能缩小到具体输入与状态；性能回归同时固定 backend、输入与环境。数值正确并不能替代内存释放和跨请求隔离检查。
+
+## 机制与实现
+
 ## 1. 新模型接入层次
 
 ```text
@@ -57,4 +76,3 @@ Backend 不只是一个 kernel wrapper。它要处理 prefill/decode、paged KV 
 - `sglang/docs_new/docs/developer_guide/evaluating_new_models.mdx`
 - `sglang/docs_new/docs/developer_guide/development_jit_kernel_guide.mdx`
 - `sglang/docs_new/docs/developer_guide/quantization_contribution_guide.mdx`
-

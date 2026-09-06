@@ -1,5 +1,45 @@
 # 07｜DistServe 与 Prefill-Decode Disaggregation：为什么要把一次 LLM 推理拆到两组 GPU？
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先把 Prefill / Decode 差异再强调一次](#read-01)
+- [Prefill](#read-02)
+- [Decode](#read-03)
+- [2. 传统 serving 为什么把它们放一起？](#read-04)
+- [3. 问题一：Prefill 会干扰 Decode](#read-05)
+- [4. 问题二：Decode 也会影响 Prefill](#read-06)
+- [5. 两个最重要的 Latency 指标](#read-07)
+- [TTFT — Time To First Token](#read-08)
+- [TPOT — Time Per Output Token](#read-09)
+- [6. 什么是 SLO？](#read-10)
+- [7. Throughput 和 Goodput 区别是什么？](#read-11)
+- [8. DistServe 的核心思想：Disaggregation](#read-12)
+- [9. 为什么分开之后 interference 消失？](#read-13)
+- [10. 更深一层：并行策略也可以分开了](#read-14)
+- [11. 但是最大的代价来了：KV Cache 必须搬](#read-15)
+- [12. KV Transfer 为什么和网络拓扑强相关？](#read-16)
+- [13. DistServe 为什么强调 placement？](#read-17)
+- [14. 为什么 P/D 比“Chunked Prefill”更激进？](#read-18)
+- [15. P/D Disaggregation 是不是永远更好？](#read-19)
+- [16. DistServe 的论文结果怎么读？](#read-20)
+- [17. 2024 之后为什么 P/D Disaggregation 越来越重要？](#read-21)
+- [18. 现代 P/D 系统多了一层：KV Connector](#read-22)
+- [19. 从 Orca 到 DistServe 的历史线](#read-23)
+- [20. 一个餐厅比喻](#read-24)
+- [21. AI Infra 最值得记住的 9 个 Insight](#read-25)
+- [22. 读完后应该能回答](#read-26)
+- [主要参考资料](#read-27)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：首读 prefill/decode 干扰与传 KV 成本；PD 部署与复现实验专项。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；GPU = **Graphics Processing Unit（图形处理器）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；P/D 或 PD = **Prefill/Decode（预填充/解码）**；TTFT = **Time To First Token（首 Token 延迟）**；TPOT = **Time Per Output Token（平均每个输出 Token 的耗时）**；ITL = **Inter-Token Latency（相邻输出 Token 延迟）**；TBT = **Time Between Tokens（相邻 Token 时间间隔）**；SLO = **Service Level Objective（服务等级目标）**；P2P = **Peer-to-Peer（点到点通信）**；RDMA = **Remote Direct Memory Access（远程直接内存访问）**；NIXL = **NVIDIA Inference Xfer Library（NVIDIA 推理数据传输库，Xfer 即 transfer）**。**goodput（有效吞吐量）**只统计满足 SLO 的请求吞吐；**disaggregation（解耦/分离部署）**指把 Prefill 与 Decode 放到不同资源池。 另外：KV Cache = **Key-Value Cache（键值缓存）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；HBM = **High Bandwidth Memory（高带宽内存）**；AI = **Artificial Intelligence（人工智能）**。
 
 > 论文：Yinmin Zhong et al., **DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving**，OSDI 2024。
@@ -12,6 +52,9 @@
 > 这篇论文要理解的核心不是“多了一次 KV 传输”，而是一个更大的系统设计变化：**Prefill 和 Decode 是两种完全不同的 workload，为什么必须强迫它们共享同一组 GPU、同一种并行策略和同一个 scheduler？**
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 先把 Prefill / Decode 差异再强调一次
 
@@ -37,6 +80,9 @@ Decode
 
 它们虽然都执行 Transformer，但硬件行为非常不同。
 
+
+<a id="read-02"></a>
+
 ## Prefill
 
 ```text
@@ -45,6 +91,9 @@ Decode
 高 arithmetic intensity
 更偏 compute-bound
 ```
+
+
+<a id="read-03"></a>
 
 ## Decode
 
@@ -57,13 +106,16 @@ GEMM 很瘦
 
 于是：
 
-\[
+$$
 \boxed{\text{Prefill 和 Decode 是两种不同的 GPU workload}}
-\]
+$$
 
 这就是 DistServe 的起点。
 
 ---
+
+
+<a id="read-04"></a>
 
 # 2. 传统 serving 为什么把它们放一起？
 
@@ -101,6 +153,9 @@ GEMM 很瘦
 
 ---
 
+
+<a id="read-05"></a>
+
 # 3. 问题一：Prefill 会干扰 Decode
 
 假设稳定 decode：
@@ -133,6 +188,9 @@ decode
 
 ---
 
+
+<a id="read-06"></a>
+
 # 4. 问题二：Decode 也会影响 Prefill
 
 反过来，如果 scheduler 为了保证老用户 token 流畅：
@@ -159,7 +217,13 @@ decode
 
 ---
 
+
+<a id="read-07"></a>
+
 # 5. 两个最重要的 Latency 指标
+
+
+<a id="read-08"></a>
 
 ## TTFT — Time To First Token
 
@@ -178,6 +242,9 @@ decode
 - 第一次 decode/sampling；
 
 对交互体验非常重要。
+
+
+<a id="read-09"></a>
 
 ## TPOT — Time Per Output Token
 
@@ -209,6 +276,9 @@ DistServe 的重点就是同时满足二者 SLO。
 
 ---
 
+
+<a id="read-10"></a>
+
 # 6. 什么是 SLO？
 
 SLO = **Service Level Objective（服务等级目标）**。
@@ -234,6 +304,9 @@ tokens/s 很高
 因此 DistServe 使用 **goodput** 的视角，而不只是 raw throughput。
 
 ---
+
+
+<a id="read-11"></a>
 
 # 7. Throughput 和 Goodput 区别是什么？
 
@@ -264,6 +337,9 @@ DistServe 的系统优化目标就是：
 > **最大化同时满足 TTFT 与 TPOT 约束的请求率。**
 
 ---
+
+
+<a id="read-12"></a>
 
 # 8. DistServe 的核心思想：Disaggregation
 
@@ -302,6 +378,9 @@ D nodes = Decode only
 
 ---
 
+
+<a id="read-13"></a>
+
 # 9. 为什么分开之后 interference 消失？
 
 Prefill pool 上：
@@ -337,6 +416,9 @@ TPOT 的资源
 系统终于可以分别调优。
 
 ---
+
+
+<a id="read-14"></a>
 
 # 10. 更深一层：并行策略也可以分开了
 
@@ -391,6 +473,9 @@ Decode Pool:
 
 ---
 
+
+<a id="read-15"></a>
+
 # 11. 但是最大的代价来了：KV Cache 必须搬
 
 Prefill GPU 算出了：
@@ -420,6 +505,9 @@ Decode GPU HBM
 > **KV Transfer。**
 
 ---
+
+
+<a id="read-16"></a>
 
 # 12. KV Transfer 为什么和网络拓扑强相关？
 
@@ -469,6 +557,9 @@ request routing
 
 ---
 
+
+<a id="read-17"></a>
+
 # 13. DistServe 为什么强调 placement？
 
 因为拆得太远：
@@ -490,6 +581,9 @@ Prefill 计算很快
 这就是典型的 cluster-level inference optimization。
 
 ---
+
+
+<a id="read-18"></a>
 
 # 14. 为什么 P/D 比“Chunked Prefill”更激进？
 
@@ -544,6 +638,9 @@ P/D Disaggregation（Prefill/Decode 分离部署）
 
 ---
 
+
+<a id="read-19"></a>
+
 # 15. P/D Disaggregation 是不是永远更好？
 
 不是。
@@ -571,6 +668,9 @@ P/D Disaggregation（Prefill/Decode 分离部署）
 
 ---
 
+
+<a id="read-20"></a>
+
 # 16. DistServe 的论文结果怎么读？
 
 论文报告，在其模型、工作负载和 SLO 设置下，DistServe 相比当时的 colocated serving baseline，可以服务显著更高的 SLO-satisfying request rate；论文 headline 包括最高约 7.4× 的请求承载能力提升，或在某些比较下支持显著更严格的 SLO。
@@ -584,6 +684,9 @@ P/D Disaggregation（Prefill/Decode 分离部署）
 > **当 TTFT 与 TPOT 都受到严格约束时，消除 Prefill/Decode interference 和 parallelism coupling 可能产生巨大的 goodput 收益。**
 
 ---
+
+
+<a id="read-21"></a>
 
 # 17. 2024 之后为什么 P/D Disaggregation 越来越重要？
 
@@ -611,6 +714,9 @@ Prefill/Decode 不对称性
 因此 DistServe 的价值已经不只是“一篇系统论文”，而是帮助理解现代推理集群架构的一条主线。
 
 ---
+
+
+<a id="read-22"></a>
 
 # 18. 现代 P/D 系统多了一层：KV Connector
 
@@ -655,6 +761,9 @@ LMCache
 
 ---
 
+
+<a id="read-23"></a>
+
 # 19. 从 Orca 到 DistServe 的历史线
 
 ```text
@@ -681,6 +790,9 @@ Prefill-Decode Disaggregation
 > 每解决一个更粗粒度问题，就会暴露一个更细粒度的新瓶颈。
 
 ---
+
+
+<a id="read-24"></a>
 
 # 20. 一个餐厅比喻
 
@@ -725,6 +837,9 @@ Serving Kitchen
 
 ---
 
+
+<a id="read-25"></a>
+
 # 21. AI Infra 最值得记住的 9 个 Insight
 
 1. **Prefill 和 Decode 数学上属于同一个模型，硬件 workload 却完全不同。**
@@ -739,6 +854,9 @@ Serving Kitchen
 
 ---
 
+
+<a id="read-26"></a>
+
 # 22. 读完后应该能回答
 
 1. Prefill 和 Decode 为什么分别更偏 compute-bound / memory-bound？
@@ -750,6 +868,9 @@ Serving Kitchen
 7. 什么情况下 P/D 可能不值得？
 
 ---
+
+
+<a id="read-27"></a>
 
 ## 主要参考资料
 

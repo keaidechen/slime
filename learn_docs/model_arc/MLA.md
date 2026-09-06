@@ -1,11 +1,53 @@
 # MLA：从 KV Cache 压缩到推理内核的完整 Infra 解析
 
-> Multi-head Latent Attention（多头潜变量注意力）专题  
-> 版本：2026-09-02  
-> 定位：`AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md` 的 MLA 深入篇  
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [0. 先给结论](#read-01)
+- [1. 为什么标准 Attention 在 decode 阶段需要 KV Cache？](#read-02)
+- [2. 先把 MHA、MQA、GQA、MLA 放在同一个坐标系里](#read-03)
+- [3. 从一个“天真的 Low-rank KV”开始](#read-04)
+- [4. 完整 MLA：Content 分支与 RoPE 分支](#read-05)
+- [5. 为什么 RoPE 会破坏矩阵吸收？](#read-06)
+- [6. 矩阵吸收：为什么不用把历史 K/V 解压出来？](#read-07)
+- [7. MHA mode 与 MQA mode：同一个 MLA 为什么有两套执行图？](#read-08)
+- [8. Training、Prefill、Decode 三条完整数据流](#read-09)
+- [9. KV Cache 账本：MLA 到底省了多少？](#read-10)
+- [10. Paged Latent Cache：MLA 如何进入 vLLM / SGLang 一类运行时？](#read-11)
+- [11. Roofline 视角：MLA 为什么是“以算换存”而不只是“少算”？](#read-12)
+- [12. FlashMLA：算法变成高性能 kernel 时发生了什么？](#read-13)
+- [13. 并行策略：为什么 MLA 与 TP 的关系很微妙？](#read-14)
+- [14. MLA 与 Prefill–Decode Disaggregation](#read-15)
+- [15. 一个接近官方实现的简化伪代码](#read-16)
+- [16. 训练侧需要注意什么？](#read-17)
+- [17. MLA 的收益边界与新瓶颈](#read-18)
+- [18. MLA 与相邻技术的区别](#read-19)
+- [19. 常见误区](#read-20)
+- [20. Profiling：如何判断 MLA 真的帮到了你的服务？](#read-21)
+- [21. 实现与排障清单](#read-22)
+- [22. FAQ](#read-23)
+- [23. 最终心智模型](#read-24)
+- [24. 参考资料与阅读顺序](#read-25)
+- [25. 与后续专题的接口](#read-26)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：先读 MHA/GQA/MLA 的 KV 形状与容量影响；推导与实现二读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+> Multi-head Latent Attention（多头潜变量注意力）专题\
+> 版本：2026-09-02\
+> 定位：`AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md` 的 MLA 深入篇\
 > 阅读目标：不仅知道“MLA 能压缩 KV Cache”，还要能推导其公式、画出训练与推理的数据流、算清显存与带宽，并理解为什么生产实现会区分 MHA mode 与 MQA mode。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 0. 先给结论
 
@@ -49,6 +91,9 @@ flowchart TD
 这也是理解它的正确入口：MLA 首先是一次 **data movement optimization（数据搬运优化）**，其次才是一种 attention 参数化形式。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 1. 为什么标准 Attention 在 decode 阶段需要 KV Cache？
 
@@ -104,6 +149,9 @@ Q\in\mathbb{R}^{1\times d}
 > GPU 的 Tensor Core 峰值很高，但单 token decode 仍可能很慢，因为时间花在从 HBM 搬历史 KV，而不是做矩阵乘法。
 
 ---
+
+
+<a id="read-03"></a>
 
 ## 2. 先把 MHA、MQA、GQA、MLA 放在同一个坐标系里
 
@@ -204,6 +252,9 @@ d_c=4d_h,\qquad d_r=\frac{1}{2}d_h
 
 ---
 
+
+<a id="read-04"></a>
+
 ## 3. 从一个“天真的 Low-rank KV”开始
 
 ### 3.1 联合压缩，而不是分别缓存低秩 K 和 V
@@ -276,6 +327,9 @@ Query 是当前步临时量，不进入历史 Cache，因此压缩 Query **不�
 这提醒我们：论文中为了表达核心思想写出的最简公式，与稳定训练所需的工程实现之间，通常还隔着 normalization、scaling、precision policy 和并行切分。
 
 ---
+
+
+<a id="read-05"></a>
 
 ## 4. 完整 MLA：Content 分支与 RoPE 分支
 
@@ -409,6 +463,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-06"></a>
+
 ## 5. 为什么 RoPE 会破坏矩阵吸收？
 
 这是 MLA 最容易“记住结论、没有理解原因”的部分。
@@ -488,6 +545,9 @@ content 分支不做旋转，因此可以吸收 $W^{UK}$；位置分支维度较
 这并不意味着 content 与 position 完全独立，因为两部分 logits 在 softmax 前相加，共同决定最终注意力权重。
 
 ---
+
+
+<a id="read-07"></a>
 
 ## 6. 矩阵吸收：为什么不用把历史 K/V 解压出来？
 
@@ -579,6 +639,9 @@ u_t=\sum_iW_i^OW_i^{UV}z_{t,i}
 
 ---
 
+
+<a id="read-08"></a>
+
 ## 7. MHA mode 与 MQA mode：同一个 MLA 为什么有两套执行图？
 
 DeepSeek-V3.2 附录和当前 FlashMLA 文档明确区分两种 MLA 计算模式。
@@ -639,6 +702,9 @@ k^C=W^{UK}c^{KV},\qquad v^C=W^{UV}c^{KV}
 
 ---
 
+
+<a id="read-09"></a>
+
 ## 8. Training、Prefill、Decode 三条完整数据流
 
 ### 8.1 Training
@@ -698,6 +764,9 @@ flowchart TD
 ```
 
 ---
+
+
+<a id="read-10"></a>
 
 ## 9. KV Cache 账本：MLA 到底省了多少？
 
@@ -836,6 +905,9 @@ FlashMLA 当前文档给出一种每 token 656 bytes 的 FP8 Cache layout：
 
 ---
 
+
+<a id="read-11"></a>
+
 ## 10. Paged Latent Cache：MLA 如何进入 vLLM / SGLang 一类运行时？
 
 PagedAttention 的核心思想与 Attention 类型无关：把逻辑连续的序列 Cache 映射到不要求物理连续的固定大小 pages/blocks。
@@ -871,6 +943,9 @@ MLA page 里的 token record 变为：
 FlashMLA 的 decode 接口接收 `block_table`、`cache_seqlens` 与 tile scheduler metadata，说明生产 kernel 不是面对一个规整的 $[B,L,D]$ 张量，而是在处理 continuous batching 下不同长度、分页存储的 ragged KV。
 
 ---
+
+
+<a id="read-12"></a>
 
 ## 11. Roofline 视角：MLA 为什么是“以算换存”而不只是“少算”？
 
@@ -946,6 +1021,9 @@ AI\approx242\ \text{FLOPs/byte}
 因此生产系统需要 backend selection，而不是看到 MLA 就固定使用同一条 kernel 路径。
 
 ---
+
+
+<a id="read-13"></a>
 
 ## 12. FlashMLA：算法变成高性能 kernel 时发生了什么？
 
@@ -1049,6 +1127,9 @@ FlashMLA 官方仓库报告过 H800 SXM5 特定软件版本和 shape 下：
 
 ---
 
+
+<a id="read-14"></a>
+
 ## 13. 并行策略：为什么 MLA 与 TP 的关系很微妙？
 
 ### 13.1 Head-parallel TP 会改变算术强度
@@ -1097,6 +1178,9 @@ MLA 减小了 Cache payload，也会减少 cache migration/offload 流量；但 
 
 ---
 
+
+<a id="read-15"></a>
+
 ## 14. MLA 与 Prefill–Decode Disaggregation
 
 PD 分离把两种硬件画像不同的阶段放到不同 workers：
@@ -1125,6 +1209,9 @@ T_{transfer}\approx\frac{KV\ bytes}{Network\ bandwidth}+latency
 所以它是 PD 系统的重要 enabler，而不是完整解决方案。
 
 ---
+
+
+<a id="read-16"></a>
 
 ## 15. 一个接近官方实现的简化伪代码
 
@@ -1178,6 +1265,9 @@ def mla_forward(x, cache, mode):
 
 ---
 
+
+<a id="read-17"></a>
+
 ## 16. 训练侧需要注意什么？
 
 ### 16.1 参数量不等于 Cache 量
@@ -1230,6 +1320,9 @@ O(S^2)
 FlashAttention 解决的是 IO 与中间矩阵落盘，activation checkpointing 解决保存哪些层输出，而 MLA 的核心收益主要落在推理 Cache。三者可以叠加，但不能互相替代。
 
 ---
+
+
+<a id="read-18"></a>
 
 ## 17. MLA 的收益边界与新瓶颈
 
@@ -1288,6 +1381,9 @@ MLA 之后，缓存宽度下降，但：
 
 ---
 
+
+<a id="read-19"></a>
+
 ## 18. MLA 与相邻技术的区别
 
 | 技术 | 主要压缩哪一维 | 是否保留所有历史 token | 是否改变 attention interaction 数 | 主要收益 |
@@ -1309,6 +1405,9 @@ MLA 之后，缓存宽度下降，但：
 它们是正交、可组合的。
 
 ---
+
+
+<a id="read-20"></a>
 
 ## 19. 常见误区
 
@@ -1345,6 +1444,9 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 常规 head-parallel TP 会切 Query heads，但共享 latent stream 可能复制。要切 Cache 往往需要 sequence/context parallel 或专门布局。
 
 ---
+
+
+<a id="read-21"></a>
 
 ## 20. Profiling：如何判断 MLA 真的帮到了你的服务？
 
@@ -1404,6 +1506,9 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 
 ---
 
+
+<a id="read-22"></a>
+
 ## 21. 实现与排障清单
 
 ### 正确性
@@ -1436,6 +1541,9 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 - [ ] 以真实请求长度分布评估，而不只用 max context。
 
 ---
+
+
+<a id="read-23"></a>
 
 ## 22. FAQ
 
@@ -1473,6 +1581,9 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 
 ---
 
+
+<a id="read-24"></a>
+
 ## 23. 最终心智模型
 
 可以把标准 MHA 理解为：每个历史 token 在 HBM 中保存一大排“已经解码好的多头档案”。
@@ -1497,42 +1608,48 @@ flowchart TD
 
 ---
 
+
+<a id="read-25"></a>
+
 ## 24. 参考资料与阅读顺序
 
 ### 第一层：先读模型结构
 
-1. [DeepSeek-V2 Technical Report](https://arxiv.org/abs/2405.04434)  
+1. [DeepSeek-V2 Technical Report](https://arxiv.org/abs/2405.04434)\
    重点：§2.1、Appendix C、Appendix D。MLA 的原始完整公式、Decoupled RoPE、Cache 对比与消融。
 
-2. [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)  
+2. [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)\
    重点：V3 延续 MLA；模型配置、latent 后 RMSNorm/scale 与整体训练/系统背景。
 
-3. [DeepSeek-V3 官方参考推理实现：`inference/model.py`](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py)  
+3. [DeepSeek-V3 官方参考推理实现：`inference/model.py`](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py)\
    重点：`attn_impl = "naive" / "absorb"` 两条路径、实际 cache tensor、Query/NoPE/RoPE 切分。
 
-4. [DeepSeek-V3-Base `config.json`](https://huggingface.co/deepseek-ai/DeepSeek-V3-Base/blob/main/config.json)  
+4. [DeepSeek-V3-Base `config.json`](https://huggingface.co/deepseek-ai/DeepSeek-V3-Base/blob/main/config.json)\
    重点：`kv_lora_rank=512`、`q_lora_rank=1536`、`qk_nope_head_dim=128`、`qk_rope_head_dim=64`、`v_head_dim=128`。
 
 ### 第二层：再读 kernel
 
-5. [FlashMLA 官方仓库](https://github.com/deepseek-ai/FlashMLA)  
+5. [FlashMLA 官方仓库](https://github.com/deepseek-ai/FlashMLA)\
    重点：dense/sparse、prefill/decode 支持矩阵、MHA/MQA mode、paged cache 接口与 FP8 Cache layout。
 
-6. [A Deep-Dive Into the New Flash MLA Kernel](https://github.com/deepseek-ai/FlashMLA/blob/main/docs/20250422-new-kernel-deep-dive.md)  
+6. [A Deep-Dive Into the New Flash MLA Kernel](https://github.com/deepseek-ai/FlashMLA/blob/main/docs/20250422-new-kernel-deep-dive.md)\
    重点：Roofline、seesaw scheduling、TMA–GEMM pipeline、split-KV 与 tile scheduler。
 
-7. [DeepSeek-V3.2 Technical Report](https://arxiv.org/abs/2512.02556)  
+7. [DeepSeek-V3.2 Technical Report](https://arxiv.org/abs/2512.02556)\
    重点：Appendix A 的 MLA MHA/MQA modes；Sparse MLA 留到 `Sparse-Attention.md` 展开。
 
 ### 第三层：最后读 serving/runtime
 
-8. [DeepSeek-V3/R1 Inference System Overview](https://github.com/deepseek-ai/open-infra-index/blob/main/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md)  
+8. [DeepSeek-V3/R1 Inference System Overview](https://github.com/deepseek-ai/open-infra-index/blob/main/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md)\
    重点：PD 分离、MLA DP + routed-expert EP、通信计算重叠、KV/request load balance。
 
-9. [vLLM Attention Backend Feature Support](https://docs.vllm.ai/en/stable/design/attention_backends/)  
+9. [vLLM Attention Backend Feature Support](https://docs.vllm.ai/en/stable/design/attention_backends/)\
    重点：MLA 分离选择 prefill/decode backend，以及不同硬件、dtype、page size、Dense/Sparse 能力矩阵。该页面随版本变化，部署前应以当前版本为准。
 
 ---
+
+
+<a id="read-26"></a>
 
 ## 25. 与后续专题的接口
 

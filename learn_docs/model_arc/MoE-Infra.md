@@ -1,5 +1,166 @@
 # MoE Infra：从条件计算到 All-to-All、Grouped GEMM 与专家并行系统
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [缩写与术语](#read-01)
+- [0. 先给结论：MoE 不是“免费增加参数”，而是一次瓶颈迁移](#read-02)
+- [1. 先从 Dense FFN 开始：MoE 到底替换了什么？](#read-03)
+- [2. Sparse MoE 的数学结构](#read-04)
+- [2.1 Total parameters 与 activated parameters](#read-05)
+- [3. 一个 MoE 层的完整张量数据流](#read-06)
+- [4. 用具体 shape 看 token 如何被复制](#read-07)
+- [5. 为什么“激活 FLOPs 少”不等于“运行一定快”](#read-08)
+- [6. MoE 的历史演化：每一步都在解决上一代的系统问题](#read-09)
+- [7. Router：一个看似很小、实际决定全系统形状的模块](#read-10)
+- [7.1 Softmax Router](#read-11)
+- [7.2 Sigmoid affinity](#read-12)
+- [7.3 Top-1、Top-2 与更大的 Top-K](#read-13)
+- [8. Top-K 不可导，Router 是怎样训练的？](#read-14)
+- [9. Capacity Factor：为什么早期 MoE 会丢 token？](#read-15)
+- [10. Auxiliary Load-Balancing Loss](#read-16)
+- [10.1 batch-wise、sequence-wise 与 global-batch balance](#read-17)
+- [11. Router z-loss：它解决的不是负载，而是 logits 尺度](#read-18)
+- [12. DeepSeek 的 Auxiliary-Loss-Free Balancing](#read-19)
+- [12.1 优点](#read-20)
+- [12.2 局限](#read-21)
+- [13. Kimi K3 的 Quantile Balancing](#read-22)
+- [14. Expert specialization：MoE 的质量收益来自哪里？](#read-23)
+- [15. Fine-Grained Experts：为什么专家越来越多、每个越来越小？](#read-24)
+- [15.1 模型侧收益](#read-25)
+- [15.2 Infra 侧代价](#read-26)
+- [16. Shared Experts：把公共知识从 routed experts 中隔离出来](#read-27)
+- [16.1 为什么可能提高质量？](#read-28)
+- [16.2 为什么它也是一个 Infra opportunity？](#read-29)
+- [16.3 代价](#read-30)
+- [17. LatentMoE：把 full model width 与 routed expert width 解耦](#read-31)
+- [17.1 为什么叫 Stable LatentMoE？](#read-32)
+- [17.2 Infra trade-off](#read-33)
+- [18. 不同路由范式：谁选择谁？](#read-34)
+- [18.1 Token Choice](#read-35)
+- [18.2 Expert Choice](#read-36)
+- [18.3 BASE balanced assignment](#read-37)
+- [18.4 Hash Routing](#read-38)
+- [18.5 Threshold / variable-K routing](#read-39)
+- [19. Expert Parallelism：为什么 MoE 通常不能只用 Tensor Parallel？](#read-40)
+- [20. EP 之后为什么出现 All-to-All？](#read-41)
+- [21. MoE 通信量的第一阶成本模型](#read-42)
+- [22. All-to-All 为什么比 All-Reduce 更难优化？](#read-43)
+- [23. 拓扑感知：NVLink 很快，但跨节点 token 仍要经过网络](#read-44)
+- [24. Node-Limited / Group-Limited Routing](#read-45)
+- [25. Token permutation：一个经常被低估的 HBM 成本](#read-46)
+- [26. Expert GEMM 为什么变成了“小而碎”的计算？](#read-47)
+- [27. Grouped GEMM：它不是一种固定 kernel，而是一种 workload abstraction](#read-48)
+- [27.1 Grouped GEMM 与 Batched GEMM 的区别](#read-49)
+- [27.2 它为什么不是万能的？](#read-50)
+- [28. 四种 Expert GEMM 实现路线](#read-51)
+- [28.1 Per-expert loop](#read-52)
+- [28.2 Multi-stream GEMM](#read-53)
+- [28.3 Unified Grouped GEMM](#read-54)
+- [28.4 Block-Sparse GEMM](#read-55)
+- [29. PyTorch `grouped_mm`、Transformer Engine 与自定义 Kernel 怎么选？](#read-56)
+- [30. Expert GEMM 的调度问题：总 token 平衡仍不够](#read-57)
+- [31. Fusion：MoE 不是只融合 activation function](#read-58)
+- [32. MoE 前向与反向到底有哪些计算？](#read-59)
+- [33. Expert 参数的 Data-Parallel Group 很容易建错](#read-60)
+- [34. MoE 的显存：Active parameters 少，并不代表模型容易装下](#read-61)
+- [35. Expert imbalance 为什么会引发 OOM，而不只是变慢？](#read-62)
+- [36. Communication–Computation Overlap：目标是把加法变成最大值](#read-63)
+- [37. DualPipe：用双向流水隐藏 MoE 通信](#read-64)
+- [37.1 DualPipe 的代价](#read-65)
+- [38. 为什么 Kimi K2 没有照搬 DualPipe？](#read-66)
+- [39. DeepEP：MoE All-to-All 不只是调用 NCCL](#read-67)
+- [39.1 为什么不是直接 `all_to_all_single` 就够？](#read-68)
+- [40. MoonEP：从“统计均衡”推进到“每个 rank 精确等量”](#read-69)
+- [40.1 系统收益](#read-70)
+- [40.2 新代价](#read-71)
+- [41. Low Precision 与 Ultra-Sparse MoE 为什么天然结合？](#read-72)
+- [42. Prefill 中的 MoE：大 token batch，有机会把通信隐藏掉](#read-73)
+- [43. Decode 中的 MoE：小 batch、低复用、低延迟](#read-74)
+- [44. 为什么 MoE Serving 经常需要 Redundant Experts？](#read-75)
+- [44.1 静态冗余](#read-76)
+- [44.2 动态冗余](#read-77)
+- [44.3 显存代价](#read-78)
+- [45. EPLB：训练平衡与 Serving 平衡是两个不同问题](#read-79)
+- [46. Expert Placement：Round-Robin 并不总比连续放置好](#read-80)
+- [47. Expert Offload：为什么本地运行 MoE 常常没有想象中快？](#read-81)
+- [48. Continuous Batching、CUDA Graph 与动态 MoE](#read-82)
+- [49. Speculative Decoding 与 MoE](#read-83)
+- [50. 现代开源模型的 MoE 路线对比](#read-84)
+- [51. DeepSeek 路线：MoE 是整套硬件协同的中心](#read-85)
+- [51.1 DeepSeekMoE](#read-86)
+- [51.2 DeepSeek-V2/V3](#read-87)
+- [51.3 DeepSeek-V4](#read-88)
+- [52. Kimi 路线：把 sparsity scaling 推到 3T 级](#read-89)
+- [52.1 Kimi K2](#read-90)
+- [52.2 Kimi K3](#read-91)
+- [53. Qwen 路线：Ultra-Sparse MoE 服务于异构部署](#read-92)
+- [54. GLM 路线：快速扩大 MoE，再与长上下文系统融合](#read-93)
+- [55. 其他有里程碑意义的模型与系统工作](#read-94)
+- [55.1 GShard](#read-95)
+- [55.2 Switch Transformer](#read-96)
+- [55.3 GLaM](#read-97)
+- [55.4 ST-MoE](#read-98)
+- [55.5 BASE Layers / Expert Choice](#read-99)
+- [55.6 DeepSpeed-MoE / Tutel / FasterMoE](#read-100)
+- [55.7 MegaBlocks](#read-101)
+- [55.8 Mixtral / DBRX](#read-102)
+- [55.9 OLMoE](#read-103)
+- [56. 一个完整的数值成本例子](#read-104)
+- [57. MoE 的 Roofline：训练与 decode 可能落在完全不同区域](#read-105)
+- [58. 如何正确 Benchmark 一个 MoE 系统](#read-106)
+- [58.1 四层指标](#read-107)
+- [58.2 必须使用真实 route trace](#read-108)
+- [59. 如何测 Communication–Computation Overlap](#read-109)
+- [60. 常见故障排查](#read-110)
+- [60.1 loss 正常，但 step time 周期性尖峰](#read-111)
+- [60.2 某些 ranks OOM，其他 ranks 显存充足](#read-112)
+- [60.3 MFU 很低，但网络利用率也不高](#read-113)
+- [60.4 Grouped GEMM 不如 for-loop](#read-114)
+- [60.5 Router collapse](#read-115)
+- [60.6 多节点 hang](#read-116)
+- [60.7 训练均衡，线上 P99 仍很差](#read-117)
+- [61. 推荐监控面板](#read-118)
+- [62. 配置 MoE 训练前的检查清单](#read-119)
+- [模型侧](#read-120)
+- [并行侧](#read-121)
+- [Kernel 侧](#read-122)
+- [通信侧](#read-123)
+- [稳定性侧](#read-124)
+- [63. 配置 MoE Serving 前的检查清单](#read-125)
+- [64. 常见误区](#read-126)
+- [误区 1：MoE 只有 active parameters 需要放显存](#read-127)
+- [误区 2：MoE FLOPs 是 Dense 的 $K/E$](#read-128)
+- [误区 3：负载均衡就是每 expert token 数相同](#read-129)
+- [误区 4：All-to-All 只取决于网络带宽](#read-130)
+- [误区 5：Grouped GEMM 一定优于多个 GEMM](#read-131)
+- [误区 6：训练时平衡，Serving 就平衡](#read-132)
+- [误区 7：更大的 EP 一定更快](#read-133)
+- [误区 8：DualPipe 是通用最优流水](#read-134)
+- [误区 9：只优化 Expert GEMM 就够了](#read-135)
+- [65. Dense 还是 MoE？从 Hardware Envelope 选择](#read-136)
+- [更适合 MoE](#read-137)
+- [更适合 Dense](#read-138)
+- [66. 一条推荐的 MoE Infra 学习路径](#read-139)
+- [67. 最终心智模型](#read-140)
+- [68. 参考资料与推荐阅读顺序](#read-141)
+- [A. 基础与早期里程碑](#read-142)
+- [B. 系统与 Kernel](#read-143)
+- [C. 开源模型结构](#read-144)
+- [D. DeepSeek 全栈路线](#read-145)
+- [E. Kimi 与 Qwen 的新一代路线](#read-146)
+- [F. Serving](#read-147)
+- [69. 与下一专题的接口](#read-148)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A3→A8 · 分层必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：首读 router→dispatch→GEMM→combine；通信/调优/模型案例专项回读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 > 本文承接 `MLA.md`、`Sparse-Attention.md` 与 `Linear-Attention.md`。前三篇讨论的是如何减少序列记忆和历史交互成本；本文转向 Transformer 的另一条主轴：如何让模型拥有极大的参数容量，却只为每个 token 激活其中一小部分参数。
 >
 > 本文面向模型架构、训练系统和推理 Infra 学习者。内容按“结构是什么 → 张量如何流动 → 为什么产生通信和小 GEMM → 训练与 Serving 如何实现 → 如何建模、测量和排障”组织。论文或技术报告中的加速数字只代表作者的特定模型、硬件和软件配置，不能直接外推。
@@ -7,6 +168,9 @@
 > **资料版本：截至 2026-09-02。** DeepEP V2、MoonEP、Qwen3.8-Flash-Next、DeepSeek-V4、Kimi K3、GLM-5.3 等仍在快速演进，具体 backend、dtype 和硬件支持以相应仓库当前版本为准。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 缩写与术语
 
@@ -41,6 +205,9 @@
 | MTP | Multi-Token Prediction | 多 token 预测，可辅助模型训练和推测解码 |
 
 ---
+
+
+<a id="read-02"></a>
 
 # 0. 先给结论：MoE 不是“免费增加参数”，而是一次瓶颈迁移
 
@@ -116,6 +283,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-03"></a>
+
 # 1. 先从 Dense FFN 开始：MoE 到底替换了什么？
 
 一个常见的 SwiGLU FFN 可以写成：
@@ -177,6 +347,9 @@ MoE 替换的通常就是这个 FFN，而 Attention、Norm、Residual 仍是 den
 
 ---
 
+
+<a id="read-04"></a>
+
 # 2. Sparse MoE 的数学结构
 
 设一层有 $E$ 个 routed experts，每个 token 选择 $K$ 个专家：
@@ -213,6 +386,9 @@ y=
 
 Shared expert 对所有 token 执行；routed expert 只对选中 token 执行。
 
+
+<a id="read-05"></a>
+
 ## 2.1 Total parameters 与 activated parameters
 
 若每个 routed expert 的 intermediate size 是 $d_e$，忽略 Router 和 dense 部分：
@@ -248,6 +424,9 @@ S=\frac{E}{K}.
 
 ---
 
+
+<a id="read-06"></a>
+
 # 3. 一个 MoE 层的完整张量数据流
 
 输入：
@@ -281,6 +460,9 @@ flowchart TD
 这张图里，真正的 Expert FFN 只有中间一步。其余步骤都是 Dense FFN 不需要承担的 MoE tax。
 
 ---
+
+
+<a id="read-07"></a>
 
 # 4. 用具体 shape 看 token 如何被复制
 
@@ -339,6 +521,9 @@ M_r=\sum_{e\in\mathcal{E}_r}m_e.
 
 ---
 
+
+<a id="read-08"></a>
+
 # 5. 为什么“激活 FLOPs 少”不等于“运行一定快”
 
 MoE 与 Dense 比较时，至少要分开四个尺度：
@@ -365,6 +550,9 @@ MoE 的实际收益依赖：
 当 batch 很小、expert 很多、Top-K 较大或跨节点网络较慢时，MoE 甚至可能比 active FLOPs 相近的 Dense 更慢。
 
 ---
+
+
+<a id="read-09"></a>
 
 # 6. MoE 的历史演化：每一步都在解决上一代的系统问题
 
@@ -396,6 +584,9 @@ MoE 的实际收益依赖：
 
 ---
 
+
+<a id="read-10"></a>
+
 # 7. Router：一个看似很小、实际决定全系统形状的模块
 
 Router 常只是一个线性层：
@@ -420,6 +611,9 @@ W_r\in\mathbb{R}^{d\times E}.
 
 因此 Router 是模型结构与运行时调度的接口。
 
+
+<a id="read-11"></a>
+
 ## 7.1 Softmax Router
 
 常见做法：
@@ -429,6 +623,9 @@ p_e(x)=\frac{\exp(s_e)}{\sum_j\exp(s_j)}.
 ```
 
 再取 Top-$K$。Softmax 在所有专家间产生竞争，一个 expert 分数上升会压低其他 expert 概率。
+
+
+<a id="read-12"></a>
 
 ## 7.2 Sigmoid affinity
 
@@ -441,6 +638,9 @@ a_e(x)=\sigma(x^\top c_e),
 先按 affinity 加 bias 选择 Top-$K$，再对选中的原始 affinity 归一化形成 mixture weight。
 
 Sigmoid 允许每个 expert 先独立估计相关性；但最终固定 Top-$K$ 仍产生离散竞争。
+
+
+<a id="read-13"></a>
 
 ## 7.3 Top-1、Top-2 与更大的 Top-K
 
@@ -458,6 +658,9 @@ T_{\text{assign}}=T\cdot K.
 ```
 
 ---
+
+
+<a id="read-14"></a>
 
 # 8. Top-K 不可导，Router 是怎样训练的？
 
@@ -487,6 +690,9 @@ Top-K 的 expert id 是离散选择，无法像普通连续算子一样对“未
 - warmup、监控 entropy 和 route churn。
 
 ---
+
+
+<a id="read-15"></a>
 
 # 9. Capacity Factor：为什么早期 MoE 会丢 token？
 
@@ -529,6 +735,9 @@ Switch Transformer 的 Top-1 简化了容量管理；MegaBlocks 则把动态 MoE
 
 ---
 
+
+<a id="read-16"></a>
+
 # 10. Auxiliary Load-Balancing Loss
 
 常见 balance loss 同时考虑：
@@ -559,6 +768,9 @@ f_e\approx p_e\approx\frac{1}{E}.
 
 若 $\lambda$ 太小，负载仍不平衡；若太大，Router 为“平均分配”牺牲 token-expert affinity，可能影响模型质量和自然专家分工。
 
+
+<a id="read-17"></a>
+
 ## 10.1 batch-wise、sequence-wise 与 global-batch balance
 
 平衡发生在哪个统计范围很重要：
@@ -571,6 +783,9 @@ f_e\approx p_e\approx\frac{1}{E}.
 Qwen3 报告使用 global-batch load balancing loss；DeepSeek-V3 主要使用非梯度 bias，同时保留较弱的 sequence-wise 辅助约束。这说明“是否使用 aux loss”不是简单二选一，而是主平衡机制与安全约束的组合。
 
 ---
+
+
+<a id="read-18"></a>
 
 # 11. Router z-loss：它解决的不是负载，而是 logits 尺度
 
@@ -597,6 +812,9 @@ ST-MoE 推广了 Router z-loss，其典型形式是惩罚 log-partition：
 
 ---
 
+
+<a id="read-19"></a>
+
 # 12. DeepSeek 的 Auxiliary-Loss-Free Balancing
 
 DeepSeek-V3 为每个 expert 维护一个 routing bias $b_e$：
@@ -619,12 +837,18 @@ b_e+\gamma\cdot
 
 因此它把系统层面的负载控制，从主任务梯度中部分解耦出来。
 
+
+<a id="read-20"></a>
+
 ## 12.1 优点
 
 - 不需要用较大的 aux loss 扭曲 LM objective；
 - bias 更新规则易于实现；
 - 可直接针对观测 load 反馈；
 - inference 时可冻结 bias，仍是普通 Top-K。
+
+
+<a id="read-21"></a>
 
 ## 12.2 局限
 
@@ -636,6 +860,9 @@ b_e+\gamma\cdot
 这正是 Kimi K3 继续发展 Quantile Balancing 的背景。
 
 ---
+
+
+<a id="read-22"></a>
 
 # 13. Kimi K3 的 Quantile Balancing
 
@@ -671,6 +898,9 @@ QB 的 Infra 意义很强：
 > 它用固定大小的统计摘要替代收集数百万 token 的完整 margin，同时让负载控制从慢速 sign feedback 变成接近目标 coordinate update。
 
 ---
+
+
+<a id="read-23"></a>
 
 # 14. Expert specialization：MoE 的质量收益来自哪里？
 
@@ -712,6 +942,9 @@ MoE 不只是“把一个大 FFN 切成多个小 FFN”。理想状态是不同 
 
 ---
 
+
+<a id="read-24"></a>
+
 # 15. Fine-Grained Experts：为什么专家越来越多、每个越来越小？
 
 传统 MoE 可能有 $E$ 个较大 experts，每 token 选 $K$ 个。DeepSeekMoE 的思路是把专家细分：
@@ -724,12 +957,18 @@ K\rightarrow mK,
 
 同时缩小每个 expert 的 intermediate size，使 active compute 大体可控。
 
+
+<a id="read-25"></a>
+
 ## 15.1 模型侧收益
 
 - 组合空间从“选少数大模块”变成“组合更多小模块”；
 - 一个 token 可以拼出更细的功能组合；
 - routed experts 更容易专门化；
 - 在固定 active compute 下增加 total expert parameters。
+
+
+<a id="read-26"></a>
 
 ## 15.2 Infra 侧代价
 
@@ -744,6 +983,9 @@ K\rightarrow mK,
 
 ---
 
+
+<a id="read-27"></a>
+
 # 16. Shared Experts：把公共知识从 routed experts 中隔离出来
 
 Shared expert 对所有 token 都执行。其目标是承载跨领域通用变换，让 routed experts 不必重复学习相同公共模式。
@@ -754,11 +996,17 @@ Shared expert 对所有 token 都执行。其目标是承载跨领域通用变�
 y=y_{\text{shared}}+y_{\text{routed}}.
 ```
 
+
+<a id="read-28"></a>
+
 ## 16.1 为什么可能提高质量？
 
 没有 shared expert 时，所有 token 都必须经过 routed experts。为了服务通用 token，多个专家容易学习冗余的基础知识。
 
 Shared path 提供稳定公共 backbone，routed path 专注差异化容量。
+
+
+<a id="read-29"></a>
 
 ## 16.2 为什么它也是一个 Infra opportunity？
 
@@ -772,6 +1020,9 @@ Shared expert 无需 Router，且所有 token 都使用，GEMM 较大而规则�
 
 Megatron Core 等系统提供 shared-expert overlap：通信 routed tokens 时，同时计算 shared expert。
 
+
+<a id="read-30"></a>
+
 ## 16.3 代价
 
 - shared compute 始终发生；
@@ -780,6 +1031,9 @@ Megatron Core 等系统提供 shared-expert overlap：通信 routed tokens 时�
 - combine 与 residual 的融合更复杂。
 
 ---
+
+
+<a id="read-31"></a>
 
 # 17. LatentMoE：把 full model width 与 routed expert width 解耦
 
@@ -799,6 +1053,9 @@ y\in\mathbb{R}^{d},
 
 这使 routed expert bank 可以在较窄空间扩到 896 experts，而 shared experts 保留 full-width 公共路径。
 
+
+<a id="read-32"></a>
+
 ## 17.1 为什么叫 Stable LatentMoE？
 
 极端稀疏和额外投影形成较长的矩阵乘链，内部 activation 可能爆炸。Kimi K3 加入：
@@ -808,6 +1065,9 @@ y\in\mathbb{R}^{d},
 - Quantile Balancing。
 
 这说明容量 scaling 继续暴露出优化稳定性与负载控制的新瓶颈。
+
+
+<a id="read-33"></a>
 
 ## 17.2 Infra trade-off
 
@@ -824,7 +1084,13 @@ T_{\text{projection}}
 
 ---
 
+
+<a id="read-34"></a>
+
 # 18. 不同路由范式：谁选择谁？
+
+
+<a id="read-35"></a>
 
 ## 18.1 Token Choice
 
@@ -834,19 +1100,31 @@ T_{\text{projection}}
 
 缺点：每 expert 的 token 数不固定，需要额外平衡。
 
+
+<a id="read-36"></a>
+
 ## 18.2 Expert Choice
 
 每个 expert 从所有 tokens 中选择固定容量的 Top tokens。这样每 expert 的 GEMM shape 天然固定，但每 token 可能被 0、1 或多个 experts 选择。
 
 它把负载平衡内建进选择规则，却改变了每 token compute 和 causal serving 的语义，因此在主流自回归 LLM 中不如 token-choice 普遍。
 
+
+<a id="read-37"></a>
+
 ## 18.3 BASE balanced assignment
 
 BASE Layers 将 token-to-expert 写成线性分配问题，保证每 expert 收到相同 token 数。优点是严格均衡；代价是需要全局 assignment，跨 rank 协调和在线低延迟并不简单。
 
+
+<a id="read-38"></a>
+
 ## 18.4 Hash Routing
 
 按 token id 或固定 hash 选择专家，省掉学习 Router 和平衡问题。缺点是输入上下文适应性弱，专家分工受 hash 规则约束。
+
+
+<a id="read-39"></a>
 
 ## 18.5 Threshold / variable-K routing
 
@@ -855,6 +1133,9 @@ BASE Layers 将 token-to-expert 写成线性分配问题，保证每 expert 收�
 对大规模 Serving 来说，固定 Top-K 的可预算性仍是非常强的工程优势。
 
 ---
+
+
+<a id="read-40"></a>
 
 # 19. Expert Parallelism：为什么 MoE 通常不能只用 Tensor Parallel？
 
@@ -889,6 +1170,9 @@ N_{GPU}
 但这些维度不一定完全独立相乘；实现会复用 rank 维度或形成嵌套 process groups，必须以框架的 group construction 为准。
 
 ---
+
+
+<a id="read-41"></a>
 
 # 20. EP 之后为什么出现 All-to-All？
 
@@ -926,6 +1210,9 @@ Expert 计算完成后，输出还要沿相反关系返回原 token rank，即 C
 反向传播还会重复相应的数据交换。
 
 ---
+
+
+<a id="read-42"></a>
 
 # 21. MoE 通信量的第一阶成本模型
 
@@ -974,6 +1261,9 @@ p_{remote}\approx1-\frac1R.
 
 ---
 
+
+<a id="read-43"></a>
+
 # 22. All-to-All 为什么比 All-Reduce 更难优化？
 
 All-Reduce 的每个 rank 通常发送相同 shape 的 tensor，通信模式规则。
@@ -1002,6 +1292,9 @@ T_{setup}
 小 batch decode 中，$T_{setup}$ 和 RTT 可能比 payload 传输更重要；大 batch prefill/training 中，有效带宽和拥塞更重要。
 
 ---
+
+
+<a id="read-44"></a>
 
 # 23. 拓扑感知：NVLink 很快，但跨节点 token 仍要经过网络
 
@@ -1034,6 +1327,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-45"></a>
+
 # 24. Node-Limited / Group-Limited Routing
 
 如果 Top-$K$ experts 分散在很多节点，一个 token 会产生广泛 fan-out。可以先把 experts 分组，例如一组对应一个节点或一个拓扑域：
@@ -1065,6 +1361,9 @@ N_{remote\ nodes\ per\ token}\leq G_{top}.
 这体现了典型 Model–System Co-design：路由规则开始感知集群拓扑。
 
 ---
+
+
+<a id="read-46"></a>
 
 # 25. Token permutation：一个经常被低估的 HBM 成本
 
@@ -1110,6 +1409,9 @@ Permutation 常受 HBM bandwidth 和随机访存限制，且中间 tensor 可能
 
 ---
 
+
+<a id="read-47"></a>
+
 # 26. Expert GEMM 为什么变成了“小而碎”的计算？
 
 第 $e$ 个 expert 的第一组投影是：
@@ -1151,6 +1453,9 @@ W^{down}_e[d_e,d].
 
 ---
 
+
+<a id="read-48"></a>
+
 # 27. Grouped GEMM：它不是一种固定 kernel，而是一种 workload abstraction
 
 对本地 $E_{local}$ 个 experts，需要计算：
@@ -1177,9 +1482,15 @@ for expert in local_experts:
 - 让小 GEMM 共同填满 GPU；
 - 可以按 workload 调整 tile schedule。
 
+
+<a id="read-49"></a>
+
 ## 27.1 Grouped GEMM 与 Batched GEMM 的区别
 
 Strided Batched GEMM 通常要求每组矩阵形状和 stride 规则一致；Grouped GEMM 允许 $M_e$ 不同，并通过 pointer/offset/shape metadata 描述各组。
+
+
+<a id="read-50"></a>
 
 ## 27.2 它为什么不是万能的？
 
@@ -1195,7 +1506,13 @@ Strided Batched GEMM 通常要求每组矩阵形状和 stride 规则一致；Gro
 
 ---
 
+
+<a id="read-51"></a>
+
 # 28. 四种 Expert GEMM 实现路线
+
+
+<a id="read-52"></a>
 
 ## 28.1 Per-expert loop
 
@@ -1204,6 +1521,9 @@ Strided Batched GEMM 通常要求每组矩阵形状和 stride 规则一致；Gro
 缺点：launch 多；小 GEMM 利用率差。
 
 适合少量大 experts，或作为正确性 baseline。
+
+
+<a id="read-53"></a>
 
 ## 28.2 Multi-stream GEMM
 
@@ -1214,9 +1534,15 @@ Strided Batched GEMM 通常要求每组矩阵形状和 stride 规则一致；Gro
 - 很难保证不同 shape 公平调度；
 - CUDA Graph 与动态 shape 处理复杂。
 
+
+<a id="read-54"></a>
+
 ## 28.3 Unified Grouped GEMM
 
 一个 persistent/grouped kernel 在内部调度所有 expert tiles。适合 many-small-GEMM，但需高质量 scheduler。
+
+
+<a id="read-55"></a>
 
 ## 28.4 Block-Sparse GEMM
 
@@ -1225,6 +1551,9 @@ MegaBlocks 把所有 expert token blocks 组织成 block-sparse matrix，用稀�
 没有一条路线对所有 $E,m_e,d,d_e,dtype,GPU$ 都最优。正确方法是根据真实 route trace benchmark。
 
 ---
+
+
+<a id="read-56"></a>
 
 # 29. PyTorch `grouped_mm`、Transformer Engine 与自定义 Kernel 怎么选？
 
@@ -1253,6 +1582,9 @@ MegaBlocks 把所有 expert token blocks 组织成 block-sparse matrix，用稀�
 
 ---
 
+
+<a id="read-57"></a>
+
 # 30. Expert GEMM 的调度问题：总 token 平衡仍不够
 
 即使每个 rank 的总 token 数完全相同，rank 内不同 experts 的 $m_e$ 仍可能高度偏斜。
@@ -1277,6 +1609,9 @@ MegaBlocks 把所有 expert token blocks 组织成 block-sparse matrix，用稀�
 Kimi K3 的 MoonEP 即使实现 rank-level perfect balance，仍使用 workload-aware expert-GEMM scheduler，因为 rank 内 skew 不会自动消失。
 
 ---
+
+
+<a id="read-58"></a>
 
 # 31. Fusion：MoE 不是只融合 activation function
 
@@ -1313,6 +1648,9 @@ MoE 数据流中存在大量中间 tensor。可融合方向包括：
 
 ---
 
+
+<a id="read-59"></a>
+
 # 32. MoE 前向与反向到底有哪些计算？
 
 对一个 expert 线性层：
@@ -1345,6 +1683,9 @@ dW=X^\top dY.
 
 ---
 
+
+<a id="read-60"></a>
+
 # 33. Expert 参数的 Data-Parallel Group 很容易建错
 
 假设 EP group 内每个 expert 只存在一份，而整个模型有多个 DP replicas。
@@ -1374,6 +1715,9 @@ dW=X^\top dY.
 ```
 
 ---
+
+
+<a id="read-61"></a>
 
 # 34. MoE 的显存：Active parameters 少，并不代表模型容易装下
 
@@ -1417,6 +1761,9 @@ Kimi K2 报告中在 1T 参数规模下结合 PP16、EP16、ZeRO-1，并对 acti
 
 ---
 
+
+<a id="read-62"></a>
+
 # 35. Expert imbalance 为什么会引发 OOM，而不只是变慢？
 
 某 rank 收到更多 assignments 时，会扩大：
@@ -1450,6 +1797,9 @@ M_r
 需要记录 per-layer/per-rank max token count，而不只是平均 expert load。
 
 ---
+
+
+<a id="read-63"></a>
 
 # 36. Communication–Computation Overlap：目标是把加法变成最大值
 
@@ -1487,6 +1837,9 @@ T\approx\max(T_{comm},T_{compute}).
 
 ---
 
+
+<a id="read-64"></a>
+
 # 37. DualPipe：用双向流水隐藏 MoE 通信
 
 DeepSeek-V3 把每个 chunk 拆为：
@@ -1501,6 +1854,9 @@ Backward 还将 input-gradient 和 weight-gradient 计算拆开。DualPipe 从�
 
 DeepSeek-V3 报告的关键背景是：跨节点 EP 的 compute-to-communication 时间比接近 1:1；若串行执行，通信几乎将 MoE 时间翻倍。
 
+
+<a id="read-65"></a>
+
 ## 37.1 DualPipe 的代价
 
 - 双向 stage placement 更复杂；
@@ -1513,6 +1869,9 @@ DeepSeek-V3 报告的关键背景是：跨节点 EP 的 compute-to-communication
 DualPipe 不是“所有 MoE 训练都应该打开”的通用开关。
 
 ---
+
+
+<a id="read-66"></a>
 
 # 38. 为什么 Kimi K2 没有照搬 DualPipe？
 
@@ -1527,6 +1886,9 @@ Kimi K2 使用 PP16、EP16 和 interleaved 1F1B，通过增加 warm-up micro-bat
 DeepSeek-V3 的 Attention 头数、EP64、H800 IB 集群与 Kimi K2 的 attention shape、EP16、RoCE 集群不同。不能把某个 schedule 脱离模型结构复制。
 
 ---
+
+
+<a id="read-67"></a>
 
 # 39. DeepEP：MoE All-to-All 不只是调用 NCCL
 
@@ -1548,6 +1910,9 @@ DeepEP 是面向 Expert Parallel dispatch/combine 的通信库，区分：
 
 截至本文版本，DeepEP 仓库还包含 zero-copy、Hybrid-EP、NVFP4、AMD/MORI 等实验或社区路径。它们不应被视作所有环境默认稳定支持。
 
+
+<a id="read-68"></a>
+
 ## 39.1 为什么不是直接 `all_to_all_single` 就够？
 
 通用 collective 不知道：
@@ -1564,6 +1929,9 @@ DeepEP 是面向 Expert Parallel dispatch/combine 的通信库，区分：
 
 ---
 
+
+<a id="read-69"></a>
+
 # 40. MoonEP：从“统计均衡”推进到“每个 rank 精确等量”
 
 Kimi K3 的 MoonEP 使用动态 redundant experts：
@@ -1576,6 +1944,9 @@ Kimi K3 的 MoonEP 使用动态 redundant experts：
 
 报告给出的保证是：每 rank 预留至多 $E/R$ 个 redundant-expert slots，可保证存在可行均衡计划。
 
+
+<a id="read-70"></a>
+
 ## 40.1 系统收益
 
 - rank-level compute 完全均衡；
@@ -1583,6 +1954,9 @@ Kimi K3 的 MoonEP 使用动态 redundant experts：
 - 避免 host 每层读取动态 shape 后再 launch；
 - activation buffer 更可预测；
 - zero-copy communication 更容易组织。
+
+
+<a id="read-71"></a>
 
 ## 40.2 新代价
 
@@ -1595,6 +1969,9 @@ Kimi K3 的 MoonEP 使用动态 redundant experts：
 MoonEP 说明负载均衡已经从“Router loss”发展成“路由 + placement + migration + kernel schedule”的全栈问题。
 
 ---
+
+
+<a id="read-72"></a>
 
 # 41. Low Precision 与 Ultra-Sparse MoE 为什么天然结合？
 
@@ -1639,6 +2016,9 @@ DeepSeek-V3 报告中 dispatch activation 可使用 FP8，而 combine 保留 BF1
 
 ---
 
+
+<a id="read-73"></a>
+
 # 42. Prefill 中的 MoE：大 token batch，有机会把通信隐藏掉
 
 Prefill 一次处理很多 input tokens：
@@ -1663,6 +2043,9 @@ Prefill 优化优先级通常是：
 5. 与 Attention/CP 的资源竞争。
 
 ---
+
+
+<a id="read-74"></a>
 
 # 43. Decode 中的 MoE：小 batch、低复用、低延迟
 
@@ -1691,6 +2074,9 @@ Decode 优化优先级通常变成：
 
 ---
 
+
+<a id="read-75"></a>
+
 # 44. 为什么 MoE Serving 经常需要 Redundant Experts？
 
 训练通过 balance objective 让训练分布上的专家负载接近均匀，但线上请求可能集中在代码、某种语言或 Agent 工具调用，形成 hot experts。
@@ -1708,13 +2094,22 @@ e_{hot}\rightarrow
 \{e_{hot}^{(1)},e_{hot}^{(2)},\ldots\}.
 ```
 
+
+<a id="read-76"></a>
+
 ## 44.1 静态冗余
 
 根据历史统计周期性选择 hot experts，加载副本并重排 placement。简单稳定，但跟不上快速流量漂移。
 
+
+<a id="read-77"></a>
+
 ## 44.2 动态冗余
 
 每个 GPU 保存更多候选 experts，每个 step 动态选择由哪个副本服务。更灵活，但 planner 和 dispatch fusion 必须足够快。
+
+
+<a id="read-78"></a>
 
 ## 44.3 显存代价
 
@@ -1731,6 +2126,9 @@ B_{expert\ weights}.
 所以 EPLB 不是无条件开启：memory-constrained serving 可能更愿意接受部分不均衡。
 
 ---
+
+
+<a id="read-79"></a>
 
 # 45. EPLB：训练平衡与 Serving 平衡是两个不同问题
 
@@ -1755,6 +2153,9 @@ vLLM 等 Serving 系统提供 Expert Parallel Load Balancer，基于在线窗口
 但重新移动权重可能造成 stop-the-world、HBM 峰值和 TTFT/TPOT 抖动。生产系统应监控 rebalance duration、迁移 byte 和前后 P99，而不只看 balance score。
 
 ---
+
+
+<a id="read-80"></a>
 
 # 46. Expert Placement：Round-Robin 并不总比连续放置好
 
@@ -1784,6 +2185,9 @@ C_{ij}=P(i,j\text{ simultaneously selected})
 ```
 
 ---
+
+
+<a id="read-81"></a>
 
 # 47. Expert Offload：为什么本地运行 MoE 常常没有想象中快？
 
@@ -1815,6 +2219,9 @@ T_{PCIe\ load\ expert}.
 因此消费级部署中，Dense 小模型有时比 total size 巨大的 MoE 更实用。
 
 ---
+
+
+<a id="read-82"></a>
 
 # 48. Continuous Batching、CUDA Graph 与动态 MoE
 
@@ -1852,6 +2259,9 @@ MoE 却天然产生动态：
 
 ---
 
+
+<a id="read-83"></a>
+
 # 49. Speculative Decoding 与 MoE
 
 Speculative decoding 一次 verify 多个 tokens，可以增大单次 Expert GEMM 的 $M$，理论上改善 MoE 权重复用。
@@ -1877,6 +2287,9 @@ Speculative decoding 一次 verify 多个 tokens，可以增大单次 Expert GEM
 
 ---
 
+
+<a id="read-84"></a>
+
 # 50. 现代开源模型的 MoE 路线对比
 
 下表只用于理解结构趋势。Activated parameters 的统计口径可能包含 attention、shared expert、embedding 或其他模块，不能直接横向当作 FLOPs。
@@ -1899,7 +2312,13 @@ Speculative decoding 一次 verify 多个 tokens，可以增大单次 Expert GEM
 
 ---
 
+
+<a id="read-85"></a>
+
 # 51. DeepSeek 路线：MoE 是整套硬件协同的中心
+
+
+<a id="read-86"></a>
 
 ## 51.1 DeepSeekMoE
 
@@ -1908,6 +2327,9 @@ Speculative decoding 一次 verify 多个 tokens，可以增大单次 Expert GEM
 - fine-grained expert segmentation；
 - shared experts；
 - routed expert specialization。
+
+
+<a id="read-87"></a>
 
 ## 51.2 DeepSeek-V2/V3
 
@@ -1937,6 +2359,9 @@ V3 将 MoE 继续扩到 671B total / 37B active，并增加：
 \text{DualPipe overlap}.
 ```
 
+
+<a id="read-88"></a>
+
 ## 51.3 DeepSeek-V4
 
 官方公开规格为 V4-Pro 1.6T/49B active、V4-Flash 284B/13B active。MoE 容量继续扩大，同时长上下文侧改用 token-wise compression + DSA。
@@ -1945,7 +2370,13 @@ V3 将 MoE 继续扩到 671B total / 37B active，并增加：
 
 ---
 
+
+<a id="read-89"></a>
+
 # 52. Kimi 路线：把 sparsity scaling 推到 3T 级
+
+
+<a id="read-90"></a>
 
 ## 52.1 Kimi K2
 
@@ -1958,6 +2389,9 @@ E=384,
 ```
 
 Infra 侧选择 PP16、EP16、ZeRO-1、interleaved 1F1B，并通过 activation FP8 storage 和 CPU offload 控制显存。
+
+
+<a id="read-91"></a>
 
 ## 52.2 Kimi K3
 
@@ -1981,6 +2415,9 @@ E=896,
 K3 是 Amdahl's Law 的典型案例：算法每解决一个 scaling 限制，系统中的下一个小部分就成为大问题。
 
 ---
+
+
+<a id="read-92"></a>
 
 # 53. Qwen 路线：Ultra-Sparse MoE 服务于异构部署
 
@@ -2008,6 +2445,9 @@ MoE 不再独自承担所有容量 scaling，参数本身也开始分层。
 
 ---
 
+
+<a id="read-93"></a>
+
 # 54. GLM 路线：快速扩大 MoE，再与长上下文系统融合
 
 GLM-4.5 是 GLM 路线公开的大规模 MoE 节点：355B total / 32B active；GLM-5 扩到 744B / 40B active，并采用 DSA 降低长上下文 Attention 成本。
@@ -2025,45 +2465,78 @@ GLM-4.5 是 GLM 路线公开的大规模 MoE 节点：355B total / 32B active；
 
 ---
 
+
+<a id="read-94"></a>
+
 # 55. 其他有里程碑意义的模型与系统工作
+
+
+<a id="read-95"></a>
 
 ## 55.1 GShard
 
 把 MoE Transformer 自动分片扩到 600B 级和 2048 TPU，确立了“模型表达 + compiler sharding”共同扩展的路线。
 
+
+<a id="read-96"></a>
+
 ## 55.2 Switch Transformer
 
 Top-1 routing 减少每 token expert 数和通信复杂度，同时系统化讨论 capacity、token dropping、低精度与训练稳定性。
+
+
+<a id="read-97"></a>
 
 ## 55.3 GLaM
 
 将 sparse MoE generalist language model 扩到 1.2T，证明总参数远大于 active compute 可以成为大语言模型 scaling 轴。
 
+
+<a id="read-98"></a>
+
 ## 55.4 ST-MoE
 
 关注训练稳定性与下游迁移，Router z-loss 成为重要实践。
+
+
+<a id="read-99"></a>
 
 ## 55.5 BASE Layers / Expert Choice
 
 两者都从路由约束本身保证专家负载，而不是只依赖 auxiliary loss，为后来的最优分配、quantile/bias 和 placement 方法提供思想基础。
 
+
+<a id="read-100"></a>
+
 ## 55.6 DeepSpeed-MoE / Tutel / FasterMoE
 
 将 MoE 从模型论文推进为训练与推理系统问题：并行分组、通信调度、动态 placement、inference latency 都成为核心。
+
+
+<a id="read-101"></a>
 
 ## 55.7 MegaBlocks
 
 用 block-sparse kernels 解决 token drop 与 padding 浪费的冲突，是 MoE kernel/system co-design 的代表。
 
+
+<a id="read-102"></a>
+
 ## 55.8 Mixtral / DBRX
 
 Mixtral 让开源 decoder-only MoE 大规模普及；DBRX 使用更细的 16 experts、Top-4，并依赖 MegaBlocks 训练，推动 fine-grained open MoE。
+
+
+<a id="read-103"></a>
 
 ## 55.9 OLMoE
 
 提供权重、数据、代码、训练日志和路由分析，为研究 expert specialization、collapse 和 training dynamics 提供可复现基线。
 
 ---
+
+
+<a id="read-104"></a>
 
 # 56. 一个完整的数值成本例子
 
@@ -2118,6 +2591,9 @@ B_{combine}
 
 ---
 
+
+<a id="read-105"></a>
+
 # 57. MoE 的 Roofline：训练与 decode 可能落在完全不同区域
 
 GEMM 算术强度近似：
@@ -2148,7 +2624,13 @@ AI\rightarrow O(m).
 
 ---
 
+
+<a id="read-106"></a>
+
 # 58. 如何正确 Benchmark 一个 MoE 系统
+
+
+<a id="read-107"></a>
 
 ## 58.1 四层指标
 
@@ -2191,6 +2673,9 @@ AI\rightarrow O(m).
 - memory peak；
 - cost per million tokens。
 
+
+<a id="read-108"></a>
+
 ## 58.2 必须使用真实 route trace
 
 均匀随机路由只适合测理想上界。至少准备：
@@ -2206,6 +2691,9 @@ AI\rightarrow O(m).
 DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 trace 时不能把理想 overlap 直接当作线上负载结论。
 
 ---
+
+
+<a id="read-109"></a>
 
 # 59. 如何测 Communication–Computation Overlap
 
@@ -2238,7 +2726,13 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 
 ---
 
+
+<a id="read-110"></a>
+
 # 60. 常见故障排查
+
+
+<a id="read-111"></a>
 
 ## 60.1 loss 正常，但 step time 周期性尖峰
 
@@ -2251,6 +2745,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - allocator 是否因动态 buffer 扩容同步；
 - checkpoint/日志是否与网络争用。
 
+
+<a id="read-112"></a>
+
 ## 60.2 某些 ranks OOM，其他 ranks 显存充足
 
 检查：
@@ -2261,6 +2758,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - redundant experts 是否在同 rank 过多；
 - Grouped GEMM workspace 是否随最大 expert shape 分配；
 - activation offload 与 EP traffic 是否互相堵塞。
+
+
+<a id="read-113"></a>
 
 ## 60.3 MFU 很低，但网络利用率也不高
 
@@ -2273,6 +2773,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - CUDA Graph 未生效；
 - 0-token expert 导致分支或 launch 浪费；
 - collective 次序有 barrier。
+
+
+<a id="read-114"></a>
 
 ## 60.4 Grouped GEMM 不如 for-loop
 
@@ -2287,6 +2790,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - GPU 架构是否属于优化路径；
 - 比较是否包含相同 activation/fusion。
 
+
+<a id="read-115"></a>
+
 ## 60.5 Router collapse
 
 检查：
@@ -2299,6 +2805,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - dead expert 初始化；
 - global-batch statistics 是否正确跨 DP 汇总。
 
+
+<a id="read-116"></a>
+
 ## 60.6 多节点 hang
 
 检查：
@@ -2310,6 +2819,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - CUDA stream event 依赖是否形成环；
 - varlen/empty expert 是否跳过了必须参与的 collective；
 - NCCL/RDMA timeout 前的第一处 rank divergence。
+
+
+<a id="read-117"></a>
 
 ## 60.7 训练均衡，线上 P99 仍很差
 
@@ -2324,6 +2836,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - 单 expert 的量化/kernel 路径是否不同。
 
 ---
+
+
+<a id="read-118"></a>
 
 # 61. 推荐监控面板
 
@@ -2365,7 +2880,13 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 
 ---
 
+
+<a id="read-119"></a>
+
 # 62. 配置 MoE 训练前的检查清单
+
+
+<a id="read-120"></a>
 
 ## 模型侧
 
@@ -2376,6 +2897,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - [ ] 是否 node/group-limited；
 - [ ] total/active parameter 口径明确。
 
+
+<a id="read-121"></a>
+
 ## 并行侧
 
 - [ ] EP/TP/DP/PP/CP process groups 验证；
@@ -2383,6 +2907,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - [ ] 每 GPU expert ownership 可打印；
 - [ ] checkpoint 能在不同 EP size reshard；
 - [ ] empty expert 与非整除 expert 数可处理。
+
+
+<a id="read-122"></a>
 
 ## Kernel 侧
 
@@ -2393,6 +2920,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - [ ] Grouped GEMM 与 loop/multi-stream baseline 对比；
 - [ ] CUDA Graph/compile 多次 replay 验证。
 
+
+<a id="read-123"></a>
+
 ## 通信侧
 
 - [ ] 节点内/跨节点 byte 拆分；
@@ -2401,6 +2931,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - [ ] 通信 SM 配额调优；
 - [ ] overlap 用 joint time 验证；
 - [ ] NIC rail、VL/QoS 和拥塞监控。
+
+
+<a id="read-124"></a>
 
 ## 稳定性侧
 
@@ -2411,6 +2944,9 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 - [ ] checkpoint 恢复后 routing/optimizer state 一致。
 
 ---
+
+
+<a id="read-125"></a>
 
 # 63. 配置 MoE Serving 前的检查清单
 
@@ -2429,39 +2965,69 @@ DeepSeek 公开 profile 特别说明使用绝对均衡路由模拟，因此读 t
 
 ---
 
+
+<a id="read-126"></a>
+
 # 64. 常见误区
+
+
+<a id="read-127"></a>
 
 ## 误区 1：MoE 只有 active parameters 需要放显存
 
 错误。所有本地 expert weights 都必须驻留或被按需搬运；total parameters 决定集群最小存储规模。
 
+
+<a id="read-128"></a>
+
 ## 误区 2：MoE FLOPs 是 Dense 的 $K/E$
 
 只对 expert bank 的理想计算近似成立，还需加入 shared/dense paths、Router、通信、padding 和 kernel 低利用率。
+
+
+<a id="read-129"></a>
 
 ## 误区 3：负载均衡就是每 expert token 数相同
 
 系统真正受 rank makespan、跨节点流量、rank 内 GEMM schedule 和在线 placement 共同影响。
 
+
+<a id="read-130"></a>
+
 ## 误区 4：All-to-All 只取决于网络带宽
 
 小消息 RTT、metadata、permute、SM 占用、拓扑和拥塞都可能主导。
+
+
+<a id="read-131"></a>
 
 ## 误区 5：Grouped GEMM 一定优于多个 GEMM
 
 少量大 experts、错误 tile 或不成熟 backend 下可能相反，必须按真实 shape 测量。
 
+
+<a id="read-132"></a>
+
 ## 误区 6：训练时平衡，Serving 就平衡
 
 线上流量分布不同，需要 placement、replica 和 EPLB。
+
+
+<a id="read-133"></a>
 
 ## 误区 7：更大的 EP 一定更快
 
 EP 越大，每 GPU 权重越少，但 remote ratio、部署规模和通信参与者越多，expert batch 也可能更小。
 
+
+<a id="read-134"></a>
+
 ## 误区 8：DualPipe 是通用最优流水
 
 Kimi K2 的公开选择已说明，内存和模型 shape 不同时，interleaved 1F1B + 小 EP 可能更合适。
+
+
+<a id="read-135"></a>
 
 ## 误区 9：只优化 Expert GEMM 就够了
 
@@ -2469,7 +3035,13 @@ Kimi K2 的公开选择已说明，内存和模型 shape 不同时，interleaved
 
 ---
 
+
+<a id="read-136"></a>
+
 # 65. Dense 还是 MoE？从 Hardware Envelope 选择
+
+
+<a id="read-137"></a>
 
 ## 更适合 MoE
 
@@ -2480,6 +3052,9 @@ Kimi K2 的公开选择已说明，内存和模型 shape 不同时，interleaved
 - Serving 能承担 EP 最小部署单元；
 - 有专用 kernel/communication/runtime 团队；
 - 希望 active compute 远小于 total capacity。
+
+
+<a id="read-138"></a>
 
 ## 更适合 Dense
 
@@ -2502,6 +3077,9 @@ Kimi K2 的公开选择已说明，内存和模型 shape 不同时，interleaved
 ```
 
 ---
+
+
+<a id="read-139"></a>
 
 # 66. 一条推荐的 MoE Infra 学习路径
 
@@ -2533,6 +3111,9 @@ Kimi K2 的公开选择已说明，内存和模型 shape 不同时，interleaved
 这样 kernel 才会被放回完整系统中理解。
 
 ---
+
+
+<a id="read-140"></a>
 
 # 67. 最终心智模型
 
@@ -2572,117 +3153,141 @@ MoE 的四层本质：
 
 ---
 
+
+<a id="read-141"></a>
+
 # 68. 参考资料与推荐阅读顺序
+
+
+<a id="read-142"></a>
 
 ## A. 基础与早期里程碑
 
-1. [Adaptive Mixtures of Local Experts](https://direct.mit.edu/neco/article/3/1/79/5560/Adaptive-Mixtures-of-Local-Experts)  
+1. [Adaptive Mixtures of Local Experts](https://direct.mit.edu/neco/article/3/1/79/5560/Adaptive-Mixtures-of-Local-Experts)\
    Gate 与竞争专家的早期基础。
 
-2. [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538)  
+2. [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538)\
    稀疏条件计算扩展到大规模语言与翻译模型。
 
-3. [GShard](https://arxiv.org/abs/2006.16668)  
+3. [GShard](https://arxiv.org/abs/2006.16668)\
    自动分片、Transformer MoE 与 600B 级扩展。
 
-4. [Switch Transformers](https://arxiv.org/abs/2101.03961)  
+4. [Switch Transformers](https://arxiv.org/abs/2101.03961)\
    Top-1 routing、capacity、稳定性和低精度训练。
 
-5. [BASE Layers](https://arxiv.org/abs/2103.16716)  
+5. [BASE Layers](https://arxiv.org/abs/2103.16716)\
    用 balanced assignment 保证专家负载。
 
-6. [GLaM](https://arxiv.org/abs/2112.06905)  
+6. [GLaM](https://arxiv.org/abs/2112.06905)\
    1.2T sparse language model 与条件容量 scaling。
 
-7. [ST-MoE](https://arxiv.org/abs/2202.08906)  
+7. [ST-MoE](https://arxiv.org/abs/2202.08906)\
    Router z-loss、稳定训练和迁移。
 
-8. [Expert Choice Routing](https://arxiv.org/abs/2202.09368)  
+8. [Expert Choice Routing](https://arxiv.org/abs/2202.09368)\
    由 expert 选择固定容量 tokens。
+
+
+<a id="read-143"></a>
 
 ## B. 系统与 Kernel
 
-9. [DeepSpeed-MoE](https://arxiv.org/abs/2201.05596)  
+9. [DeepSpeed-MoE](https://arxiv.org/abs/2201.05596)\
    训练/推理并行与大规模 MoE 系统。
 
-10. [Tutel](https://arxiv.org/abs/2206.03382)  
+10. [Tutel](https://arxiv.org/abs/2206.03382)\
     自适应 MoE runtime 与通信优化。
 
-11. [MegaBlocks](https://arxiv.org/abs/2211.15841)  
+11. [MegaBlocks](https://arxiv.org/abs/2211.15841)\
     Block-sparse dropless MoE。
 
-12. [PyTorch grouped_mm documentation](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html)  
+12. [PyTorch grouped_mm documentation](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.grouped_mm.html)\
     原生 ragged Grouped MM 接口。
 
-13. [Megatron Core MoE Guide](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/features/moe.html)  
+13. [Megatron Core MoE Guide](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/features/moe.html)\
     EP、Grouped GEMM、dispatcher、shared expert overlap 等工程配置。
 
-14. [Transformer Engine](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/)  
+14. [Transformer Engine](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/)\
     FP8/MXFP8/NVFP4 与 GroupedLinear。
+
+
+<a id="read-144"></a>
 
 ## C. 开源模型结构
 
-15. [Mixtral of Experts](https://arxiv.org/abs/2401.04088)  
+15. [Mixtral of Experts](https://arxiv.org/abs/2401.04088)\
     8 experts、Top-2 的开源 decoder-only MoE。
 
-16. [DBRX](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm)  
+16. [DBRX](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm)\
     16 experts、Top-4 与 fine-grained MoE。
 
-17. [OLMoE](https://arxiv.org/abs/2409.02060)  
+17. [OLMoE](https://arxiv.org/abs/2409.02060)\
     权重、数据、代码、日志完整开放的研究基线。
 
-18. [Qwen2 Technical Report](https://arxiv.org/abs/2407.10671) 与 [Qwen3 Technical Report](https://arxiv.org/abs/2505.09388)  
+18. [Qwen2 Technical Report](https://arxiv.org/abs/2407.10671) 与 [Qwen3 Technical Report](https://arxiv.org/abs/2505.09388)\
     shared experts、fine-grained experts 与 global-batch balancing 的演化。
 
-19. [GLM-4.5](https://arxiv.org/abs/2508.06471) 与 [GLM-5](https://arxiv.org/abs/2602.15763)  
+19. [GLM-4.5](https://arxiv.org/abs/2508.06471) 与 [GLM-5](https://arxiv.org/abs/2602.15763)\
     GLM 从 355B/32B active 扩到 744B/40B active。
+
+
+<a id="read-145"></a>
 
 ## D. DeepSeek 全栈路线
 
-20. [DeepSeekMoE](https://arxiv.org/abs/2401.06066)  
+20. [DeepSeekMoE](https://arxiv.org/abs/2401.06066)\
     Fine-grained expert segmentation 与 shared experts。
 
-21. [DeepSeek-V2](https://arxiv.org/abs/2405.04434)  
+21. [DeepSeek-V2](https://arxiv.org/abs/2405.04434)\
     MLA + DeepSeekMoE 的模型系统协同。
 
-22. [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)  
+22. [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)\
     Aux-loss-free、node-limited routing、EP64、FP8、DualPipe 与部署。
 
-23. [DeepEP](https://github.com/deepseek-ai/DeepEP)  
+23. [DeepEP](https://github.com/deepseek-ai/DeepEP)\
     Expert Parallel dispatch/combine 通信库。
 
-24. [DualPipe](https://github.com/deepseek-ai/DualPipe) 与 [profile-data](https://github.com/deepseek-ai/profile-data)  
+24. [DualPipe](https://github.com/deepseek-ai/DualPipe) 与 [profile-data](https://github.com/deepseek-ai/profile-data)\
     双向流水和通信计算重叠 trace。
 
-25. [DeepSeek-V4 Official Release](https://api-docs.deepseek.com/news/news260424/)  
+25. [DeepSeek-V4 Official Release](https://api-docs.deepseek.com/news/news260424/)\
     1.6T/49B active 与 284B/13B active 两种部署边界。
+
+
+<a id="read-146"></a>
 
 ## E. Kimi 与 Qwen 的新一代路线
 
-26. [Kimi K2 Technical Report](https://arxiv.org/abs/2507.20534)  
+26. [Kimi K2 Technical Report](https://arxiv.org/abs/2507.20534)\
     Sparsity scaling、EP16、interleaved 1F1B 与 activation memory。
 
-27. [Kimi K3 Technical Report](https://arxiv.org/abs/2607.24653)  
+27. [Kimi K3 Technical Report](https://arxiv.org/abs/2607.24653)\
     Stable LatentMoE、Quantile Balancing、MoonEP 与 workload-aware GEMM。
 
-28. [MoonEP](https://github.com/MoonshotAI/MoonEP)  
+28. [MoonEP](https://github.com/MoonshotAI/MoonEP)\
     动态 redundant experts 与 perfect rank balance。
 
-29. [Qwen3-Next](https://qwen.ai/blog?from=research.latest-advancements-list&id=4074cca80393150c248e508aa62983f9cb7d27cd)  
+29. [Qwen3-Next](https://qwen.ai/blog?from=research.latest-advancements-list&id=4074cca80393150c248e508aa62983f9cb7d27cd)\
     512 experts 与 Ultra-Sparse MoE。
 
-30. [Qwen3.8-Flash-Next model card](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)  
+30. [Qwen3.8-Flash-Next model card](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)\
     512 experts、10 routed + 1 shared，并与 QSA/GDN/n-gram memory 组合。
+
+
+<a id="read-147"></a>
 
 ## F. Serving
 
-31. [vLLM Expert Parallel Deployment](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment/)  
+31. [vLLM Expert Parallel Deployment](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment/)\
     EP、EPLB、redundant experts 与 placement。
 
-32. [PyTorch MoE Grouped GEMM Optimization](https://pytorch.org/blog/accelerating-moes-with-a-triton-persistent-cache-aware-grouped-gemm-kernel/)  
+32. [PyTorch MoE Grouped GEMM Optimization](https://pytorch.org/blog/accelerating-moes-with-a-triton-persistent-cache-aware-grouped-gemm-kernel/)\
     Persistent、cache-aware Grouped GEMM 的实现视角。
 
 ---
+
+
+<a id="read-148"></a>
 
 # 69. 与下一专题的接口
 

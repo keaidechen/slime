@@ -1,9 +1,32 @@
 # 02 Rollout 子系统：Server 模式的 SGLang 推理是如何生成训练数据的
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 三个层次](#read-01)
+- [2. 编排层：server 与 router 的启动](#read-02)
+- [3. 函数层：默认 rollout 主循环](#read-03)
+- [4. 引擎层：训练侧看不见的 SGLang](#read-04)
+- [5. 评测路径](#read-05)
+- [6. 深入拆解：prompt 是怎么"复用"的、abort 精确做了什么](#read-06)
+- [7. 小结](#read-07)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：读服务拓扑、生成循环、并发限制与 abort；前置 SGLang 请求基础。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.2「Rollout 架构：Engine 模式 vs Server 模式」。
 > slime 是纯 server 模式框架：推理是独立的 HTTP 服务，训练侧通过 router 访问。本篇逐层解读这条链路。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 1. 三个层次
 
@@ -19,6 +42,9 @@
 数据流向：`RolloutManager.generate()` → （函数层）对 router 发 HTTP `/generate` → （引擎层）SGLang server 采样 → 带 token 级 logprob 的响应 → 填回 `Sample` → 攒够 `rollout_batch_size` 组 → 转换成训练数据。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 2. 编排层：server 与 router 的启动
 
@@ -88,6 +114,9 @@ def _update_bucket_weights_from_distributed(self, converted_named_tensors, pbar=
 **它不是唯一的同步机制，也不是所有更新路径都用**：`UpdateWeightFromTensor`（colocated，CUDA-IPC/nixl）接收了这个参数但根本不调用它——每个 bucket 是一次性 Ray remote 调用 + GPU 直接传输，不存在长期存活的 NCCL group，没有"顺序错位死锁"的风险；`UpdateWeightFromDisk*` 同理不用，改用同机 flock 文件锁保证串行。真正保证"权重替换期间不会用半新半旧权重生成"的，是另一套完全独立的机制——`pause_generation`/`continue_generation`（几乎所有更新路径都用，保证推理正确性），`rollout_engine_lock` 只管 NCCL 调用顺序不冲突，两者是完全不同维度的问题，不要混淆。
 
 ---
+
+
+<a id="read-03"></a>
 
 ## 3. 函数层：默认 rollout 主循环
 
@@ -229,6 +258,9 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
 
 ---
 
+
+<a id="read-04"></a>
+
 ## 4. 引擎层：训练侧看不见的 SGLang
 
 `slime/backends/sglang_utils/` 中：
@@ -266,11 +298,17 @@ SglangConfig                                    (整个 --sglang-config YAML)
 
 
 
+
+<a id="read-05"></a>
+
 ## 5. 评测路径
 
 `eval_rollout` / `eval_rollout_single_dataset`（sglang_rollout.py:473-614）与训练路径共用 `generate_and_rm`，差异：数据来自 `--eval-*` 配置的 `EvalDatasetConfig`，每个数据集可有自己的采样参数与 per-sample `generate_function_path`；用 `EVAL_PROMPT_DATASET` 全局缓存避免每个 rollout 重复加载；结果按数据集聚合 rewards/truncated，由 `_log_eval_rollout_data` 记录。**评测数据集配置的完整字段、reward 打分的分发机制、dynamic filter 的完整实现，见 [08_rm_hub_and_eval.md](08_rm_hub_and_eval.md)。**
 
 ---
+
+
+<a id="read-06"></a>
 
 ## 6. 深入拆解：prompt 是怎么"复用"的、abort 精确做了什么
 
@@ -341,6 +379,9 @@ async def abort(args, rollout_id):
 **直觉**：`over_sampling_batch_size` 越大于 `rollout_batch_size`，"抢跑"的富余度越大，长尾样本被提前甩出主路径的概率越高，但同时被 abort 掉的半成品也越多（如果不开 partial rollout，这些半成品直接丢弃，等价于浪费的算力）。
 
 ---
+
+
+<a id="read-07"></a>
 
 ## 7. 小结
 

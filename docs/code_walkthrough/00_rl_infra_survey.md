@@ -1,11 +1,33 @@
 # RL Infra 全景调研：知名开源 RL 代码库、近期工作与 Roadmap
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 为什么 RL infra 是一个独立的工程领域](#read-01)
+- [2. 知识点地图（Taxonomy）](#read-02)
+- [3. 各框架详细调研](#read-03)
+- [4. 横向对比](#read-04)
+- [5. 趋势总结（2025 → 2026）](#read-05)
+- [6. 知识点 → slime 代码索引](#read-06)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A0 · 分层必修。
+> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **首读/二读**：首读工程问题地图；各框架近况与 Roadmap 为版本化参考。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 本文是"从 0 系统学习 RL infra"系列的第一篇：先建立领域地图，再逐篇深入本仓库（slime）的代码。
 >
 > - 调研对象：slime、verl、OpenRLHF、NeMo-RL、AReaL、ROLL、TRL、TorchForge、RLinf，以及若干支撑性项目（checkpoint-engine、APRIL、SGLang/vLLM 的 RL 能力等）。
 > - 阅读建议：先读 §1 建立问题直觉，读 §2 建立知识分类，再按需翻 §3 的各框架细节。§6 给出每个知识点在 slime 代码中的落点索引。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 1. 为什么 RL infra 是一个独立的工程领域
 
@@ -52,6 +74,9 @@ verl（HybridFlow 论文）与 APRIL 论文都指出：**RL 训练 80% 以上的
 | 10 | 工程化 | 可复现、容错、调试、trace、profiling、CI——RL bug 往往不报错只降智 |
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 2. 知识点地图（Taxonomy）
 
@@ -171,6 +196,9 @@ server 模式下的关键组件：
 
 ---
 
+
+<a id="read-03"></a>
+
 ## 3. 各框架详细调研
 
 ### 3.1 slime（本仓库，THUDM / 智谱）
@@ -274,6 +302,9 @@ server 模式下的关键组件：
 
 ---
 
+
+<a id="read-04"></a>
+
 ## 4. 横向对比
 
 | 框架 | 训练后端 | 推理后端 | 编排 | 异步能力 | 强项 | 适用场景 |
@@ -290,6 +321,9 @@ server 模式下的关键组件：
 
 ---
 
+
+<a id="read-05"></a>
+
 ## 5. 趋势总结（2025 → 2026）
 
 1. **server 模式成为主流**：engine 模式的性能优势被 SGLang/vLLM 的 RL 专用控制端点（热更新、显存释放、abort）追平，而 server 模式在故障隔离、扩缩容、multi-turn 上的优势是结构性的。连 engine 模式起家的 verl/OpenRLHF 都在向 server/agent-loop 演进。
@@ -300,6 +334,9 @@ server 模式下的关键组件：
 6. **RL infra 泛化**：从 LLM 扩展到 omni-modal（Relax）、具身（RLinf）、kernel 生成（TritonForge）等"任意可验证环境"。
 
 ---
+
+
+<a id="read-06"></a>
 
 ## 6. 知识点 → slime 代码索引
 

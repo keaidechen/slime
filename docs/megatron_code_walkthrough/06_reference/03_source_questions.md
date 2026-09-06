@@ -1,6 +1,41 @@
 # 源码问题索引与详解
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [快速索引](#read-01)
+- [1. world size 为什么不能总写成 `TP×PP×CP×EP×DP`](#read-02)
+- [2. 一个 update 消费多少样本，microbatch 数怎样变化](#read-03)
+- [3. mixed-precision overflow 后，iteration、样本和 LR 谁推进](#read-04)
+- [4. `forward_step` 为什么返回延迟执行的 loss closure](#read-05)
+- [5. microbatch mean 与全局 token mean 为什么可能不同](#read-06)
+- [6. batch 是不是每个 rank 都从 DataLoader 取一份](#read-07)
+- [7. Column/Row Parallel 的 forward 与 backward 通信在哪](#read-08)
+- [8. SP 与 CP 的实际切分为什么不能画成同一张图](#read-09)
+- [9. 为什么 TP 通常节点内，而 EP all-to-all 更敏感](#read-10)
+- [10. collective hang 为什么经常不是 NCCL 自身的 bug](#read-11)
+- [11. PP 发送 activation 后为什么还能反向](#read-12)
+- [12. Distributed Optimizer 与 Megatron-FSDP 的关键边界](#read-13)
+- [13. checkpoint 能重分片什么，不能自动解决什么](#read-14)
+- [14. async checkpoint 什么时候才算完整](#read-15)
+- [15. MoE auxiliary loss 是否要在任务 loss 中手工相加](#read-16)
+- [16. router replay 固定 expert 后，router 还有没有梯度](#read-17)
+- [17. overlap 打开后为什么可能不快，甚至更慢](#read-18)
+- [18. strict resume 为什么比固定 seed 多得多](#read-19)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A3/A5 · 分层必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：先读 world size/batch/token mean；overflow/reshard 等在对应实验回读。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章集中回答那些会同时跨过训练循环、并行组、通信和状态管理的问题。结论以仓库内 `Megatron-LM/` 固定 commit `21fe0fe1597932421f1bb0efd93f469376a7a255` 为准；源码锚点使用“路径 + 符号”，避免只有行号的答案随代码插入而失效。
+
+
+<a id="read-01"></a>
 
 ## 快速索引
 
@@ -24,6 +59,9 @@
 | router replay 究竟固定了什么？ | 固定 top-k expert ID，不冻结当前 score/probability | `moe/router_replay.py` |
 | overlap 为什么可能不快？ | 只能遮蔽通信，还会增加 bucket/buffer/调度成本 | `distributed_data_parallel.py` |
 | fixed seed 为什么不等于 strict resume？ | 数据、RNG、低精度和归约顺序都是状态 | `checkpointing.py`、`random.py` |
+
+
+<a id="read-02"></a>
 
 ## 1. world size 为什么不能总写成 `TP×PP×CP×EP×DP`
 
@@ -55,6 +93,9 @@ expert grid:          expert_TP, PP, EP, expert_DP
 
 源码锚点：`megatron/core/parallel_state.py:RankGenerator`、`initialize_model_parallel`。
 
+
+<a id="read-03"></a>
+
 ## 2. 一个 update 消费多少样本，microbatch 数怎样变化
 
 常规 fixed batch 下：
@@ -70,6 +111,9 @@ num_microbatches = GBS / (MBS × DP)
 `update_num_microbatches(consumed_samples, ...)` 会在每轮前更新 calculator。当前快照支持 step batch-size schedule；当 microbatch 数变化时，普通训练会先保存 checkpoint，再做一致性检查。若开启 `decrease_batch_size_if_needed`，实际 running GBS 可以向下取到可整除值，不能再把配置中的目标 GBS 当成本轮真实消费量。
 
 源码锚点：`megatron/core/num_microbatches_calculator.py`、`megatron/training/training.py:train`。
+
+
+<a id="read-04"></a>
 
 ## 3. mixed-precision overflow 后，iteration、样本和 LR 谁推进
 
@@ -99,6 +143,9 @@ checkpoint 需要保存这些状态的同一提交点，不能用“参数有没
 
 源码锚点：`megatron/training/training.py:train_step`、`train`。
 
+
+<a id="read-05"></a>
+
 ## 4. `forward_step` 为什么返回延迟执行的 loss closure
 
 任务入口 `pretrain_gpt.forward_step` 不直接把 loss 变成一个最终 scalar，而是返回 output 与绑定了 `loss_mask` 的 closure。pipeline schedule 才知道当前 model chunk 是否是逻辑末 stage：
@@ -111,6 +158,9 @@ checkpoint 需要保存这些状态的同一提交点，不能用“参数有没
 这个边界让 schedule 负责“什么时候算和怎样缩放”，任务代码负责“loss 数学定义”。如果任务代码提前做 DP all-reduce 或除 microbatch 数，schedule 再规约一次就会重复缩放。
 
 源码锚点：`pretrain_gpt.py:loss_func`、`megatron/core/pipeline_parallel/schedules.py:forward_step_calc_loss`。
+
+
+<a id="read-06"></a>
 
 ## 5. microbatch mean 与全局 token mean 为什么可能不同
 
@@ -140,6 +190,9 @@ sample mean / sequence mean / microbatch mean / valid-token mean
 
 源码锚点：`pretrain_gpt.py:loss_func`、`schedules.py:forward_step_calc_loss`、`distributed/finalize_model_grads.py`。
 
+
+<a id="read-07"></a>
+
 ## 6. batch 是不是每个 rank 都从 DataLoader 取一份
 
 不是。典型 GPT 路径分两步：
@@ -157,6 +210,9 @@ PP 会进一步减少字段：首 stage 主要需要 tokens/position，末 stage
 
 源码锚点：`megatron/core/utils.py:get_batch_on_this_tp_rank`、`get_batch_on_this_cp_rank`。
 
+
+<a id="read-08"></a>
+
 ## 7. Column/Row Parallel 的 forward 与 backward 通信在哪
 
 以 `Y=XA` 为例：
@@ -171,6 +227,9 @@ PP 会进一步减少字段：首 stage 主要需要 tokens/position，末 stage
 Column→激活→Row 成对使用时，中间大 activation 始终保持 hidden shard，不必先组成完整 `[tokens, 4H]`。
 
 源码锚点：`megatron/core/tensor_parallel/layers.py:ColumnParallelLinear`、`RowParallelLinear`；`tensor_parallel/mappings.py`。
+
+
+<a id="read-09"></a>
 
 ## 8. SP 与 CP 的实际切分为什么不能画成同一张图
 
@@ -188,6 +247,9 @@ CP rank1 <- chunk1 + chunk2 = [2,3,4,5]
 
 源码锚点：`megatron/core/utils.py:_get_batch_on_this_cp_rank_per_sequence_balancing`、`_get_batch_on_this_cp_rank_per_document_balancing`。
 
+
+<a id="read-10"></a>
+
 ## 9. 为什么 TP 通常节点内，而 EP all-to-all 更敏感
 
 TP collective 出现在几乎每层的主路径，消息往往与单个 GEMM 相邻。跨节点后，较低带宽和较高 latency 会被重复支付，且 TP size 过大还会把 GEMM 切小，降低计算效率。因此把变化最快的 TP ranks 放在 NVLink/NVSwitch 域通常最稳妥。
@@ -197,6 +259,9 @@ EP dispatch 的特征不同：每个 token 根据动态路由发到 expert owner
 所以拓扑策略应写成“优先级 + 实测”，而不是绝对规则：TP 看每层 exposed collective，EP 看 token histogram、split size、A2A tail 和 grouped-GEMM shape。
 
 源码锚点：`parallel_state.initialize_model_parallel` 的 rank order；`megatron/core/transformer/moe/token_dispatcher.py`。
+
+
+<a id="read-11"></a>
 
 ## 10. collective hang 为什么经常不是 NCCL 自身的 bug
 
@@ -213,6 +278,9 @@ collective 是组内 rank 共同执行的有序协议。第 `k` 次 collective �
 
 定位时给通信调用记录 `(iteration, microbatch, op_seq, group_name, numel, dtype)`，对比首个不一致序号；同时先查所有 rank 的第一条 exception。只把 timeout 调大，会延后症状而不会修复协议不一致。
 
+
+<a id="read-12"></a>
+
 ## 11. PP 发送 activation 后为什么还能反向
 
 `deallocate_output_tensor` 在 forward activation 发给下一 stage 后，把 `out.data` 换成单元素 tensor，释放大 payload，但 Python Tensor 对象与 `grad_fn` 仍存在。backward 收到下一 stage 发回的完整 gradient 后，`custom_backward` 直接调用 autograd engine，绕过普通 `torch.autograd.backward` 对 output/grad shape 的检查。
@@ -226,6 +294,9 @@ collective 是组内 rank 共同执行的有序协议。第 `k` 次 collective �
 - 自定义 Function 若偷偷依赖 output payload，而没有正确 `save_for_backward`，会在此优化下暴露错误。
 
 源码锚点：`megatron/core/pipeline_parallel/schedules.py:deallocate_output_tensor`、`custom_backward`。
+
+
+<a id="read-13"></a>
 
 ## 12. Distributed Optimizer 与 Megatron-FSDP 的关键边界
 
@@ -244,6 +315,9 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 选择时先问瓶颈：如果主要是 optimizer state，Distributed Optimizer 或较浅 FSDP 策略可能已足够；若训练参数 replica 本身放不下，才必须承担 stage-3 类参数 AG 生命周期。不要仅用“ZeRO-几”替代对 buffer、hook 和 schedule 的核对。
 
 源码锚点：`megatron/core/optimizer/distrib_optimizer.py`、`megatron/core/distributed/fsdp/src/megatron_fsdp/fully_shard.py:ShardingStrategy`、`mcore_fsdp_adapter.py:FullyShardedDataParallel`、`megatron_fsdp.py:MegatronFSDP`。
+
+
+<a id="read-14"></a>
 
 ## 13. checkpoint 能重分片什么，不能自动解决什么
 
@@ -267,6 +341,9 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 
 源码锚点：`megatron/core/dist_checkpointing/mapping.py:ShardedTensor`、`validation.py:validate_sharding_integrity`、各 module 的 `sharded_state_dict`。
 
+
+<a id="read-15"></a>
+
 ## 14. async checkpoint 什么时候才算完整
 
 `dist_checkpointing.serialization.save(..., async_sharded_save=True)` 返回 `AsyncRequest`，调用者还必须调度并最终 finalize。当前实现把 `metadata_finalize_fn` 放进 finalize callbacks：所有 shard 完成后才由 rank 0 写 checkpoint backend/version metadata，并做 barrier。
@@ -274,6 +351,9 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 这意味着目录存在、部分 tensor 文件可见，都不等于 checkpoint 已发布。恢复/清理工具应以完整性 metadata/manifest 和上层 tracker 的提交语义判断，不能扫描到新目录就立即加载。开启 integrity manifest 时还会在所有数据写完后额外读文件计算 hash，可靠性更强但有额外 I/O。
 
 源码锚点：`megatron/core/dist_checkpointing/serialization.py:save`、`megatron/training/checkpointing.py`。
+
+
+<a id="read-16"></a>
 
 ## 15. MoE auxiliary loss 是否要在任务 loss 中手工相加
 
@@ -292,6 +372,9 @@ schedule 的 `forward_step_calc_loss` 再根据 microbatch、CP、loss scale 和
 
 源码锚点：`megatron/core/transformer/moe/router.py:_apply_aux_loss`、`moe_utils.py:MoEAuxLossAutoScaler`、`schedules.py:forward_step_calc_loss`。
 
+
+<a id="read-17"></a>
+
 ## 16. router replay 固定 expert 后，router 还有没有梯度
 
 replay 保存/提供的是 top-k indices。`REPLAY_FORWARD` 或 `REPLAY_BACKWARD` 下，代码不重新执行 top-k，而是：
@@ -307,6 +390,9 @@ probs = scores.gather(1, top_indices)
 
 源码锚点：`megatron/core/transformer/moe/router_replay.py:RouterReplay`、`router.py:TopKRouter`。
 
+
+<a id="read-18"></a>
+
 ## 17. overlap 打开后为什么可能不快，甚至更慢
 
 overlap 只把通信搬到另一个可并行窗口，不会消除通信。收益近似取决于：
@@ -320,6 +406,9 @@ exposed_comm_after = max(comm_time - coverable_compute_window, tail_and_sync)
 所以验收要比较端到端 step time 与 exposed tail，而不是只看 NCCL kernel 与 GEMM 在时间线上有重叠。常见“看起来 overlap、吞吐不变”的原因是通信本来不在 critical path，或新增 buffer/launch 开销抵消了遮蔽收益。
 
 源码锚点：`megatron/core/distributed/distributed_data_parallel.py:DistributedDataParallel.__init__`、各 `start_*_sync`/`finish_*_sync`。
+
+
+<a id="read-19"></a>
 
 ## 18. strict resume 为什么比固定 seed 多得多
 

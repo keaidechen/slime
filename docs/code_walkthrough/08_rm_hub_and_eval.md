@@ -1,5 +1,12 @@
 # 08 奖励模型与评估体系：RM Hub、Dynamic Filter 与 Eval Pipeline
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：reward/filter/eval 的顺序与样本组语义；算法背景不替代工程校验。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.7「RL 算法」的输入端——advantage 计算前，reward 从哪来、怎么打分、怎么过滤、评测集怎么单独跑一套采样参数，是常被忽视但直接决定训练信号质量的一环。承接 02 篇（生成后如何调用 RM）与 03 篇（`Sample.reward` 字段），本篇专门讲透这条链路。
 
 ---

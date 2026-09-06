@@ -1,5 +1,24 @@
 # 多维并行与 DeviceMesh
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：先画 2×2 rank group，再看大配置；勿以缩写乘积替代布局。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：先画 2×2，再画大集群
+
+令 tp 为低位坐标，dp 为高位，rank=tp_rank+2*dp_rank。四个 rank 的 TP 组为 [0,1]、[2,3]，DP 组为 [0,2]、[1,3]。这是明确指定 order 后的算例，其他 order 得到不同编号。
+
+随后把 rank 放到实际机器：同一 TP 组是否位于预期高速互联域？若物理设备映射被容器重新排序，连续 rank 不保证物理相邻。逻辑 mesh 与硬件拓扑要画两张图再连线。
+
+验收：列出每个 rank 的坐标、设备、参数 shape 和通信组。模型参数 owner、梯度 owner、checkpoint shard owner 也可能不同，不用一个 rank0 概括全部。
+
+## 机制与实现
+
 ## 不是把缩写相乘就结束了
 
 假设 `TP=8, PP=4, CP=2, EP=8, DP=16`，直接相乘需要 8,192 GPU。但 EP 与 TP/DP 可能只作用于特定 layer，DP 还可能拆为 shard/replicate 维；现代系统需要表达**不同 operator 使用不同 mesh view**。
@@ -75,4 +94,3 @@ attention output 可能是 `[sequence shard, hidden replicated]`，MoE 输入需
 - [TorchTitan](https://github.com/pytorch/torchtitan)
 - [Megatron Core Parallelism Guide](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/parallelism-guide.html)
 - [Megatron Distributed Checkpoint](https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/dist_checkpointing.html)
-

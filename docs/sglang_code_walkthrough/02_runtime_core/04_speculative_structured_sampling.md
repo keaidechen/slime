@@ -1,5 +1,12 @@
 # 2.4 推测解码、约束输出与采样正确性
 
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：采样正确性和约束输出先读；speculative 树与性能专项。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 推测解码的目标
 
 decode 每步受模型权重读取和 launch/通信 latency 限制。用更便宜的 draft 一次提出多个 token，再让 target 一次验证，可减少 target forward 次数。

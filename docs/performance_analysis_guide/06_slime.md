@@ -1,8 +1,36 @@
 # 06 Slime 强化学习全链路性能分析
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先画出正在测量的系统](#read-01)
+- [2. 第一次运行只看 `perf/*`](#read-02)
+- [3. 先拆开 rollout 和训练再 profile](#read-03)
+- [4. 训练侧 PyTorch Profiler](#read-04)
+- [5. 训练侧显存和主机内存](#read-05)
+- [6. Rollout 侧 SGLang Profiler](#read-06)
+- [7. 看 sample 级端到端时间线](#read-07)
+- [8. 用 Nsight Systems 看跨进程关键路径](#read-08)
+- [9. 权重同步怎么分析](#read-09)
+- [10. 系统平衡实验](#read-10)
+- [11. 症状到下一步](#read-11)
+- [12. 本章完成标准](#read-12)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A5/A6 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：分离两侧、测换权/offload、观察角色关键路径与质量约束。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 Slime 的性能问题不是“训练性能 + 推理性能”的简单相加。一个 rollout step 里还包含数据准备、reward、优势计算、权重同步、显存 offload/onload，以及训练侧和推理侧互相等待。真正要优化的是端到端关键路径，而不是某个局部 kernel 的峰值。
 
 本章以当前仓库代码为准。先照着做，不需要一开始就读懂 Ray、Megatron 或 SGLang 源码。
+
+
+<a id="read-01"></a>
 
 ## 1. 先画出正在测量的系统
 
@@ -32,6 +60,9 @@ Colocate 模式还会插入模型或 KV Cache 的 release、offload、onload。�
 
 这些是 workload，不是无关配置。
 
+
+<a id="read-02"></a>
+
 ## 2. 第一次运行只看 `perf/*`
 
 先用一个已经能正确运行的小配置跑 10～20 个 rollout。不要立即开 profiler。保存完整日志，并在日志或 TensorBoard/W&B 中观察：
@@ -51,7 +82,7 @@ Colocate 模式还会插入模型或 KV Cache 的 release、offload、onload。�
 | `perf/step_time` | 训练侧工作加等待的完整 step 时间 |
 | `perf/wait_time_ratio` | 训练侧有多少比例在等待另一侧？ |
 
-具体 key 取决于本次启用的算法和阶段。当前实现可从 [train_metric_utils.py](../../slime/utils/train_metric_utils.py) 和 [rollout.py](../../slime/ray/rollout.py) 核对。
+具体 key 取决于本次启用的算法和阶段。当前实现可从 [train_metric_utils.py](../../slime/observability/train_metric_utils.py) 和 [rollout.py](../../slime/ray/rollout.py) 核对。
 
 ### 2.1 先做三个判断
 
@@ -71,6 +102,9 @@ update_weights_time 高
 wait_time_ratio 高
   -> 对齐训练和 rollout 时间线，找真正阻塞训练的事件
 ```
+
+
+<a id="read-03"></a>
 
 ## 3. 先拆开 rollout 和训练再 profile
 
@@ -109,6 +143,9 @@ wait_time_ratio 高
 
 完整参数语义见 [Debug 指南](../zh/developer_guide/debug.md)。
 
+
+<a id="read-04"></a>
+
 ## 4. 训练侧 PyTorch Profiler
 
 ### 4.1 只抓最短且稳定的窗口
@@ -131,7 +168,7 @@ wait_time_ratio 高
 
 `profile-step-start/end` 的 step 含义会随 target 改变：整体 target 对应 rollout 级推进，局部 target 对应相应 iterator。先抓 2 个 active step，并检查 trace 中到底包含了什么，再扩大窗口。
 
-当前 [profile_utils.py](../../slime/utils/profile_utils.py) 会为每个分布式 rank 输出 trace，并启用 shape、stack、memory 和 FLOPs，开销和文件都较大。第一次应使用小模型、少量 rank、固定 debug 数据；不要在生产任务上长期开启。
+当前 [profile_utils.py](../../slime/observability/profile_utils.py) 会为每个分布式 rank 输出 trace，并启用 shape、stack、memory 和 FLOPs，开销和文件都较大。第一次应使用小模型、少量 rank、固定 debug 数据；不要在生产任务上长期开启。
 
 用 TensorBoard 打开：
 
@@ -150,6 +187,9 @@ tensorboard --logdir /tmp/slime_train_profile
 5. 判断 GPU gap 前 CPU 在做什么；
 6. 判断 collective 是关键路径，还是被计算成功覆盖；
 7. 最后才对热点 CUDA kernel 用 Nsight Compute。
+
+
+<a id="read-05"></a>
 
 ## 5. 训练侧显存和主机内存
 
@@ -192,6 +232,9 @@ memray tree /path/to/generated_file
 ```
 
 它适合查 Python/C/C++ 主机内存，不等价于 CUDA allocator snapshot。
+
+
+<a id="read-06"></a>
 
 ## 6. Rollout 侧 SGLang Profiler
 
@@ -249,6 +292,9 @@ python tools/analyze_profile.py \
 
 脚本输出是线索，不是最终结论。回到原始 trace 核对其分类是否适配当前 backend 和 kernel 命名。
 
+
+<a id="read-07"></a>
+
 ## 7. 看 sample 级端到端时间线
 
 开启 rollout debug dump 后，每个 sample 可携带 trace。生成可视化：
@@ -268,6 +314,9 @@ python tools/trace_timeline_viewer.py \
 5. PD 分离时，prefill/decode lane 是否存在空洞或 handoff 等待？
 
 这是分析 agentic、多轮工具调用和 reward 服务长尾的首选入口。详细字段见 [rollout trace 文档](../zh/developer_guide/trace.md)。
+
+
+<a id="read-08"></a>
 
 ## 8. 用 Nsight Systems 看跨进程关键路径
 
@@ -294,6 +343,9 @@ nsys profile \
 - 训练结束到下一轮请求真正进入 engine 之间；
 - Ray task、对象传输或 CPU serialization 的空洞。
 
+
+<a id="read-09"></a>
+
 ## 9. 权重同步怎么分析
 
 当 `perf/update_weights_time` 高时，依次做：
@@ -306,6 +358,9 @@ nsys profile \
 6. 修改协议或频率前先验证权重更新后的数值一致性。
 
 需要排除正确性问题时，可使用仓库的 `--check-weight-update-equal`，但它本身有额外开销，不用于正式基线。
+
+
+<a id="read-10"></a>
 
 ## 10. 系统平衡实验
 
@@ -327,6 +382,9 @@ nsys profile \
 
 目标不是让每张卡始终 100%，而是减少关键路径上的空闲，并提高最终有效产出。局部 actor TFLOPS 上升但端到端 step 变慢，不是优化成功。
 
+
+<a id="read-11"></a>
+
 ## 11. 症状到下一步
 
 | 症状 | 先收集 | 下一步 |
@@ -339,6 +397,9 @@ nsys profile \
 | Colocate 周期性空洞 | nsys、显存曲线 | 查 release/offload/onload 和 graph 重建 |
 | 偶发超慢轮次 | p95/p99、最长 sample、各 rank | 查长尾 agent、straggler、重试、抖动 |
 | OOM | allocator snapshot + 非 PyTorch 显存 | 区分活跃 tensor、碎片和外部分配 |
+
+
+<a id="read-12"></a>
 
 ## 12. 本章完成标准
 

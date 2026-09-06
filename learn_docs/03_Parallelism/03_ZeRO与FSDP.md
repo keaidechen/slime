@@ -1,5 +1,28 @@
 # ZeRO 与 FSDP：分片数据并行的执行语义
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：ZeRO 三种状态与 FSDP gather/reshard；区分原理和 Megatron 实现。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：用八个参数画出全分片生命周期
+
+两个 rank 各持有四个参数 shard。某层 forward 前，按需 AllGather 得到该层完整参数；算完后可释放临时完整副本。backward 可能再次需要完整参数，梯度规约后仅由 owner 消费对应 shard。
+
+| 方案 | 主要分片对象 | 新引入的责任 |
+|---|---|---|
+| ZeRO-1 思路 | 优化器状态 | 本地更新与参数一致性 |
+| ZeRO-2 思路 | 再分片梯度 | 梯度规约/owner 与存储 |
+| ZeRO-3/FSDP 思路 | 再分片参数 | 按层 materialize、释放与预取 |
+
+这些是概念层分法，不能直接推出某框架的完整 grad buffer 已按 DP 缩小。查看真实 buffer 分配与峰值时间。验收：标注“逻辑归属”和“物理 allocation”两列，解释为何节省常驻状态后仍可能在 all-gather 峰值 OOM。
+
+## 机制与实现
+
 Zero Redundancy Optimizer（ZeRO，零冗余优化器）和 Fully Sharded Data Parallel（FSDP，全分片数据并行）仍属于数据并行：不同 rank 处理不同 batch shard；变化在于参数、gradient 和 optimizer state 不再永久复制。
 
 显存核算与 offload 见上一专题的[训练显存优化](../02_Distributed_Communication_Memory/10_训练显存优化.md)。本章只解释并行执行。
@@ -76,4 +99,3 @@ group 构造错误可能程序仍能运行，却得到重复/缺失 reduction。
 - [TorchTitan FSDP2 Design](https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md)
 - [DeepSpeed ZeRO](https://www.deepspeed.ai/tutorials/zero/)
 - [PyTorch `fully_shard`](https://docs.pytorch.org/docs/stable/distributed.fsdp.fully_shard.html)
-

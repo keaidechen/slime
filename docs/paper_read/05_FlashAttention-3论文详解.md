@@ -1,5 +1,40 @@
 # 05｜FlashAttention-3 论文详解：为什么 H100 需要“异步 Attention”？
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 一句话先记住 FlashAttention-3](#read-01)
+- [2. 为什么 FA2 在 H100 上不够？](#read-02)
+- [3. Attention 为什么特别适合做流水线重叠？](#read-03)
+- [4. 第一层异步：数据搬运与计算 overlap](#read-04)
+- [5. Producer-Consumer Warp Specialization](#read-05)
+- [6. Shared Memory 在 FA3 里像“传送带”](#read-06)
+- [7. Ping-Pong Scheduling 是什么？](#read-07)
+- [8. 第二层异步：GEMM 与 Softmax overlap](#read-08)
+- [9. 为什么 H100 上 Softmax 更“碍眼”了？](#read-09)
+- [10. “Overlap”到底是不是把计算量减少了？](#read-10)
+- [11. 第三部分：为什么 FA3 强调 FP8？](#read-11)
+- [12. FP8 的问题不是只剩“精度少一点”](#read-12)
+- [13. Incoherent Processing 的直觉](#read-13)
+- [14. 为什么这种变换不能改变 Attention？](#read-14)
+- [15. FA3 的三个核心技术终于可以放在一起了](#read-15)
+- [16. FA3 的性能数字怎么读？](#read-16)
+- [17. FlashAttention 三代到底分别解决什么？](#read-17)
+- [18. FA3 与 FlashInfer 的关系](#read-18)
+- [19. 一个厨房比喻](#read-19)
+- [20. AI Infra 最值得记住的 8 个 Insight](#read-20)
+- [21. 读完后你应该能回答](#read-21)
+- [主要参考资料](#read-22)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：异步搬运/计算、流水线与资源；实验能力以实际 H20 环境核验。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：FA1/FA2/FA3 分别指 **FlashAttention-1/2/3**；GPU = **Graphics Processing Unit（图形处理器）**；TMA = **Tensor Memory Accelerator（张量内存加速器，用于异步搬运大块张量）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级异步矩阵乘加）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；HBM = **High Bandwidth Memory（高带宽内存）**；FP8 = **8-bit Floating Point（8 位浮点格式）**；FP16 = **16-bit Floating Point（16 位浮点格式）**。本文中的 **pipeline（流水线）**指把数据搬运、矩阵乘法和 Softmax 等阶段重叠执行，**warp specialization（warp 专职化）**指让不同 warp group 分别长期承担 producer/consumer 等不同职责。 另外：LLM = **Large Language Model（大语言模型）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；Q/K/V = **Query/Key/Value（查询/键/值向量）**，QKᵀ 与 PV 分别对应 Attention 的两次主要矩阵乘；AI = **Artificial Intelligence（人工智能）**；CUTLASS = **CUDA Templates for Linear Algebra Subroutines（NVIDIA 高性能线性代数 CUDA 模板库）**。H100/A100/B200 是 NVIDIA GPU 产品型号，不属于需要展开的缩写。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
 
 > 论文：Jay Shah et al., **FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision**，2024，NeurIPS 2024。
@@ -12,6 +47,9 @@
 > 这篇论文标志着 FlashAttention 从“IO-aware algorithm（I/O 感知算法：设计时显式考虑数据搬运成本）”进一步进入“**与 GPU 微架构协同设计 software pipeline**”的阶段。
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 一句话先记住 FlashAttention-3
 
@@ -35,11 +73,14 @@ FP8
 
 所以最适合记忆成：
 
-\[
+$$
 \boxed{\text{FA3 = Asynchrony + Pipelining + Low Precision}}
-\]
+$$
 
 ---
+
+
+<a id="read-02"></a>
 
 # 2. 为什么 FA2 在 H100 上不够？
 
@@ -69,6 +110,9 @@ better warp work partition
 新硬件通常需要新的 schedule。
 
 ---
+
+
+<a id="read-03"></a>
 
 # 3. Attention 为什么特别适合做流水线重叠？
 
@@ -115,6 +159,9 @@ FA3 的目标就是把时间线重排。
 
 ---
 
+
+<a id="read-04"></a>
+
 # 4. 第一层异步：数据搬运与计算 overlap
 
 传统简化时间线：
@@ -139,6 +186,9 @@ Compute        [comp0 ][comp1 ][comp2 ][comp3 ]
 Hopper 的 TMA 让这件事更自然。
 
 ---
+
+
+<a id="read-05"></a>
 
 # 5. Producer-Consumer Warp Specialization
 
@@ -183,6 +233,9 @@ load → compute → load → compute
 
 ---
 
+
+<a id="read-06"></a>
+
 # 6. Shared Memory 在 FA3 里像“传送带”
 
 可以把 Shared Memory 看成 producer 和 consumer 之间的缓冲区：
@@ -218,6 +271,9 @@ producer 才能覆盖
 
 ---
 
+
+<a id="read-07"></a>
+
 # 7. Ping-Pong Scheduling 是什么？
 
 FA3 使用一种 ping-pong 风格的调度，让不同 consumer warp group 交替推进工作。
@@ -245,6 +301,9 @@ B 再接上
 > **通过显式软件调度，让硬件上异步执行的 Tensor Core 工作彼此交错，减少 pipeline bubble。**
 
 ---
+
+
+<a id="read-08"></a>
 
 # 8. 第二层异步：GEMM 与 Softmax overlap
 
@@ -303,6 +362,9 @@ Softmax:             [soft0][soft1][soft2]
 
 ---
 
+
+<a id="read-09"></a>
+
 # 9. 为什么 H100 上 Softmax 更“碍眼”了？
 
 假设上一代 GPU：
@@ -341,6 +403,9 @@ FA3 更进一步：
 
 ---
 
+
+<a id="read-10"></a>
+
 # 10. “Overlap”到底是不是把计算量减少了？
 
 不是。
@@ -374,6 +439,9 @@ softmax 还是算了 2ms 的工作。
 
 ---
 
+
+<a id="read-11"></a>
+
 # 11. 第三部分：为什么 FA3 强调 FP8？
 
 H100 对 FP8 Tensor Core 提供非常高的理论吞吐。
@@ -396,13 +464,16 @@ Tensor Core FP8 throughput 更高
 
 尤其：
 
-\[
+$$
 \operatorname{softmax}(QK^T)
-\]
+$$
 
 如果 Q/K 量化误差把 logits 扭曲，softmax 后的概率分布可能发生明显变化。
 
 ---
+
+
+<a id="read-12"></a>
 
 # 12. FP8 的问题不是只剩“精度少一点”
 
@@ -428,6 +499,9 @@ scale 的粒度多大？
 因此 FA3 采用更细粒度的 block quantization 思路，并研究如何降低 FP8 Attention 的数值误差。
 
 ---
+
+
+<a id="read-13"></a>
 
 # 13. Incoherent Processing 的直觉
 
@@ -465,35 +539,38 @@ scale 的粒度多大？
 
 ---
 
+
+<a id="read-14"></a>
+
 # 14. 为什么这种变换不能改变 Attention？
 
 Attention 的关键分数是：
 
-\[
+$$
 qk^T
-\]
+$$
 
 如果对 Q 和 K 施加一个适当的正交变换：
 
-\[
+$$
 q' = qR,
 \qquad
 k' = kR
-\]
+$$
 
 且：
 
-\[
+$$
 RR^T=I
-\]
+$$
 
 那么：
 
-\[
+$$
 q'k'^T
 = qRR^Tk^T
 = qk^T
-\]
+$$
 
 所以数学内积保持不变。
 
@@ -502,6 +579,9 @@ q'k'^T
 > 可以改变数值表示分布，但保持理论 Attention score。
 
 ---
+
+
+<a id="read-15"></a>
 
 # 15. FA3 的三个核心技术终于可以放在一起了
 
@@ -534,6 +614,9 @@ Tensor Core / softmax 串行
 
 ---
 
+
+<a id="read-16"></a>
+
 # 16. FA3 的性能数字怎么读？
 
 论文在 H100 上报告：
@@ -548,6 +631,9 @@ Tensor Core / softmax 串行
 > **在新一代 GPU 上，性能的关键从“减少 HBM IO”进一步转向“把多个硬件 pipeline 重叠起来”。**
 
 ---
+
+
+<a id="read-17"></a>
 
 # 17. FlashAttention 三代到底分别解决什么？
 
@@ -578,6 +664,9 @@ FA3 = Asynchrony
 
 ---
 
+
+<a id="read-18"></a>
+
 # 18. FA3 与 FlashInfer 的关系
 
 不要把两者混成竞争方案。
@@ -607,6 +696,9 @@ A100 / H100 / B200 ...
 
 ---
 
+
+<a id="read-19"></a>
+
 # 19. 一个厨房比喻
 
 FA1：
@@ -629,6 +721,9 @@ FA3：
 
 ---
 
+
+<a id="read-20"></a>
+
 # 20. AI Infra 最值得记住的 8 个 Insight
 
 1. **硬件换代会改变最佳 kernel schedule。**
@@ -642,6 +737,9 @@ FA3：
 
 ---
 
+
+<a id="read-21"></a>
+
 # 21. 读完后你应该能回答
 
 1. TMA 和普通线程 load 有什么概念上的区别？
@@ -652,6 +750,9 @@ FA3：
 6. FA1、FA2、FA3 各自的核心关键词是什么？
 
 ---
+
+
+<a id="read-22"></a>
 
 ## 主要参考资料
 

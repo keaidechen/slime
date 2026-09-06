@@ -1,5 +1,12 @@
 # 07 自定义接口与 Agentic RL：把任意数据生成流程接入训练闭环
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：先 hook/自定义 rollout，再多轮工具等待、轨迹对齐与失败。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.8「Agentic RL」。
 > slime 的核心承诺是"最大化的数据生成自由度"（README）：math、code、search、tool、sandbox、multi-agent 都能接入同一条 training / rollout / Data Buffer 路径。本篇讲清接口体系，并给出 examples 的完整地图。
 

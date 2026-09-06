@@ -1,5 +1,24 @@
 # 训练配置评审与上线清单
 
+<!-- learning-position -->
+> **学习定位**：A3/A7 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：每个 Megatron 实验填写，避免只保存启动命令。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：给清单填一个可被别人复核的配置
+
+不要只勾“并行正确”。写下模型参数量、序列长度分布、global/microbatch、梯度累积次数、各 group 的 rank 列表和实际 GPU 映射。普通参数与 expert 参数分别记录 owner。
+
+例如 global batch 固定时提高 DP，会减少每卡样本或 microbatch 数；若改动后实际有效 token 总数不同，性能对比需要重做口径。恢复实验则要同时检查样本位置、LR 和参数，而不只是文件能读。
+
+提交评审时至少附一张状态显存表、一张 step 时间线、完整命令及正确性结果。不确定项注明尚缺什么测量，避免把估算写成实测。
+
+## 机制与实现
+
 ## 1. 配置摘要
 
 - 模型：参数量、层数、hidden、heads/GQA、FFN、词表、seq length、dense/MoE。
@@ -33,4 +52,3 @@
 ## 6. 回滚与故障演练
 
 每个激进特性都有单独开关和已验证 fallback。至少演练 rank 异常、数据慢节点、checkpoint 写失败、恢复时 DP 改变、极端 MoE 路由、NaN/Inf。成功标准是及时发现第一因、资源清理、坏 checkpoint 不被发布，而不仅是作业最终退出。
-

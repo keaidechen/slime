@@ -1,5 +1,24 @@
 # Sequence Parallelism：两个同名概念必须分开
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：Megatron SP 与其他 sequence 切分的区别；先跟 TP 相邻层。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：从 TP 两侧的激活看 Sequence Parallel
+
+设 activation 为 [S=8,H=4]，TP=2。某些逐 token 操作不需要把所有序列位置常驻在两张卡上：每卡可持有 [4,4]，独立做对应 token 的 normalization，再在需要完整序列的边界做布局转换。
+
+这并没有让每枚 token 的 attention 只看半段上下文。Megatron SP 主要关联 TP 区间的 activation 布局，其他论文中的 sequence parallel 可能直接切 attention 的序列计算，必须辨明定义。
+
+练习：在 LayerNorm→ColumnLinear→RowLinear 的链上标注每处 shape、谁需要完整输入，以及 gather/reduce-scatter 在哪里。不能只把配置 sp=True 就当作完成理解。
+
+## 机制与实现
+
 “Sequence Parallelism（SP，序列并行）”在业界至少指两类不同方法：
 
 1. Megatron SP：与 Tensor Parallelism（TP，张量并行）配合，把 LayerNorm、Dropout、Residual 等非 TP 区域沿 sequence 切分；
@@ -61,4 +80,3 @@ Layer Normalization（LayerNorm，层归一化）通常沿 hidden dimension 求�
 - [DeepSpeed-Ulysses](https://arxiv.org/abs/2309.14509)
 - [Ring Attention](https://arxiv.org/abs/2310.01889)
 - [USP：Unified Sequence Parallelism](https://arxiv.org/abs/2405.07719)
-

@@ -1,10 +1,79 @@
 # Linear Attention：从 Attention 矩阵到可更新的有限状态记忆
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [缩写与术语](#read-01)
+- [0. 先给结论：Linear Attention 把历史从 token 列表变成了一个程序状态](#read-02)
+- [1. 先划清边界：哪些结构可以叫 Linear Attention](#read-03)
+- [2. 为什么 Softmax Attention 不能直接交换乘法顺序](#read-04)
+- [3. Kernelized Linear Attention 的完整推导](#read-05)
+- [4. Feature Map：线性化 Softmax 的代价在哪里](#read-06)
+- [5. 从 Attention 到 Fast Weight Programmer](#read-07)
+- [6. Vanilla additive update 为什么不够](#read-08)
+- [7. RetNet：把 decay、并行、递推和 chunkwise 统一](#read-09)
+- [8. RWKV：Transformer 训练形态与 RNN 推理形态的另一条路线](#read-10)
+- [9. S4、Mamba 与 Mamba-2：为什么必须写进 Linear Attention 演化史](#read-11)
+- [10. Hyena：别把所有线性时间模型都叫 Attention](#read-12)
+- [11. GLA：让忘记多少由当前数据决定](#read-13)
+- [12. Delta Rule：从“追加记忆”变成“纠错写入”](#read-14)
+- [13. DeltaNet：质量提高后，训练并行成为新瓶颈](#read-15)
+- [14. Gated DeltaNet：全局忘记与定向覆写结合](#read-16)
+- [15. KDA：把 forget gate 从每个 Head 细化到每个 Channel](#read-17)
+- [16. 三种执行模式：Recurrent、Parallel、Chunkwise](#read-18)
+- [17. Vanilla Linear Attention 的 Chunk 公式](#read-19)
+- [18. Chunk size 怎么选](#read-20)
+- [19. Gated/Delta Chunk 算法为什么更难](#read-21)
+- [20. Prefill 的真正目标：用 FLOPs 换掉长序列状态 IO](#read-22)
+- [21. Decode：复杂度不再随 Context 增长，但 State 本身成为带宽瓶颈](#read-23)
+- [22. State Layout：一个转置就能让长上下文静默损坏](#read-24)
+- [23. Variable-length batching 与 `cu_seqlens`](#read-25)
+- [24. Backward：为什么训练显存不会自动变成 $O(1)$](#read-26)
+- [25. Position：没有显式 Token Cache 后，顺序从哪里来](#read-27)
+- [26. 为什么 Fixed State 天然不擅长 Exact Retrieval](#read-28)
+- [27. Hybrid Attention：不是过渡方案，而是 Memory Hierarchy](#read-29)
+- [28. Hybrid 的三种组织方式](#read-30)
+- [29. 现代开源模型路线对比](#read-31)
+- [30. 其他具有里程碑意义的 Hybrid 模型](#read-32)
+- [31. 里程碑时间线](#read-33)
+- [32. Serving Runtime：Linear State 不是普通 KV Cache](#read-34)
+- [33. Speculative Decoding：回滚 Recurrent State 为什么困难](#read-35)
+- [34. Context Parallelism：状态转移的组合比 KV All-Gather 更微妙](#read-36)
+- [35. Tensor/Head Parallelism：State 应该怎么切](#read-37)
+- [36. Kernel Fusion 清单](#read-38)
+- [37. FlashKDA 与 FLA：从研究公式到可部署算子](#read-39)
+- [38. 数值稳定性](#read-40)
+- [39. 性能模型](#read-41)
+- [40. 正确的 Benchmark 方法](#read-42)
+- [41. Quality Evaluation](#read-43)
+- [42. Troubleshooting：按症状定位](#read-44)
+- [43. 常见误区](#read-45)
+- [44. 实现检查表](#read-46)
+- [45. 一个最小 Reference 实现](#read-47)
+- [46. 一个端到端数量级算例](#read-48)
+- [47. 如何选择架构](#read-49)
+- [48. Infra 学习路线](#read-50)
+- [49. 最终心智模型](#read-51)
+- [50. 参考资料与推荐阅读顺序](#read-52)
+- [51. 与下一专题的接口](#read-53)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：递归状态与 KV 的差别、混合模型资源特征；数学长推导后读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 > 本文承接 `MLA.md` 与 `Sparse-Attention.md`。MLA 减少每个历史 token 的 KV byte；Sparse Attention 减少每个 Query 实际读取的历史位置；Linear Attention 走得更远：不再把全部历史保存为 token-level KV，而是把历史持续压缩进固定大小的 recurrent state。
 >
 > 本文面向模型架构、训练系统和推理 Infra 学习者。公式首先解释结构本身，再落到 prefill、decode、GPU kernel、状态管理和 Serving runtime。论文或模型报告中的速度数字只作为作者特定实验的结果，不直接外推到其他模型、硬件和工作负载。
 >
 > **资料版本：截至 2026-09-02。** 其中 GDN-2、DART、Qwen3.8-Flash-Next、GLM-5.3-Flash 等属于快速演进中的近期工作；文中会区分论文结论、作者报告和本文推导，具体 kernel 支持范围以对应仓库当前版本为准。
+
+
+<a id="read-01"></a>
 
 ## 缩写与术语
 
@@ -34,6 +103,9 @@
 这里的 “Linear” 指对序列长度 $L$ 的时间复杂度近似为 $O(L)$，不是“这一层只有 Linear/全连接算子”，也不代表所有维度上的成本都是常数。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 0. 先给结论：Linear Attention 把历史从 token 列表变成了一个程序状态
 
@@ -103,6 +175,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-03"></a>
+
 ## 1. 先划清边界：哪些结构可以叫 Linear Attention
 
 今天“Linear Attention”常被用作三个不同层次的词。
@@ -141,6 +216,9 @@ RetNet、RWKV、S4/Mamba、Hyena 也具有线性或近线性序列计算、固�
 但公式会明确标注属于 LA、RNN、SSM 还是 convolution 路线。
 
 ---
+
+
+<a id="read-04"></a>
 
 ## 2. 为什么 Softmax Attention 不能直接交换乘法顺序
 
@@ -184,6 +262,9 @@ Q\operatorname{Softmax}(K^\top V).
 Linear Attention 的关键是换一种可分解的相似度，或者设计一个能以递推状态实现的 token mixer。
 
 ---
+
+
+<a id="read-05"></a>
 
 ## 3. Kernelized Linear Attention 的完整推导
 
@@ -295,6 +376,9 @@ BF16 大约：
 
 ---
 
+
+<a id="read-06"></a>
+
 ## 4. Feature Map：线性化 Softmax 的代价在哪里
 
 ### 4.1 简单正值 feature map
@@ -358,6 +442,9 @@ A=\Phi(Q)\Phi(K)^\top.
 
 ---
 
+
+<a id="read-07"></a>
+
 ## 5. 从 Attention 到 Fast Weight Programmer
 
 2021 年 **Linear Transformers Are Secretly Fast Weight Programmers** 给出了非常有用的解释：
@@ -413,6 +500,9 @@ S^\top k_a
 
 ---
 
+
+<a id="read-08"></a>
+
 ## 6. Vanilla additive update 为什么不够
 
 最简单的更新：
@@ -457,6 +547,9 @@ key = city, value = Shanghai
 
 ---
 
+
+<a id="read-09"></a>
+
 ## 7. RetNet：把 decay、并行、递推和 chunkwise 统一
 
 RetNet（Retentive Network，保留网络）在 2023 年系统化展示了三种等价/对应计算范式：
@@ -497,6 +590,9 @@ A_{t,s}\propto(q_t^\top k_s)\gamma^{t-s}.
 
 ---
 
+
+<a id="read-10"></a>
+
 ## 8. RWKV：Transformer 训练形态与 RNN 推理形态的另一条路线
 
 RWKV 是 Receptance Weighted Key Value。其早期核心 token mixer 常称 WKV，将：
@@ -517,6 +613,9 @@ RWKV 的里程碑意义：
 RWKV 与 kernelized LA 的共同点是固定状态与并行/递推双形态；不同点是其具体 WKV recurrence、time mixing 和 receptance 设计并非简单 $\phi(Q)(\phi(K)^\top V)$。
 
 ---
+
+
+<a id="read-11"></a>
 
 ## 9. S4、Mamba 与 Mamba-2：为什么必须写进 Linear Attention 演化史
 
@@ -577,6 +676,9 @@ Mamba-2 通过 State Space Duality 说明一类 SSM 和结构化 masked Attentio
 
 ---
 
+
+<a id="read-12"></a>
+
 ## 10. Hyena：别把所有线性时间模型都叫 Attention
 
 Hyena 使用隐式长卷积与 data-controlled gating，是 subquadratic sequence mixer。它没有显式 token-to-token Softmax matrix，也不等于 fast-weight matrix update。
@@ -588,6 +690,9 @@ Hyena 使用隐式长卷积与 data-controlled gating，是 subquadratic sequenc
 文档后续比较 Hybrid 架构时会将 Hyena/SSM 列为 adjacent recurrent/convolution family，而不把它们的公式偷换成 Linear Attention。
 
 ---
+
+
+<a id="read-13"></a>
 
 ## 11. GLA：让忘记多少由当前数据决定
 
@@ -623,6 +728,9 @@ GLA 论文的另一项关键贡献是 FlashLinearAttention：不只提出 gate�
 所以复杂度优势只有通过 chunk GEMM、fused gate、state recomputation 和 IO-aware scheduling 才能变成 wall-clock 优势。
 
 ---
+
+
+<a id="read-14"></a>
 
 ## 12. Delta Rule：从“追加记忆”变成“纠错写入”
 
@@ -685,6 +793,9 @@ S_t
 
 ---
 
+
+<a id="read-15"></a>
+
 ## 13. DeltaNet：质量提高后，训练并行成为新瓶颈
 
 Delta rule 的 recurrent 实现很自然，但每个 $S_t$ 依赖 $S_{t-1}$，逐 token kernel 对 GPU 很不友好。
@@ -701,6 +812,9 @@ Delta rule 的 recurrent 实现很自然，但每个 $S_t$ 依赖 $S_{t-1}$，�
 这也是现代 GDN/KDA 的直接技术基础。
 
 ---
+
+
+<a id="read-16"></a>
 
 ## 14. Gated DeltaNet：全局忘记与定向覆写结合
 
@@ -753,6 +867,9 @@ GDN 的 $\alpha_t$ 常是 per-head scalar。整个 $d_k\times d_v$ state 同时�
 这正是 KDA 继续演化的入口。
 
 ---
+
+
+<a id="read-17"></a>
 
 ## 15. KDA：把 forget gate 从每个 Head 细化到每个 Channel
 
@@ -820,6 +937,9 @@ GDN/KDA 中的 $\beta_t$ 同时影响“擦除旧映射”和“写入新 Value�
 GDN-2 截至本文时间仍属于较新的研究工作，是否在大规模生产模型中广泛验证，应与 KDA/GDN 的公开规模分开看待。
 
 ---
+
+
+<a id="read-18"></a>
 
 ## 16. 三种执行模式：Recurrent、Parallel、Chunkwise
 
@@ -890,6 +1010,9 @@ Chunkwise 是现代 Linear Attention kernel 的核心平衡：
 
 ---
 
+
+<a id="read-19"></a>
+
 ## 17. Vanilla Linear Attention 的 Chunk 公式
 
 先看最简单 additive state，便于理解 kernel。
@@ -934,6 +1057,9 @@ O_c=O_{inter}+O_{intra}.
 
 ---
 
+
+<a id="read-20"></a>
+
 ## 18. Chunk size 怎么选
 
 设 chunk size 为 $C$。
@@ -977,6 +1103,9 @@ T(C)
 因此 `chunk_size=64` 或 `128` 不能脱离具体 backend 当作通用真理。
 
 ---
+
+
+<a id="read-21"></a>
 
 ## 19. Gated/Delta Chunk 算法为什么更难
 
@@ -1043,6 +1172,9 @@ Linear Attention 的实现难点往往不是 `einsum` 写不出来，而是避�
 
 ---
 
+
+<a id="read-22"></a>
+
 ## 20. Prefill 的真正目标：用 FLOPs 换掉长序列状态 IO
 
 Prefill 有大量 Query，可以使用 Tensor Core 做大矩阵乘法。对 Linear Attention 来说，一个反直觉现象是：
@@ -1094,6 +1226,9 @@ Serving 中可能只给模型一个 prompt chunk。此时 kernel contract 是：
 下一 chunk 必须接上完全相同语义和布局的 $S_{final}$。这比普通 KV append 更容易出现 layout、dtype 或 request mapping 错误。
 
 ---
+
+
+<a id="read-23"></a>
 
 ## 21. Decode：复杂度不再随 Context 增长，但 State 本身成为带宽瓶颈
 
@@ -1171,6 +1306,9 @@ L^*\approx\frac{2B_S}{b_{KV}}.
 
 ---
 
+
+<a id="read-24"></a>
+
 ## 22. State Layout：一个转置就能让长上下文静默损坏
 
 同一个 state 可存为：
@@ -1211,6 +1349,9 @@ L^*\approx\frac{2B_S}{b_{KV}}.
 
 ---
 
+
+<a id="read-25"></a>
+
 ## 23. Variable-length batching 与 `cu_seqlens`
 
 训练和 Serving 常把多条序列拼成：
@@ -1247,6 +1388,9 @@ Softmax Attention 用 block-diagonal causal mask 防止跨序列 Attention。Lin
 Segmented scan 最节省 padding，但 control flow 和 metadata 更复杂。
 
 ---
+
+
+<a id="read-26"></a>
 
 ## 24. Backward：为什么训练显存不会自动变成 $O(1)$
 
@@ -1286,6 +1430,9 @@ State 与 gate 的长期乘积可能出现：
 
 ---
 
+
+<a id="read-27"></a>
+
 ## 25. Position：没有显式 Token Cache 后，顺序从哪里来
 
 标准 Transformer 通过 RoPE、ALiBi 或其他位置编码让 $q_t,k_s$ 感知相对位置。Linear recurrent models 还可以通过 transition 本身表达顺序：
@@ -1312,6 +1459,9 @@ S_t
 这也是部分 Hybrid 模型在 global attention 层使用 NoPE 的原因之一：位置已经由 recurrent path 和层间结构提供，但具体结论依模型训练验证，不能泛化为“Linear Attention 不需要位置编码”。
 
 ---
+
+
+<a id="read-28"></a>
 
 ## 26. 为什么 Fixed State 天然不擅长 Exact Retrieval
 
@@ -1353,6 +1503,9 @@ Delta rule 能定向覆盖旧关联、减少同 Key 冲突；gate 能清理无�
 
 ---
 
+
+<a id="read-29"></a>
+
 ## 27. Hybrid Attention：不是过渡方案，而是 Memory Hierarchy
 
 现代架构越来越少采用纯 Linear Attention，而是把不同记忆路径分工。
@@ -1383,6 +1536,9 @@ Hybrid 的本质是：
 ```
 
 ---
+
+
+<a id="read-30"></a>
 
 ## 28. Hybrid 的三种组织方式
 
@@ -1429,6 +1585,9 @@ y_t=g_t\odot y_t^{attn}+(1-g_t)\odot y_t^{linear}.
 截至 2026，这仍是活跃研究方向，工程成熟度通常低于固定 layer ratio。
 
 ---
+
+
+<a id="read-31"></a>
 
 ## 29. 现代开源模型路线对比
 
@@ -1515,6 +1674,9 @@ MiniMax-01 将 Lightning Attention 与 MoE 结合，公开训练/推理到百万
 
 ---
 
+
+<a id="read-32"></a>
+
 ## 30. 其他具有里程碑意义的 Hybrid 模型
 
 ### 30.1 BASED：明确提出 Recall–Throughput Pareto Frontier
@@ -1562,6 +1724,9 @@ Jamba 将 Transformer Attention、Mamba 与 MoE 混合。它的重要性在于�
 
 ---
 
+
+<a id="read-33"></a>
+
 ## 31. 里程碑时间线
 
 | 年份 | 工作 | 关键推进 |
@@ -1582,6 +1747,9 @@ Jamba 将 Transformer Attention、Mamba 与 MoE 混合。它的重要性在于�
 | 2026 | GDN-2、DART | erase/write 解耦；可检索 recurrent state memory |
 
 ---
+
+
+<a id="read-34"></a>
 
 ## 32. Serving Runtime：Linear State 不是普通 KV Cache
 
@@ -1632,6 +1800,9 @@ Prefill 节点必须把：
 
 ---
 
+
+<a id="read-35"></a>
+
 ## 33. Speculative Decoding：回滚 Recurrent State 为什么困难
 
 Attention-only speculative decoding 对 draft 的多个 token append KV；拒绝后截断 page table 即可。
@@ -1661,6 +1832,9 @@ Tree speculative decoding 更难：每个分支都有自己的 state evolution�
 
 ---
 
+
+<a id="read-36"></a>
+
 ## 34. Context Parallelism：状态转移的组合比 KV All-Gather 更微妙
 
 把序列分到 $P$ 个 rank。每个 rank 可先计算本地 chunk transition：
@@ -1689,6 +1863,9 @@ S_{out}^{(p)}
 FLA 的公开实现已经加入 KDA/GDN context-parallel 支持，这一方向说明百万 context 训练仍需要序列并行；$O(L)$ 不代表单卡就能承受所有 activation 和 compute。
 
 ---
+
+
+<a id="read-37"></a>
 
 ## 35. Tensor/Head Parallelism：State 应该怎么切
 
@@ -1726,6 +1903,9 @@ k^\top S,quad kk^\top S
 
 ---
 
+
+<a id="read-38"></a>
+
 ## 36. Kernel Fusion 清单
 
 一个 Linear Attention block 常包含：
@@ -1752,6 +1932,9 @@ k^\top S,quad kk^\top S
 FlashKDA 当前公开 kernel API 直接接收 `q/k/v/g/beta`，可在 kernel 内处理 gate、QK normalization 与 beta activation；这就是从算法模块走向 production primitive 的典型形态。
 
 ---
+
+
+<a id="read-39"></a>
 
 ## 37. FlashKDA 与 FLA：从研究公式到可部署算子
 
@@ -1799,6 +1982,9 @@ Moonshot 的 FlashKDA 使用 CUTLASS 构建高性能 KDA kernel。当前公开 R
 
 ---
 
+
+<a id="read-40"></a>
+
 ## 38. 数值稳定性
 
 ### 38.1 Gate product underflow
@@ -1837,6 +2023,9 @@ Delta rule 常依赖 normalized Key，使 $kk^\top$ 的更新尺度可控。若 
 KV Cache 是“存后读取”；recurrent state 每 token 被读写和累积，量化误差会递归传播，因此低精度风险更高。
 
 ---
+
+
+<a id="read-41"></a>
 
 ## 39. 性能模型
 
@@ -1891,6 +2080,9 @@ rT_{linear}
 
 ---
 
+
+<a id="read-42"></a>
+
 ## 40. 正确的 Benchmark 方法
 
 ### 40.1 三类模式分别测
@@ -1925,6 +2117,9 @@ rT_{linear}
 Linear kernel 快 $6\times$ 不等于整模型快 $6\times$；Hybrid 中的 MoE、MLP、exact layers 和通信都可能主导。
 
 ---
+
+
+<a id="read-43"></a>
 
 ## 41. Quality Evaluation
 
@@ -1969,6 +2164,9 @@ Linear kernel 快 $6\times$ 不等于整模型快 $6\times$；Hybrid 中的 MoE�
 ```
 
 ---
+
+
+<a id="read-44"></a>
 
 ## 42. Troubleshooting：按症状定位
 
@@ -2026,6 +2224,9 @@ Linear kernel 快 $6\times$ 不等于整模型快 $6\times$；Hybrid 中的 MoE�
 
 ---
 
+
+<a id="read-45"></a>
+
 ## 43. 常见误区
 
 ### 误区 1：Linear Attention 与 Softmax Attention 完全等价
@@ -2070,6 +2271,9 @@ head dim、state layout、GPU capability、dtype、varlen、training/inference m
 
 ---
 
+
+<a id="read-46"></a>
+
 ## 44. 实现检查表
 
 ### 数学语义
@@ -2107,6 +2311,9 @@ head dim、state layout、GPU capability、dtype、varlen、training/inference m
 
 ---
 
+
+<a id="read-47"></a>
+
 ## 45. 一个最小 Reference 实现
 
 下面用 $S\in\mathbb R^{B\times H\times K\times V}$ 表示 state，仅用于澄清语义。
@@ -2143,6 +2350,9 @@ def recurrent_gated_delta(q, k, v, alpha, beta, state):
 高性能实现不会逐行 materialize `decayed`、`predicted_v` 和 outer product；它会融合并按 chunk/state tile 调度。
 
 ---
+
+
+<a id="read-48"></a>
 
 ## 46. 一个端到端数量级算例
 
@@ -2193,6 +2403,9 @@ Hybrid 把 token-level Cache 层数减少约 75%，固定 KDA state 相比百万
 
 ---
 
+
+<a id="read-49"></a>
+
 ## 47. 如何选择架构
 
 | 场景 | 更适合的路线 | 原因 |
@@ -2207,6 +2420,9 @@ Hybrid 把 token-level Cache 层数减少约 75%，固定 KDA state 相比百万
 | 大规模 agent serving | Linear + Sparse/MLA Hybrid | 长输入、长输出和精确工具记忆同时存在 |
 
 ---
+
+
+<a id="read-50"></a>
 
 ## 48. Infra 学习路线
 
@@ -2254,6 +2470,9 @@ Hybrid 把 token-level Cache 层数减少约 75%，固定 KDA state 相比百万
 
 ---
 
+
+<a id="read-51"></a>
+
 ## 49. 最终心智模型
 
 Linear Attention 的本质不是“把 Attention 算快一点”，而是改变模型的内存抽象：
@@ -2291,101 +2510,107 @@ Linear Attention 的本质不是“把 Attention 算快一点”，而是改变�
 
 ---
 
+
+<a id="read-52"></a>
+
 ## 50. 参考资料与推荐阅读顺序
 
 ### A. Linear Attention 与 Fast Weight 基础
 
-1. [Efficient Attention: Attention with Linear Complexities](https://arxiv.org/abs/1812.01243)  
+1. [Efficient Attention: Attention with Linear Complexities](https://arxiv.org/abs/1812.01243)\
    重点：通过结合律改变 Attention 的中间张量与复杂度。
 
-2. [Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention](https://arxiv.org/abs/2006.16236)  
+2. [Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention](https://arxiv.org/abs/2006.16236)\
    重点：kernelized Attention、prefix state、parallel/recurrent duality。
 
-3. [Rethinking Attention with Performers](https://arxiv.org/abs/2009.14794)  
+3. [Rethinking Attention with Performers](https://arxiv.org/abs/2009.14794)\
    重点：FAVOR+ 随机特征近似 Softmax kernel。
 
-4. [Linear Transformers Are Secretly Fast Weight Programmers](https://arxiv.org/abs/2102.11174)  
+4. [Linear Transformers Are Secretly Fast Weight Programmers](https://arxiv.org/abs/2102.11174)\
    重点：outer-product state 的 fast-weight 解释、容量限制与 delta update。
 
-5. [Going Beyond Linear Transformers with Recurrent Fast Weight Programmers](https://arxiv.org/abs/2106.06295)  
+5. [Going Beyond Linear Transformers with Recurrent Fast Weight Programmers](https://arxiv.org/abs/2106.06295)\
    重点：更一般的 recurrent fast-weight program。
 
-6. [ABC: Attention with Bounded-memory Control](https://arxiv.org/abs/2110.02488)  
+6. [ABC: Attention with Bounded-memory Control](https://arxiv.org/abs/2110.02488)\
    重点：把多种固定内存 Attention 统一为 memory organization 问题。
 
 ### B. Retention、RNN、SSM 与长卷积
 
-7. [Efficiently Modeling Long Sequences with Structured State Spaces（S4）](https://arxiv.org/abs/2111.00396)  
+7. [Efficiently Modeling Long Sequences with Structured State Spaces（S4）](https://arxiv.org/abs/2111.00396)\
    重点：结构化 SSM、高效长序列建模。
 
-8. [RWKV: Reinventing RNNs for the Transformer Era](https://arxiv.org/abs/2305.13048)  
+8. [RWKV: Reinventing RNNs for the Transformer Era](https://arxiv.org/abs/2305.13048)\
    重点：Transformer-like parallel training 与 RNN inference。
 
-9. [Retentive Network](https://arxiv.org/abs/2307.08621)  
+9. [Retentive Network](https://arxiv.org/abs/2307.08621)\
    重点：parallel、recurrent、chunkwise recurrent 三种形态。
 
-10. [Hyena Hierarchy](https://arxiv.org/abs/2302.10866)  
+10. [Hyena Hierarchy](https://arxiv.org/abs/2302.10866)\
     重点：隐式长卷积与 gated sequence mixer。
 
-11. [Mamba](https://arxiv.org/abs/2312.00752)  
+11. [Mamba](https://arxiv.org/abs/2312.00752)\
     重点：input-dependent selective SSM 与 hardware-aware scan。
 
-12. [Transformers are SSMs / Mamba-2](https://arxiv.org/abs/2405.21060)  
+12. [Transformers are SSMs / Mamba-2](https://arxiv.org/abs/2405.21060)\
     重点：State Space Duality、semiseparable matrix 与 chunk algorithm。
 
 ### C. Gated / Delta 系列
 
-13. [Gated Linear Attention Transformers with Hardware-Efficient Training](https://arxiv.org/abs/2312.06635)  
+13. [Gated Linear Attention Transformers with Hardware-Efficient Training](https://arxiv.org/abs/2312.06635)\
     重点：data-dependent diagonal gate 与 FlashLinearAttention。
 
-14. [Simple Linear Attention Models Balance the Recall-Throughput Tradeoff（BASED）](https://arxiv.org/abs/2402.18668)  
+14. [Simple Linear Attention Models Balance the Recall-Throughput Tradeoff（BASED）](https://arxiv.org/abs/2402.18668)\
     重点：state size、local window、recall 与吞吐 Pareto。
 
-15. [Parallelizing Linear Transformers with the Delta Rule over Sequence Length](https://arxiv.org/abs/2406.06484)  
+15. [Parallelizing Linear Transformers with the Delta Rule over Sequence Length](https://arxiv.org/abs/2406.06484)\
     重点：DeltaNet 的 WY representation 与硬件高效训练。
 
-16. [Gated Delta Networks](https://arxiv.org/abs/2412.06464)  
+16. [Gated Delta Networks](https://arxiv.org/abs/2412.06464)\
     重点：scalar decay + delta correction、chunkwise algorithm 与 Hybrid。
 
-17. [Kimi Linear](https://arxiv.org/abs/2510.26692)  
-    官方仓库：[MoonshotAI/Kimi-Linear](https://github.com/MoonshotAI/Kimi-Linear)  
+17. [Kimi Linear](https://arxiv.org/abs/2510.26692)\
+    官方仓库：[MoonshotAI/Kimi-Linear](https://github.com/MoonshotAI/Kimi-Linear)\
     重点：KDA channel-wise gate、DPLR chunk、3:1 KDA+MLA。
 
-18. [Gated DeltaNet-2](https://arxiv.org/abs/2605.22791)  
+18. [Gated DeltaNet-2](https://arxiv.org/abs/2605.22791)\
     重点：erase/write gate 解耦与新一代 gated delta rule。
 
 ### D. Hybrid 模型与工程实现
 
-19. [Griffin](https://arxiv.org/abs/2402.19427) 与 [RecurrentGemma](https://arxiv.org/abs/2404.07839)  
+19. [Griffin](https://arxiv.org/abs/2402.19427) 与 [RecurrentGemma](https://arxiv.org/abs/2404.07839)\
     重点：gated recurrence + local attention。
 
-20. [Jamba](https://arxiv.org/abs/2403.19887)  
+20. [Jamba](https://arxiv.org/abs/2403.19887)\
     重点：Transformer + Mamba + MoE 的模型级 Hybrid。
 
-21. [MiniMax-01](https://arxiv.org/abs/2501.08313) 与 [MiniMax-M1](https://arxiv.org/abs/2506.13585)  
+21. [MiniMax-01](https://arxiv.org/abs/2501.08313) 与 [MiniMax-M1](https://arxiv.org/abs/2506.13585)\
     重点：Lightning Attention、MoE 与百万上下文规模验证。
 
     延伸：[MiniMax-M2 Series](https://arxiv.org/abs/2605.26494)，重点关注大规模 Hybrid 模型在 multi-hop reasoning 中暴露的质量边界。
 
-22. [Qwen3-Next official blog](https://qwen.ai/blog?from=research.latest-advancements-list&id=4074cca80393150c248e508aa62983f9cb7d27cd)  
+22. [Qwen3-Next official blog](https://qwen.ai/blog?from=research.latest-advancements-list&id=4074cca80393150c248e508aa62983f9cb7d27cd)\
     重点：Gated DeltaNet + Gated Attention Hybrid。
 
-23. [DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)  
+23. [DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)\
     重点：作为非 recurrent 对照，理解 MLA + DSA 的 token-level sparse exact memory。
 
-24. [GLM-5 official repository](https://github.com/zai-org/GLM-5)  
+24. [GLM-5 official repository](https://github.com/zai-org/GLM-5)\
     重点：DSA → IndexShare → Sparse + Linear Hybrid 的公开路线。
 
-25. [DART: Decoded Attention over Recurrent States](https://arxiv.org/abs/2608.02032)  
+25. [DART: Decoded Attention over Recurrent States](https://arxiv.org/abs/2608.02032)\
     重点：从 Mamba-2 chunk states 构造可检索 state memory。
 
-26. [FLA: Flash Linear Attention](https://github.com/fla-org/flash-linear-attention)  
+26. [FLA: Flash Linear Attention](https://github.com/fla-org/flash-linear-attention)\
     重点：GLA/DeltaNet/GDN/KDA/RetNet/Mamba 等训练与推理 kernel、varlen 和 CP 支持。
 
-27. [FlashKDA](https://github.com/MoonshotAI/FlashKDA)  
+27. [FlashKDA](https://github.com/MoonshotAI/FlashKDA)\
     重点：CUTLASS KDA kernel、state layout、gate/beta/QK normalization 融合与 backend dispatch。
 
 ---
+
+
+<a id="read-53"></a>
 
 ## 51. 与下一专题的接口
 

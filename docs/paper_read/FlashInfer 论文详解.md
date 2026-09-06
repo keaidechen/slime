@@ -1,12 +1,85 @@
 # FlashInfer 论文详解：从 Attention、KV Cache 到 LLM 推理 Runtime
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [0. 一句话理解 FlashInfer](#read-01)
+- [1. 先把 FlashInfer 放进历史技术演化里](#read-02)
+- [2. LLM 推理为什么天然分成 Prefill 和 Decode？](#read-03)
+- [2.1 Prefill](#read-04)
+- [2.2 Decode](#read-05)
+- [3. KV Cache 是什么？](#read-06)
+- [4. 为什么 KV Cache 最终会变成一个 AI Infra 问题？](#read-07)
+- [5. PagedAttention：把操作系统分页思想搬到 KV Cache](#read-08)
+- [6. RadixAttention：不只是分页，还要复用 Prefix](#read-09)
+- [7. FlashInfer 的第一个核心问题：这些 KV Layout 能不能统一？](#read-10)
+- [8. 什么是 Block Sparse？](#read-11)
+- [9. 为什么这是 FlashInfer 很重要的“大统一”思想？](#read-12)
+- [10. Composable Formats：共享 Prefix 为什么可以减少 HBM Traffic？](#read-13)
+- [11. GPU Memory Hierarchy：为什么“少读 HBM”这么重要？](#read-14)
+- [12. FlashAttention 和 FlashInfer 到底是什么关系？](#read-15)
+- [FlashAttention](#read-16)
+- [FlashInfer](#read-17)
+- [13. Operational Intensity：为什么 Decode 特别难优化？](#read-18)
+- [14. GQA 为什么不仅能减少 KV Cache，还能提高推理效率？](#read-19)
+- [15. FlashInfer 的第二个统一：统一 Attention 变体](#read-20)
+- [16. 例子：RoPE Fusion 为什么有效？](#read-21)
+- [17. 可定制性和高性能天然有冲突](#read-22)
+- [18. JIT 是什么？](#read-23)
+- [19. 为什么 FlashInfer 要支持不同 Tile Size？](#read-24)
+- [20. FlashInfer 的第三个核心问题：Dynamic Workload](#read-25)
+- [21. SM 和 CTA 是什么？](#read-26)
+- [22. FlashInfer 怎么做动态负载均衡？](#read-27)
+- [23. Attention 可以随便把 KV 切开吗？](#read-28)
+- [24. Attention Composition：为什么拆开以后还能正确合并？](#read-29)
+- [25. 为什么 Attention State 是 FlashInfer 很深的一个 Insight？](#read-30)
+- [26. 又出现一个系统矛盾：Dynamic Scheduling vs CUDA Graph](#read-31)
+- [27. FlashInfer 的解决方式：Plan / Run 分离](#read-32)
+- [Plan](#read-33)
+- [Run](#read-34)
+- [28. FlashInfer 的整体架构](#read-35)
+- [29. 用“三个统一”记住整篇 FlashInfer](#read-36)
+- [统一一：统一数据表示](#read-37)
+- [统一二：统一 Attention 计算变体](#read-38)
+- [统一三：统一 Runtime 调度](#read-39)
+- [30. FlashInfer 和 vLLM / SGLang 不是同一层](#read-40)
+- [31. FlashInfer 和 Triton 又是什么关系？](#read-41)
+- [CUDA](#read-42)
+- [Triton](#read-43)
+- [FlashInfer](#read-44)
+- [32. 怎么正确看 FlashInfer 论文实验？](#read-45)
+- [33. 为什么 Skewed Workload 尤其重要？](#read-46)
+- [34. FlashInfer 最深层的思想：把 Attention 重新定义成系统问题](#read-47)
+- [35. AI Infra 视角最值得记住的 6 个 Insight](#read-48)
+- [Insight 1：Training Attention 与 Serving Attention 是不同 workload](#read-49)
+- [Insight 2：KV Cache 已经演化成 Memory Management System](#read-50)
+- [Insight 3：FlashAttention 和 FlashInfer 解决的是不同层次的问题](#read-51)
+- [Insight 4：Block Sparse 是强大的统一 abstraction](#read-52)
+- [Insight 5：Attention State 让 Attention 可以像 Reduction 一样拆分](#read-53)
+- [Insight 6：一个经典系统矛盾](#read-54)
+- [36. 用“GPU 超级工厂”比喻整篇论文](#read-55)
+- [37. 后续学习建议](#read-56)
+- [38. 最终总结](#read-57)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：A4 看 backend 的职责与 KV layout；A8 深入 ragged/page/kernel 调度。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：FlashInfer 是面向大语言模型推理的高性能算子与 Attention runtime（运行时）库；LLM = **Large Language Model（大语言模型）**；MLSys = **Conference on Machine Learning and Systems（机器学习与系统会议）**；AI Infra = **Artificial Intelligence Infrastructure（人工智能基础设施）**；KV Cache = **Key-Value Cache（键值缓存）**；JIT = **Just-In-Time（即时编译）**；GPU = **Graphics Processing Unit（图形处理器）**；MHA = **Multi-Head Attention（多头注意力）**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**；MLA = **Multi-head Latent Attention（多头潜在注意力）**；IR = **Intermediate Representation（中间表示）**；DSL = **Domain-Specific Language（领域专用语言）**；OI = **Operational Intensity（运算强度，单位数据搬运对应的计算量）**；LSE = **Log-Sum-Exp（对指数和取对数的数值稳定统计量）**；BSR = **Block Sparse Row（块稀疏行存储格式）**；TTFT = **Time To First Token（首 Token 延迟）**；ITL = **Inter-Token Latency（相邻 Token 延迟）**。本文中的 **kernel** 是 GPU 核函数，**scheduler** 是调度器，**block sparse** 是块稀疏表示，**composable format** 指可组合的数据布局抽象。 另外：CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；HBM = **High Bandwidth Memory（高带宽内存）**；SM = **Streaming Multiprocessor（流式多处理器）**；CTA = **Cooperative Thread Array（协作线程阵列）**；CPU = **Central Processing Unit（中央处理器）**；FP16 = **16-bit Floating Point（16 位浮点格式）**；I/O = **Input/Output（输入/输出）**；API = **Application Programming Interface（应用程序编程接口）**；LLVM 是现代编译器基础设施项目（名称历史上源于 **Low Level Virtual Machine**）；ARM 是主流精简指令集 CPU 架构；MLC = **Machine Learning Compilation（机器学习编译）**。
 
-> 论文：**FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving**  
-> 会议：**MLSys 2025**  
+> 论文：**FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving**\
+> 会议：**MLSys 2025**\
 > 阅读目标：从零 AI Infra 背景理解 FlashInfer 为什么出现、它解决什么问题，以及它与 FlashAttention、PagedAttention、vLLM、SGLang 的关系。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 0. 一句话理解 FlashInfer
 
@@ -21,6 +94,9 @@ FlashInfer 不是一种新的 Attention 数学公式，也不是新的模型结�
 FlashInfer 希望给这些复杂 Attention workload 建立一个统一的执行层。
 
 ---
+
+
+<a id="read-02"></a>
 
 # 1. 先把 FlashInfer 放进历史技术演化里
 
@@ -64,6 +140,9 @@ KV Cache 数据结构
 
 ---
 
+
+<a id="read-03"></a>
+
 # 2. LLM 推理为什么天然分成 Prefill 和 Decode？
 
 假设用户输入：
@@ -71,6 +150,9 @@ KV Cache 数据结构
 > 中国最大的城市是什么？
 
 LLM 推理基本分成两个阶段。
+
+
+<a id="read-04"></a>
 
 ## 2.1 Prefill
 
@@ -86,9 +168,9 @@ V: 1000 tokens
 
 Attention 中的大致矩阵乘法是：
 
-\[
+$$
 Q_{1000\times d}K^T_{d\times1000}
-\]
+$$
 
 这是比较大的矩阵乘法。
 
@@ -99,6 +181,9 @@ GPU 很擅长这种大规模并行计算，因此 Prefill 往往更加 **compute
 > 数据已经给到了 GPU，但算术单元本身不够快，计算吞吐成为瓶颈。
 
 ---
+
+
+<a id="read-05"></a>
 
 ## 2.2 Decode
 
@@ -120,9 +205,9 @@ KV: 1002
 
 于是核心计算更像：
 
-\[
+$$
 1\times d \quad \times \quad d\times N
-\]
+$$
 
 这里每次只处理 1 个 Query token，但为了算 Attention，需要读取之前很长的一整段 K/V。
 
@@ -138,13 +223,16 @@ KV: 1002
 
 ---
 
+
+<a id="read-06"></a>
+
 # 3. KV Cache 是什么？
 
 Transformer Attention 的经典公式：
 
-\[
+$$
 Attention(Q,K,V)=softmax\left(\frac{QK^T}{\sqrt d}\right)V
-\]
+$$
 
 假设模型已经生成：
 
@@ -191,6 +279,9 @@ K_F V_F
 
 ---
 
+
+<a id="read-07"></a>
+
 # 4. 为什么 KV Cache 最终会变成一个 AI Infra 问题？
 
 单请求时 KV Cache 很简单。
@@ -221,6 +312,9 @@ K_F V_F
 这直接推动了 PagedAttention 的出现。
 
 ---
+
+
+<a id="read-08"></a>
 
 # 5. PagedAttention：把操作系统分页思想搬到 KV Cache
 
@@ -274,6 +368,9 @@ GPU KV block 99
 
 ---
 
+
+<a id="read-09"></a>
+
 # 6. RadixAttention：不只是分页，还要复用 Prefix
 
 很多真实请求会共享长 Prefix。
@@ -313,6 +410,9 @@ SGLang 的 RadixAttention 会把公共 prefix 放进 radix tree：
 
 ---
 
+
+<a id="read-10"></a>
+
 # 7. FlashInfer 的第一个核心问题：这些 KV Layout 能不能统一？
 
 FlashInfer 给出的答案是：
@@ -347,17 +447,20 @@ Query C █ █ █ . █ █
 
 ---
 
+
+<a id="read-11"></a>
+
 # 8. 什么是 Block Sparse？
 
 普通 Sparse Matrix 可能按单个元素记录：
 
-\[
+$$
 A=\begin{bmatrix}
 1&0&0&3\\
 0&0&4&0\\
 0&5&0&0
 \end{bmatrix}
-\]
+$$
 
 只记录非零元素的位置。
 
@@ -374,6 +477,9 @@ Block Sparse 则不是一个元素一个元素处理，而是一块一块：
 这更适合 GPU，因为 GPU 天然喜欢 tile/block 粒度的数据和计算。
 
 ---
+
+
+<a id="read-12"></a>
 
 # 9. 为什么这是 FlashInfer 很重要的“大统一”思想？
 
@@ -410,6 +516,9 @@ x86 / ARM / GPU
 所以可以把 FlashInfer 的 block-sparse abstraction 理解成一种 Attention 世界里的“中间表示”。
 
 ---
+
+
+<a id="read-13"></a>
 
 # 10. Composable Formats：共享 Prefix 为什么可以减少 HBM Traffic？
 
@@ -472,6 +581,9 @@ Q3 ┘
 
 ---
 
+
+<a id="read-14"></a>
+
 # 11. GPU Memory Hierarchy：为什么“少读 HBM”这么重要？
 
 可以先用一个粗略层级理解：
@@ -508,9 +620,15 @@ FlashInfer 的 Composable Format 进一步把问题扩展到：
 
 ---
 
+
+<a id="read-15"></a>
+
 # 12. FlashAttention 和 FlashInfer 到底是什么关系？
 
 最容易混淆的地方就在这里。
+
+
+<a id="read-16"></a>
 
 ## FlashAttention
 
@@ -524,6 +642,9 @@ FlashInfer 的 Composable Format 进一步把问题扩展到：
 - online softmax；
 - 减少 HBM IO；
 - kernel fusion。
+
+
+<a id="read-17"></a>
 
 ## FlashInfer
 
@@ -550,24 +671,27 @@ FlashInfer 并不是推翻 FlashAttention，而是在 serving 场景继续向上
 
 ---
 
+
+<a id="read-18"></a>
+
 # 13. Operational Intensity：为什么 Decode 特别难优化？
 
 论文给出：
 
-\[
+$$
 OI=O\left(\frac{1}{1/l_{qo}+1/l_{kv}}\right)
-\]
+$$
 
 其中：
 
-- \(l_{qo}\)：Query / Output sequence length
-- \(l_{kv}\)：KV sequence length
+- $l_{qo}$：Query / Output sequence length
+- $l_{kv}$：KV sequence length
 
 Operational Intensity 可以粗略理解成：
 
-\[
+$$
 OI=\frac{\text{计算量 FLOPs}}{\text{内存访问 Bytes}}
-\]
+$$
 
 即：
 
@@ -593,29 +717,29 @@ OI=\frac{\text{计算量 FLOPs}}{\text{内存访问 Bytes}}
 
 LLM serving 中通常：
 
-\[
+$$
 l_{qo}\le l_{kv}
-\]
+$$
 
 所以可近似为：
 
-\[
+$$
 OI=O(l_{qo})
-\]
+$$
 
 Prefill 时：
 
-\[
+$$
 l_{qo}\gg1
-\]
+$$
 
 OI 高。
 
 Decode 时：
 
-\[
+$$
 l_{qo}=1
-\]
+$$
 
 OI 很低。
 
@@ -624,6 +748,9 @@ OI 很低。
 > **Decode 是典型的 KV memory-traffic dominated workload。**
 
 ---
+
+
+<a id="read-19"></a>
 
 # 14. GQA 为什么不仅能减少 KV Cache，还能提高推理效率？
 
@@ -647,9 +774,9 @@ GQA 可能是：
 
 定义：
 
-\[
+$$
 g=\frac{H_q}{H_{kv}}
-\]
+$$
 
 那么一份 KV 可以被更多 Query head reuse。
 
@@ -663,13 +790,16 @@ g=\frac{H_q}{H_{kv}}
 
 ---
 
+
+<a id="read-20"></a>
+
 # 15. FlashInfer 的第二个统一：统一 Attention 变体
 
 今天的 Attention 已经不是只有：
 
-\[
+$$
 softmax(QK^T)V
-\]
+$$
 
 而是存在很多变体：
 
@@ -717,6 +847,9 @@ OutputTransform
 
 ---
 
+
+<a id="read-21"></a>
+
 # 16. 例子：RoPE Fusion 为什么有效？
 
 普通实现可能是：
@@ -756,6 +889,9 @@ FlashInfer 可以把它融合：
 
 ---
 
+
+<a id="read-22"></a>
+
 # 17. 可定制性和高性能天然有冲突
 
 越通用的代码通常越容易出现：
@@ -791,6 +927,9 @@ Performance
 FlashInfer 的解决方式之一是 **JIT Compilation**。
 
 ---
+
+
+<a id="read-23"></a>
 
 # 18. JIT 是什么？
 
@@ -834,6 +973,9 @@ JIT specialization
 这是很典型的 compiler/runtime 思维。
 
 ---
+
+
+<a id="read-24"></a>
 
 # 19. 为什么 FlashInfer 要支持不同 Tile Size？
 
@@ -889,6 +1031,9 @@ Large Q Tile
 
 ---
 
+
+<a id="read-25"></a>
+
 # 20. FlashInfer 的第三个核心问题：Dynamic Workload
 
 真实 serving 中不同请求的 KV 长度差异非常大：
@@ -924,6 +1069,9 @@ CTA2 █████████████████████████
 这就是 **Load Imbalance**。
 
 ---
+
+
+<a id="read-26"></a>
 
 # 21. SM 和 CTA 是什么？
 
@@ -965,6 +1113,9 @@ CTA3 ██
 
 ---
 
+
+<a id="read-27"></a>
+
 # 22. FlashInfer 怎么做动态负载均衡？
 
 核心思想：
@@ -1003,9 +1154,9 @@ A B C1 C2 C3 C4 C5 D
 
 论文使用类似：
 
-\[
+$$
 cost(l_q,l_{kv})=\alpha l_q+\beta l_{kv}
-\]
+$$
 
 的 cost model 估算任务大小，再做动态调度。
 
@@ -1029,6 +1180,9 @@ SM3 ██████████
 
 ---
 
+
+<a id="read-28"></a>
+
 # 23. Attention 可以随便把 KV 切开吗？
 
 这是一个非常关键的问题。
@@ -1049,19 +1203,19 @@ KV2 = ████████
 
 分别计算：
 
-\[
+$$
 Attention(Q,KV_1)
-\]
+$$
 
-\[
+$$
 Attention(Q,KV_2)
-\]
+$$
 
 最终输出不能简单做：
 
-\[
+$$
 O=O_1+O_2
-\]
+$$
 
 因为 Attention 中间存在 Softmax normalization。
 
@@ -1069,51 +1223,54 @@ O=O_1+O_2
 
 ---
 
+
+<a id="read-29"></a>
+
 # 24. Attention Composition：为什么拆开以后还能正确合并？
 
-对于一部分 KV 集合 \(I\)，定义：
+对于一部分 KV 集合 $I$，定义：
 
-\[
+$$
 Z_I=\sum_{i\in I}e^{qk_i}
-\]
+$$
 
 以及：
 
-\[
+$$
 O_I=\frac{\sum_{i\in I}e^{qk_i}v_i}{Z_I}
-\]
+$$
 
 类似地得到：
 
-\[
+$$
 O_J,Z_J
-\]
+$$
 
 那么完整 Attention 可以写成：
 
-\[
+$$
 O_{I\cup J}=\frac{Z_IO_I+Z_JO_J}{Z_I+Z_J}
-\]
+$$
 
 因此每一个 KV chunk 不只返回局部 Output，还返回 normalization information。
 
 论文用：
 
-\[
+$$
 LSE=\log Z
-\]
+$$
 
 并定义：
 
-\[
+$$
 AttentionState=(O,LSE)
-\]
+$$
 
 然后定义合并操作：
 
-\[
+$$
 State(I\cup J)=State(I)\oplus State(J)
-\]
+$$
 
 这个合并操作具有：
 
@@ -1122,19 +1279,22 @@ State(I\cup J)=State(I)\oplus State(J)
 
 即：
 
-\[
+$$
 (A\oplus B)\oplus C=A\oplus(B\oplus C)
-\]
+$$
 
 以及：
 
-\[
+$$
 A\oplus B=B\oplus A
-\]
+$$
 
 这意味着 Attention 可以像 Reduction 一样被拆分和重新组合。
 
 ---
+
+
+<a id="read-30"></a>
 
 # 25. 为什么 Attention State 是 FlashInfer 很深的一个 Insight？
 
@@ -1172,6 +1332,9 @@ Reduce
 所以 **Attention State 的可组合性，是 FlashInfer dynamic load balancing 的数学基础。**
 
 ---
+
+
+<a id="read-31"></a>
 
 # 26. 又出现一个系统矛盾：Dynamic Scheduling vs CUDA Graph
 
@@ -1237,6 +1400,9 @@ Static CUDA Graph
 
 ---
 
+
+<a id="read-32"></a>
+
 # 27. FlashInfer 的解决方式：Plan / Run 分离
 
 FlashInfer 把运行过程拆成：
@@ -1259,6 +1425,9 @@ FlashInfer 把运行过程拆成：
       CUDA Graph replay
 ```
 
+
+<a id="read-33"></a>
+
 ## Plan
 
 动态计算：
@@ -1269,6 +1438,9 @@ CTA1 做什么
 CTA2 做什么
 ...
 ```
+
+
+<a id="read-34"></a>
 
 ## Run
 
@@ -1289,11 +1461,14 @@ fixed kernel structure
 
 可以把它记成一个非常经典的系统设计模式：
 
-\[
+$$
 \boxed{Dynamic\ Plan + Static\ Run}
-\]
+$$
 
 ---
+
+
+<a id="read-35"></a>
 
 # 28. FlashInfer 的整体架构
 
@@ -1332,7 +1507,13 @@ fixed kernel structure
 
 ---
 
+
+<a id="read-36"></a>
+
 # 29. 用“三个统一”记住整篇 FlashInfer
+
+
+<a id="read-37"></a>
 
 ## 统一一：统一数据表示
 
@@ -1345,9 +1526,12 @@ Tree Attention
 
 统一成：
 
-\[
+$$
 \boxed{Block\ Sparse\ Representation}
-\]
+$$
+
+
+<a id="read-38"></a>
 
 ## 统一二：统一 Attention 计算变体
 
@@ -1361,9 +1545,12 @@ FlashSigmoid
 
 统一到：
 
-\[
+$$
 \boxed{Attention\ Template + JIT}
-\]
+$$
+
+
+<a id="read-39"></a>
 
 ## 统一三：统一 Runtime 调度
 
@@ -1375,19 +1562,22 @@ Request C: 10000
 
 通过：
 
-\[
+$$
 \boxed{Dynamic\ Load\ Balanced\ Scheduling}
-\]
+$$
 
 同时保持：
 
-\[
+$$
 \boxed{CUDA\ Graph\ Compatibility}
-\]
+$$
 
 这三个“统一”基本就是整篇论文的主线。
 
 ---
+
+
+<a id="read-40"></a>
 
 # 30. FlashInfer 和 vLLM / SGLang 不是同一层
 
@@ -1444,9 +1634,15 @@ FlashInfer 更靠近 GPU kernel/runtime 层。
 
 ---
 
+
+<a id="read-41"></a>
+
 # 31. FlashInfer 和 Triton 又是什么关系？
 
 可以先这样理解：
+
+
+<a id="read-42"></a>
 
 ## CUDA
 
@@ -1454,11 +1650,17 @@ FlashInfer 更靠近 GPU kernel/runtime 层。
 - 开发难；
 - 可以做非常强的 hardware-specific optimization。
 
+
+<a id="read-43"></a>
+
 ## Triton
 
 - 更高级的 GPU DSL；
 - 更容易写高性能 kernel；
 - 编译器自动完成部分底层工作。
+
+
+<a id="read-44"></a>
 
 ## FlashInfer
 
@@ -1469,6 +1671,9 @@ FlashInfer 更靠近 GPU kernel/runtime 层。
 它可以使用高度特化的 CUDA implementation，同时配合 template、JIT 和 runtime scheduler。
 
 ---
+
+
+<a id="read-45"></a>
 
 # 32. 怎么正确看 FlashInfer 论文实验？
 
@@ -1488,6 +1693,9 @@ FlashInfer 的实验价值主要是证明：
 - irregular production workload 下统一 abstraction 不只是代码优雅，也可以带来实际性能收益。
 
 ---
+
+
+<a id="read-46"></a>
 
 # 33. 为什么 Skewed Workload 尤其重要？
 
@@ -1515,17 +1723,20 @@ FlashInfer 很多设计就是围绕这个现实展开的。
 
 ---
 
+
+<a id="read-47"></a>
+
 # 34. FlashInfer 最深层的思想：把 Attention 重新定义成系统问题
 
 在模型论文中，我们可能只写：
 
-\[
+$$
 Y=f(Q,K,V)
-\]
+$$
 
 但在真实 serving 系统里，它更像：
 
-\[
+$$
 Y=f(
 Q,
 KV,
@@ -1536,7 +1747,7 @@ Attention\ Variant,
 Hardware,
 Schedule
 )
-\]
+$$
 
 FlashInfer 分别为这些复杂性建立 abstraction：
 
@@ -1564,19 +1775,28 @@ CUDA Graph
 
 ---
 
+
+<a id="read-48"></a>
+
 # 35. AI Infra 视角最值得记住的 6 个 Insight
+
+
+<a id="read-49"></a>
 
 ## Insight 1：Training Attention 与 Serving Attention 是不同 workload
 
 特别是 Decode：
 
-\[
+$$
 Q=1,\quad KV\gg1
-\]
+$$
 
 高度 memory-bound。
 
 ---
+
+
+<a id="read-50"></a>
 
 ## Insight 2：KV Cache 已经演化成 Memory Management System
 
@@ -1591,6 +1811,9 @@ KV 怎么复用
 
 ---
 
+
+<a id="read-51"></a>
+
 ## Insight 3：FlashAttention 和 FlashInfer 解决的是不同层次的问题
 
 ```text
@@ -1602,6 +1825,9 @@ How to execute heterogeneous serving Attention efficiently
 ```
 
 ---
+
+
+<a id="read-52"></a>
 
 ## Insight 4：Block Sparse 是强大的统一 abstraction
 
@@ -1622,11 +1848,14 @@ Query × KV Connectivity
 
 ---
 
+
+<a id="read-53"></a>
+
 ## Insight 5：Attention State 让 Attention 可以像 Reduction 一样拆分
 
-\[
+$$
 AttentionState=(O,LSE)
-\]
+$$
 
 支持：
 
@@ -1640,29 +1869,35 @@ Split
 
 ---
 
+
+<a id="read-54"></a>
+
 ## Insight 6：一个经典系统矛盾
 
-\[
+$$
 Dynamic\ Workload
-\]
+$$
 
 vs
 
-\[
+$$
 Static\ CUDA\ Graph
-\]
+$$
 
 FlashInfer 通过：
 
-\[
+$$
 \boxed{Dynamic\ Plan + Static\ Run}
-\]
+$$
 
 解决。
 
 以后阅读 compiler、runtime、sparse computation 等系统论文时，还会经常遇到类似思想。
 
 ---
+
+
+<a id="read-55"></a>
 
 # 36. 用“GPU 超级工厂”比喻整篇论文
 
@@ -1710,13 +1945,16 @@ FlashInfer 进来说：
 
 ---
 
+
+<a id="read-56"></a>
+
 # 37. 后续学习建议
 
 建议按照下面顺序继续深入：
 
 1. **Figure 2：Page Table 为什么可以转换成 BSR / Block Sparse？**
 2. **Figure 3：Composable Format 为什么真的能降低 HBM Traffic？**
-3. **Attention State \((O,LSE)\) 为什么能够数学上正确 merge？**
+3. **Attention State $(O,LSE)$ 为什么能够数学上正确 merge？**
 4. **FlashInfer Scheduler 怎么把 KV Chunk 映射到 CTA / SM？**
 5. **Plan / Run 为什么能同时兼容 Dynamic Scheduling 和 CUDA Graph？**
 6. **再进入 FlashInfer 源码，看 BatchDecodeWithPagedKVCacheWrapper 等 API 如何映射到论文 abstraction。**
@@ -1724,6 +1962,9 @@ FlashInfer 进来说：
 把前五个问题吃透以后，再进入源码，就不会只看到 CUDA template、workspace、indptr、indices、scheduler metadata，而能够知道每个数据结构背后到底在解决什么系统问题。
 
 ---
+
+
+<a id="read-57"></a>
 
 # 38. 最终总结
 
@@ -1733,16 +1974,16 @@ FlashInfer 进来说：
 
 如果进一步压缩成三个关键词：
 
-\[
+$$
 \boxed{Block\ Sparse}
-\]
+$$
 
-\[
+$$
 \boxed{JIT\ Attention\ Template}
-\]
+$$
 
-\[
+$$
 \boxed{Dynamic\ Load\ Balancing}
-\]
+$$
 
 这三件事串起来，就是理解 FlashInfer 这篇论文最重要的主线。

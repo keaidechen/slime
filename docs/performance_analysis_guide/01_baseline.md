@@ -1,6 +1,34 @@
 # 01 建立环境清单与可信基线
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 建立实验目录](#read-01)
+- [2. 记录软件与硬件环境](#read-02)
+- [3. 保存完整启动命令和 workload](#read-03)
+- [4. 先用 nvidia-smi 看“生命体征”](#read-04)
+- [5. 同时观察 CPU、内存、磁盘和网络](#read-05)
+- [6. 正确做 warmup 和测量](#read-06)
+- [7. 基线结果必须包含正确性](#read-07)
+- [8. A/B 实验模板](#read-08)
+- [9. 什么时候进入下一层工具](#read-09)
+- [本章完成标准](#read-10)
+- [参考资料](#read-11)
+- [理解 GPU 遥测而不误读利用率](#read-12)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A1 · 必修。
+> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：固定环境、workload、重复统计；建立 H20 环境记录。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章完成后，你会得到一个不依赖高级 profiler 的基线包：环境、启动命令、workload、端到端指标和系统资源曲线。后续所有分析都从它开始。
+
+
+<a id="read-01"></a>
 
 ## 1. 建立实验目录
 
@@ -19,6 +47,9 @@ printf '%s\n' "${ARTIFACT_DIR}"
 df -h "${ARTIFACT_DIR}"
 df -i "${ARTIFACT_DIR}"
 ```
+
+
+<a id="read-02"></a>
 
 ## 2. 记录软件与硬件环境
 
@@ -56,6 +87,9 @@ numactl -H 2>&1 | tee "${ARTIFACT_DIR}/numa.txt"
 
 如果使用容器，还要记录镜像 digest，而不只是可变 tag。
 
+
+<a id="read-03"></a>
+
 ## 3. 保存完整启动命令和 workload
 
 至少保存：
@@ -77,6 +111,9 @@ env | sort | rg '^(CUDA|NCCL|TORCH|PYTORCH|OMP|MKL|RAY|SGLANG|VLLM)_' \
 ```
 
 不要把完整 `env` 直接上传到 issue 或 PR。
+
+
+<a id="read-04"></a>
 
 ## 4. 先用 nvidia-smi 看“生命体征”
 
@@ -130,6 +167,9 @@ dcgmi profile --resume
 
 参见 [DCGM Profiling](https://docs.nvidia.com/datacenter/dcgm/latest/learn/modules/profiling.html)。
 
+
+<a id="read-05"></a>
+
 ## 5. 同时观察 CPU、内存、磁盘和网络
 
 GPU 空闲不一定是 GPU 问题。
@@ -172,6 +212,9 @@ ip -s link
 
 多节点构建和 `busbw` 解释见 [NVIDIA nccl-tests](https://github.com/NVIDIA/nccl-tests)。
 
+
+<a id="read-06"></a>
+
 ## 6. 正确做 warmup 和测量
 
 第一次运行常包含：
@@ -197,6 +240,9 @@ ip -s link
 
 长训练不必人为跑 100 步，但应剔除启动阶段，并覆盖正常的数据长度变化。
 
+
+<a id="read-07"></a>
+
 ## 7. 基线结果必须包含正确性
 
 性能优化可能让结果变错。每个基线保存：
@@ -208,6 +254,9 @@ ip -s link
 - 若改精度，保存误差阈值和比较方式。
 
 只有“更快且正确”才是有效优化。
+
+
+<a id="read-08"></a>
 
 ## 8. A/B 实验模板
 
@@ -226,6 +275,9 @@ ip -s link
 回滚：恢复原并行配置
 ```
 
+
+<a id="read-09"></a>
+
 ## 9. 什么时候进入下一层工具
 
 完成本章后，先根据基线分流：
@@ -238,6 +290,9 @@ ip -s link
 | OOM/显存上涨 | 第 2 章 Memory Snapshot |
 | 推理随并发崩坏 | 第 5 章容量 sweep、scheduler/KV 指标 |
 | Slime 训练在等待 | 第 6 章先分析 rollout |
+
+
+<a id="read-10"></a>
 
 ## 本章完成标准
 
@@ -252,6 +307,9 @@ ip -s link
 - 正确性结果；
 - 下一步的一个明确假设。
 
+
+<a id="read-11"></a>
+
 ## 参考资料
 
 - [nvidia-smi 官方文档](https://docs.nvidia.com/deploy/nvidia-smi/index.html)
@@ -259,3 +317,100 @@ ip -s link
 - [NVIDIA nccl-tests](https://github.com/NVIDIA/nccl-tests)
 - [PyTorch Benchmark Recipe](https://docs.pytorch.org/tutorials/recipes/recipes/benchmark.html)
 - [PyTorch Performance Tuning Guide](https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html)
+
+
+<a id="concept-02"></a>
+
+
+<a id="read-12"></a>
+
+## 理解 GPU 遥测而不误读利用率
+
+#### 1. 三种常被混淆的“利用率”
+
+| 名称 | 大致含义 | 能说明什么 | 不能说明什么 |
+|---|---|---|---|
+| GPU utilization | 采样窗口内是否有 kernel 在执行 | GPU 是否经常完全空闲 | kernel 是否高效、Tensor Core 是否吃满 |
+| SM activity/throughput | Streaming Multiprocessor（SM，流式多处理器）的活跃/吞吐 | 执行单元忙碌程度 | 单独不能区分有用工作与低效指令 |
+| MFU | 有效模型 FLOPs / 理论峰值 FLOPs | 端到端模型计算效率 | 依赖 FLOPs 口径，跨报告未必可比 |
+
+因此出现 `GPU-Util=100%`、Model FLOPs Utilization（MFU，模型浮点运算利用率）仅 25% 并不矛盾：GPU 一直在执行，但可能在运行小 kernel、访存等待、低效 layout conversion 或通信 kernel。
+
+
+#### 3. DCGM：集群级 GPU 遥测
+
+DCGM（Data Center GPU Manager，数据中心 GPU 管理器）提供 health、diagnostics、statistics 与 profiling metrics。`dcgm-exporter` 把指标暴露给 Prometheus。Exporter 从 hostengine 已 watch 的缓存样本读取，所以 Prometheus scrape interval 不是硬件 counter 的真实采样周期。
+
+推荐四组指标：
+
+| 组 | 例子 | 用途 |
+|---|---|---|
+| 资源 | GPU/显存利用率、framebuffer used | 容量与空闲检测 |
+| 计算/内存 | SM active、Tensor active、DRAM active、PCIe/NVLink throughput | 判断工作类型和链路压力 |
+| 热与功耗 | clocks、power、temperature、throttle reason | 发现降频和散热问题 |
+| 可靠性 | Xid、ECC、NVLink error、row remap | 发现硬件/driver 异常 |
+
+ECC = Error-Correcting Code（纠错码）。Xid 是 NVIDIA driver 报告的 GPU 错误事件编号；它是定位入口，不应脱离具体编号和上下文笼统解释。
+
+
+#### 4. 从“低功耗”推断时要谨慎
+
+可能路径：
+
+```mermaid
+flowchart TD
+    A["功耗低"] --> B{"GPU timeline 是否空闲？"}
+    B -->|是| C["查 CPU / data / sync / communication"]
+    B -->|否| D{"Memory throughput 高吗？"}
+    D -->|高| E["可能 memory-bound"]
+    D -->|低| F["查小 kernel、依赖、低 occupancy 或降频"]
+```
+
+Memory-bound kernel 可能占满时间线但功耗低于大型 Tensor Core GEMM。反过来，高功耗也不证明模型有效吞吐高。
+
+
+#### 5. 时钟与降频
+
+记录 SM clock、memory clock、power limit、temperature 与 throttle reason。性能突然出现平台期时：
+
+- power cap：功耗达到上限，时钟被限制；
+- thermal throttle：温度导致降频；
+- application clock/locked clock 配置不一致；
+- 不同节点 GPU firmware 或 power policy 不一致。
+
+锁定时钟适合可控 benchmark，但会改变能效和生产策略，必须记录并在实验后恢复。新 GPU 上具体命令与支持状态应以对应 `nvidia-smi` 手册为准。
+
+
+#### 6. 采样粒度与 aliasing
+
+若每 100 ms 有一次 5 ms 空洞，而遥测每 1 秒采一个均值，它可能完全不可见。这叫 aliasing（混叠）：采样频率不足导致真实周期被误表示。
+
+长期监控用秒级 metric；短时 bubble 用微秒级 timeline。不要试图用 Prometheus 替代 profiler，也不要把 30 秒 trace 当线上容量趋势。
+
+
+#### 7. Counter 资源冲突
+
+DCGM profiling metrics、Nsight Systems GPU metrics 与 Nsight Compute 可能使用同一组硬件性能计数器。若 profiler 提示 counter unavailable，可用：
+
+```bash
+dcgmi profile --pause
+# 运行短时 profiler
+dcgmi profile --resume
+```
+
+暂停会影响集群遥测，必须在维护窗口执行并确保恢复。不同 GPU 支持的 field group 不同，可先用 `dcgmi profile --list` 查询。
+
+
+#### 8. 一个最小 dashboard
+
+每 GPU 至少同时画：
+
+1. job/rank identity 与 GPU UUID；
+2. GPU、SM、Tensor、DRAM activity；
+3. framebuffer used 与 allocator-reported memory；
+4. PCIe、NVLink、NIC throughput；
+5. power、clock、temperature、throttle；
+6. Xid/ECC/NVLink error；
+7. 应用 step/TTFT/queue/KV-cache 指标。
+
+只有硬件图没有应用 phase，常常只能看到“慢了”，看不到“哪一步慢了”。

@@ -1,5 +1,49 @@
 # 01｜FlashAttention 论文详解：为什么少算不一定更快，而少搬数据可以更快
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先给出整篇论文的一句话结论](#read-01)
+- [2. 为什么 2022 年需要 FlashAttention？](#read-02)
+- [3. 标准 Attention 在 GPU 上到底做了什么？](#read-03)
+- [4. 一个反直觉问题：为什么“多算一点”反而可能更快？](#read-04)
+- [算法 A](#read-05)
+- [算法 B](#read-06)
+- [5. FlashAttention 的核心：不要 materialize 完整 S 和 P](#read-07)
+- [6. Tiling 到底怎样应用到 Attention？](#read-08)
+- [7. 先理解数值稳定 Softmax](#read-09)
+- [8. Online Softmax：为什么可以一块一块算？](#read-10)
+- [9. Output 为什么也可以在线更新？](#read-11)
+- [10. 为什么 FlashAttention 可以只用 O(N) 额外内存？](#read-12)
+- [11. Backward 为什么要 Recomputation？](#read-13)
+- [12. FlashAttention 真正优化的是 IO Complexity](#read-14)
+- [13. 为什么一个 fused kernel 很重要？](#read-15)
+- [14. 一个很容易误解的问题：FlashAttention 是不是“稀疏 Attention”？](#read-16)
+- [15. 为什么这篇论文在 AI Infra 历史上特别重要？](#read-17)
+- [16. FlashAttention → FlashAttention-2：下一步瓶颈发生了什么变化？](#read-18)
+- [17. FlashAttention 与训练 / 推理是什么关系？](#read-19)
+- [18. FlashAttention 与 PagedAttention 有什么区别？](#read-20)
+- [FlashAttention 问](#read-21)
+- [PagedAttention 问](#read-22)
+- [19. FlashAttention 与 FlashInfer 的关系](#read-23)
+- [20. 论文实验应该怎样读？](#read-24)
+- [21. FlashAttention 的局限是什么？](#read-25)
+- [1. 没有消除 dense Attention 的 O(N²) FLOPs](#read-26)
+- [2. 高性能实现高度依赖硬件](#read-27)
+- [3. 不同 workload 的最优 kernel 不一样](#read-28)
+- [22. 最重要的 7 个 Insight](#read-29)
+- [23. 一句话串到下一篇论文](#read-30)
+- [主要参考资料](#read-31)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：先读 IO 与 tiling 的动机、精确 attention；online softmax 推导专项二读。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：I/O = **Input/Output（输入/输出）**，本文主要指 GPU 显存读写和数据搬运；HBM = **High Bandwidth Memory（高带宽内存，GPU 主显存）**；SRAM = **Static Random-Access Memory（静态随机存取存储器，本文主要指片上高速存储）**；GPU = **Graphics Processing Unit（图形处理器）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；FLOP = **Floating-Point Operation（一次浮点运算）**，FLOPs 表示浮点运算次数。本文中的 **kernel** 是 GPU 核函数，**tiling** 是分块计算，**online softmax** 是“在线/增量 Softmax”，即扫描分块时维护全局归一化统计量，**IO-aware** 指“显式把数据搬运成本纳入算法设计”。 另外：LLM = **Large Language Model（大语言模型）**；AI = **Artificial Intelligence（人工智能）**；CPU = **Central Processing Unit（中央处理器）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；Q/K/V = **Query/Key/Value（查询/键/值向量）**；KV = **Key/Value（键/值）**；FA1/FA2 = **FlashAttention-1/2**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**；ICLR = **International Conference on Learning Representations（国际学习表征会议）**。
 
 > 论文：**FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness**
@@ -12,15 +56,18 @@
 
 ---
 
+
+<a id="read-01"></a>
+
 # 1. 先给出整篇论文的一句话结论
 
 FlashAttention 没有发明新的 Attention，也没有近似 Attention。
 
 它计算的仍然是：
 
-\[
+$$
 O=softmax\left(\frac{QK^T}{\sqrt d}\right)V
-\]
+$$
 
 真正改变的是：
 
@@ -36,23 +83,26 @@ O=softmax\left(\frac{QK^T}{\sqrt d}\right)V
 
 ---
 
+
+<a id="read-02"></a>
+
 # 2. 为什么 2022 年需要 FlashAttention？
 
-Transformer 自 2017 年提出后，标准 Attention 的一个显著问题是序列长度 \(N\) 增大时：
+Transformer 自 2017 年提出后，标准 Attention 的一个显著问题是序列长度 $N$ 增大时：
 
-\[
+$$
 QK^T\in\mathbb{R}^{N\times N}
-\]
+$$
 
 因此 Attention score matrix 大小是：
 
-\[
+$$
 O(N^2)
-\]
+$$
 
 过去很自然的研究方向是：
 
-> 能不能不计算完整 \(N\times N\) Attention？
+> 能不能不计算完整 $N\times N$ Attention？
 
 于是出现大量：
 
@@ -63,11 +113,11 @@ O(N^2)
 
 这些方法试图降低：
 
-\[
+$$
 FLOPs
-\]
+$$
 
-甚至把理论复杂度从 \(O(N^2)\) 降下来。
+甚至把理论复杂度从 $O(N^2)$ 降下来。
 
 但是 FlashAttention 论文指出一个关键问题：
 
@@ -85,33 +135,36 @@ FLOPs
 
 ---
 
+
+<a id="read-03"></a>
+
 # 3. 标准 Attention 在 GPU 上到底做了什么？
 
 先忽略 scaling 和 mask：
 
-\[
+$$
 S=QK^T
-\]
+$$
 
-\[
+$$
 P=softmax(S)
-\]
+$$
 
-\[
+$$
 O=PV
-\]
+$$
 
 其中：
 
-\[
+$$
 Q,K,V\in\mathbb{R}^{N\times d}
-\]
+$$
 
 而：
 
-\[
+$$
 S,P\in\mathbb{R}^{N\times N}
-\]
+$$
 
 传统实现可以粗略理解成三个阶段：
 
@@ -147,11 +200,11 @@ S: N × N
 P: N × N
 ```
 
-例如 \(N=8192\)：
+例如 $N=8192$：
 
-\[
+$$
 8192^2\approx67\text{ million elements}
-\]
+$$
 
 一个 head 就已经产生非常大的中间矩阵。
 
@@ -168,9 +221,15 @@ P: N × N
 
 ---
 
+
+<a id="read-04"></a>
+
 # 4. 一个反直觉问题：为什么“多算一点”反而可能更快？
 
 假设有两个算法。
+
+
+<a id="read-05"></a>
 
 ## 算法 A
 
@@ -178,6 +237,9 @@ P: N × N
 100 次计算
 1000 次 HBM 数据搬运
 ```
+
+
+<a id="read-06"></a>
 
 ## 算法 B
 
@@ -207,6 +269,9 @@ FlashAttention 在 backward 中会选择 **recomputation（重计算）**：
 这是整篇论文非常重要的系统思想。
 
 ---
+
+
+<a id="read-07"></a>
 
 # 5. FlashAttention 的核心：不要 materialize 完整 S 和 P
 
@@ -244,11 +309,14 @@ V block
 
 最终：
 
-> **完整的 \(N\times N\) S/P 从来不需要驻留在 HBM。**
+> **完整的 $N\times N$ S/P 从来不需要驻留在 HBM。**
 
 这就是最大变化。
 
 ---
+
+
+<a id="read-08"></a>
 
 # 6. Tiling 到底怎样应用到 Attention？
 
@@ -260,13 +328,13 @@ K = [K1, K2, K3, ...]
 V = [V1, V2, V3, ...]
 ```
 
-每个 \(Q_i,K_j,V_j\) 都是能放进 SRAM 的 block。
+每个 $Q_i,K_j,V_j$ 都是能放进 SRAM 的 block。
 
 计算一个 tile：
 
-\[
+$$
 S_{ij}=Q_iK_j^T
-\]
+$$
 
 然后在片上完成：
 
@@ -291,9 +359,9 @@ S_ij
 
 也就是说：
 
-\[
+$$
 softmax(x_i)=\frac{e^{x_i}}{\sum_j e^{x_j}}
-\]
+$$
 
 分母需要整行所有元素。
 
@@ -303,38 +371,44 @@ FlashAttention 能成立的数学关键，就是 **Online Softmax**。
 
 ---
 
+
+<a id="read-09"></a>
+
 # 7. 先理解数值稳定 Softmax
 
 通常不会直接计算：
 
-\[
+$$
 softmax(x_i)=\frac{e^{x_i}}{\sum_j e^{x_j}}
-\]
+$$
 
-因为 \(e^{x_i}\) 可能 overflow。
+因为 $e^{x_i}$ 可能 overflow。
 
 更稳定的形式是：
 
-\[
+$$
 m=\max_i x_i
-\]
+$$
 
-\[
+$$
 softmax(x_i)=\frac{e^{x_i-m}}{\sum_j e^{x_j-m}}
-\]
+$$
 
 因此，要描述一行 softmax 的状态，我们可以记录：
 
-1. 当前最大值 \(m\)；
-2. 当前归一化和 \(l\)。
+1. 当前最大值 $m$；
+2. 当前归一化和 $l$。
 
 其中：
 
-\[
+$$
 l=\sum_j e^{x_j-m}
-\]
+$$
 
 ---
+
+
+<a id="read-10"></a>
 
 # 8. Online Softmax：为什么可以一块一块算？
 
@@ -346,28 +420,28 @@ x = [x^(1), x^(2)]
 
 第一块的最大值：
 
-\[
+$$
 m_1=\max(x^{(1)})
-\]
+$$
 
 第二块到来后：
 
-\[
+$$
 m_2=\max(m_1,\max(x^{(2)}))
-\]
+$$
 
-旧的 exponential sum 原本基于 \(m_1\)：
+旧的 exponential sum 原本基于 $m_1$：
 
-\[
+$$
 l_1=\sum e^{x^{(1)}-m_1}
-\]
+$$
 
-现在最大值变成 \(m_2\)，旧状态可以重新缩放：
+现在最大值变成 $m_2$，旧状态可以重新缩放：
 
-\[
+$$
 l_2=e^{m_1-m_2}l_1+
 \sum e^{x^{(2)}-m_2}
-\]
+$$
 
 于是每处理一个新 block，只要保留：
 
@@ -387,13 +461,16 @@ running output O
 
 ---
 
+
+<a id="read-11"></a>
+
 # 9. Output 为什么也可以在线更新？
 
 Attention 最终输出：
 
-\[
+$$
 O=PV
-\]
+$$
 
 当 softmax normalization 随着新 block 更新时，之前算过的 partial output 也需要重新 rescale。
 
@@ -421,27 +498,30 @@ O_i : 当前累计输出
 
 此时：
 
-\[
+$$
 O_i
-\]
+$$
 
 就是精确 Attention 的输出。
 
 ---
 
+
+<a id="read-12"></a>
+
 # 10. 为什么 FlashAttention 可以只用 O(N) 额外内存？
 
 标准实现要保存：
 
-\[
+$$
 S,P\in\mathbb{R}^{N\times N}
-\]
+$$
 
 所以额外内存：
 
-\[
+$$
 O(N^2)
-\]
+$$
 
 FlashAttention 主要保存：
 
@@ -451,27 +531,30 @@ m: N
 l: N
 ```
 
-而不会保存完整 \(N\times N\) score / probability matrix。
+而不会保存完整 $N\times N$ score / probability matrix。
 
 因此论文证明算法额外内存可以做到：
 
-\[
+$$
 O(N)
-\]
+$$
 
 这里“线性内存”并不意味着 Attention FLOPs 变成线性。
 
 它的计算复杂度仍然主要是：
 
-\[
+$$
 O(N^2d)
-\]
+$$
 
 这是非常容易混淆的一点：
 
-> **FlashAttention 没有把 dense Attention 的理论计算复杂度从 \(N^2\) 变掉；它主要改变的是 memory complexity / IO complexity 和实际 wall-clock。**
+> **FlashAttention 没有把 dense Attention 的理论计算复杂度从 $N^2$ 变掉；它主要改变的是 memory complexity / IO complexity 和实际 wall-clock。**
 
 ---
+
+
+<a id="read-13"></a>
 
 # 11. Backward 为什么要 Recomputation？
 
@@ -490,9 +573,9 @@ P = softmax(S)
 
 但这意味着巨大的：
 
-\[
+$$
 O(N^2)
-\]
+$$
 
 显存占用和 HBM traffic。
 
@@ -525,33 +608,36 @@ backward:
 
 ---
 
+
+<a id="read-14"></a>
+
 # 12. FlashAttention 真正优化的是 IO Complexity
 
 标准 Attention 对 HBM 的读写包含大型：
 
-\[
+$$
 N\times N
-\]
+$$
 
 中间矩阵。
 
 论文分析标准 Attention 的 HBM accesses 为：
 
-\[
+$$
 \Theta(Nd+N^2)
-\]
+$$
 
-而 FlashAttention 在 SRAM 大小为 \(M\) 时，可以将 HBM access 降到大致：
+而 FlashAttention 在 SRAM 大小为 $M$ 时，可以将 HBM access 降到大致：
 
-\[
+$$
 \Theta\left(\frac{N^2d^2}{M}\right)
-\]
+$$
 
 这里最重要的不是背公式，而是理解变量：
 
-- \(N\)：sequence length；
-- \(d\)：head dimension；
-- \(M\)：可利用的片上 SRAM 大小。
+- $N$：sequence length；
+- $d$：head dimension；
+- $M$：可利用的片上 SRAM 大小。
 
 SRAM 越能容纳合适 block：
 
@@ -560,6 +646,9 @@ SRAM 越能容纳合适 block：
 论文在典型设置中展示了 FlashAttention 可以把 HBM R/W 大幅降低，并由此显著减少 attention runtime。
 
 ---
+
+
+<a id="read-15"></a>
 
 # 13. 为什么一个 fused kernel 很重要？
 
@@ -593,21 +682,24 @@ FlashAttention 把这些核心步骤组织到一个 fused CUDA kernel 中。
 
 所以 FlashAttention 可以看成两个思想叠加：
 
-\[
+$$
 \boxed{Tiling + Online\ Softmax}
-\]
+$$
 
 让数学上可以分块；
 
 再加上：
 
-\[
+$$
 \boxed{Kernel\ Fusion + Recomputation}
-\]
+$$
 
 让硬件数据流真正高效。
 
 ---
+
+
+<a id="read-16"></a>
 
 # 14. 一个很容易误解的问题：FlashAttention 是不是“稀疏 Attention”？
 
@@ -630,6 +722,9 @@ FlashAttention 主体是：
 这是论文的 extension，而不是 FlashAttention 本身的定义。
 
 ---
+
+
+<a id="read-17"></a>
 
 # 15. 为什么这篇论文在 AI Infra 历史上特别重要？
 
@@ -664,6 +759,9 @@ Attention 太慢
 这个思想后来在 LLM Infra 里越来越重要。
 
 ---
+
+
+<a id="read-18"></a>
 
 # 16. FlashAttention → FlashAttention-2：下一步瓶颈发生了什么变化？
 
@@ -706,6 +804,9 @@ FlashAttention-3
 
 ---
 
+
+<a id="read-19"></a>
+
 # 17. FlashAttention 与训练 / 推理是什么关系？
 
 原始 FlashAttention 论文非常重视训练，因为 backward 的显存问题和 recomputation 是其重要贡献。
@@ -738,9 +839,15 @@ Decode 的形状和训练中的大矩阵 attention 差别非常大。
 
 ---
 
+
+<a id="read-20"></a>
+
 # 18. FlashAttention 与 PagedAttention 有什么区别？
 
 这是非常重要的层次区分。
+
+
+<a id="read-21"></a>
 
 ## FlashAttention 问
 
@@ -751,6 +858,9 @@ Decode 的形状和训练中的大矩阵 attention 差别非常大。
 ```text
 GPU kernel execution
 ```
+
+
+<a id="read-22"></a>
 
 ## PagedAttention 问
 
@@ -773,6 +883,9 @@ Attention kernel 再按照这个 layout 读取 KV 并计算
 两者是相邻但不同的系统层次。
 
 ---
+
+
+<a id="read-23"></a>
 
 # 19. FlashAttention 与 FlashInfer 的关系
 
@@ -802,13 +915,16 @@ FlashInfer 并不是简单“比 FlashAttention 更快的下一代”。
 
 ---
 
+
+<a id="read-24"></a>
+
 # 20. 论文实验应该怎样读？
 
 原始论文报告：
 
 - 在 GPT-2 Attention microbenchmark 中，相比 PyTorch baseline 的 attention computation 可获得很大的 kernel-level speedup；
 - BERT-large、GPT-2 和 Long Range Arena 的训练 wall-clock 均有明显改善；
-- 由于不保存 \(N\times N\) 中间矩阵，memory footprint 从关于 sequence length 的 quadratic 降到 linear 量级；
+- 由于不保存 $N\times N$ 中间矩阵，memory footprint 从关于 sequence length 的 quadratic 降到 linear 量级；
 - 能够训练更长 sequence length。
 
 但是系统论文的数字不要背成永久常数。
@@ -821,15 +937,27 @@ FlashInfer 并不是简单“比 FlashAttention 更快的下一代”。
 
 ---
 
+
+<a id="read-25"></a>
+
 # 21. FlashAttention 的局限是什么？
+
+
+<a id="read-26"></a>
 
 ## 1. 没有消除 dense Attention 的 O(N²) FLOPs
 
 长上下文无限增长时，计算量仍然存在。
 
+
+<a id="read-27"></a>
+
 ## 2. 高性能实现高度依赖硬件
 
 tile size、register、shared memory、Tensor Core、warp partition 都与 GPU 架构强相关。
+
+
+<a id="read-28"></a>
 
 ## 3. 不同 workload 的最优 kernel 不一样
 
@@ -839,9 +967,12 @@ tile size、register、shared memory、Tensor Core、warp partition 都与 GPU �
 
 ---
 
+
+<a id="read-29"></a>
+
 # 22. 最重要的 7 个 Insight
 
-1. **Attention 慢不只因为 \(O(N^2)\) FLOPs，还因为 \(N\times N\) 中间矩阵导致巨大 HBM IO。**
+1. **Attention 慢不只因为 $O(N^2)$ FLOPs，还因为 $N\times N$ 中间矩阵导致巨大 HBM IO。**
 2. **FLOPs 少不等于 wall-clock 快。**
 3. **FlashAttention 是 exact attention，不改变模型数学语义。**
 4. **Tiling + Online Softmax 是“能正确分块计算”的数学基础。**
@@ -851,15 +982,18 @@ tile size、register、shared memory、Tensor Core、warp partition 都与 GPU �
 
 ---
 
+
+<a id="read-30"></a>
+
 # 23. 一句话串到下一篇论文
 
 FlashAttention 解决以后，Attention kernel 本身已经高效很多。
 
 但是 LLM 从“训练”走向“在线自回归 serving”以后，系统出现了新的巨大对象：
 
-\[
+$$
 \boxed{KV\ Cache}
-\]
+$$
 
 它会：
 
@@ -879,6 +1013,9 @@ FlashAttention 解决以后，Attention kernel 本身已经高效很多。
 这就是下一篇 **PagedAttention / vLLM**。
 
 ---
+
+
+<a id="read-31"></a>
 
 ## 主要参考资料
 

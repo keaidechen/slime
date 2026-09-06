@@ -1,5 +1,24 @@
 # 6.1 Pipeline 架构、服务接口与动态批处理
 
+<!-- learning-position -->
+> **学习定位**：A8 · 参考。
+> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：Diffusion 请求和 pipeline 与 LLM 调度对比。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：用一次图像请求对比文本生成
+
+文本 decode 往往每次推进一个 token；扩散采样则在若干去噪步中反复更新 latent，并可能前后连接文本编码器、VAE 或其他组件。因此 LLM 的 KV/page 调度直觉不能直接当作扩散主循环。
+
+先列输入分辨率、batch、采样步数、编码器和输出解码，分别记录每阶段 shape 和驻留状态。动态 batching 还要判断不同请求的步数、尺寸与条件是否可兼容。
+
+这是一条保留的专项路线。完成标准：画出一条最小 pipeline，并说明哪个组件是当前关键路径；不要求先于 RL 文本主线学习。
+
+## 机制与实现
+
 ## 1. 与 LLM Runtime 的根本差异
 
 LLM decode 每步产生 token 并增长 KV；Diffusion 在 timestep 上反复更新 latent，再解码为图像或视频。
@@ -42,4 +61,3 @@ Diffusion 请求的资源权重由分辨率、帧数、steps 和组件共同决�
 - `sglang/docs_new/docs/sglang-diffusion/installation.mdx`
 - `sglang/docs_new/docs/sglang-diffusion/api/`
 - `sglang/docs_new/docs/sglang-diffusion/dynamic_batching.mdx`
-

@@ -1,8 +1,34 @@
 # tau-bench + Qwen3-4B 训练全流程详解
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [0. 一句话总结与总体架构](#read-01)
+- [1. 启动脚本逐段解读（`run_qwen3_4B.sh`）](#read-02)
+- [2. 入口：`train.py` 主循环](#read-03)
+- [3. Rollout 阶段（生成 / 采样）](#read-04)
+- [4. 训练阶段（Megatron actor 更新）](#read-05)
+- [5. 与 sglang 训练引擎的对接（重点）](#read-06)
+- [6. 一条数据的完整旅程（字段演变）](#read-07)
+- [7. 关键参数对照表（本脚本实际取值）](#read-08)
+- [8. 关键函数速查（不常见函数）](#read-09)
+- [附：常见疑问](#read-10)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A5/A7 · 专项。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：基础闭环后再做多轮 Agent；不作为第一次跑 RL 的默认实验。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 本文档基于 `examples/tau-bench/run_qwen3_4B.sh` 与 slime 源码逐行梳理，重点讲解 **rollout（生成/采样）**、**训练（Megatron actor 更新）** 以及 **与 sglang 训练引擎的对接** 三部分，并顺着代码逻辑盘点其余模块。最后用「一条数据」贯穿所有阶段，展示其字段如何逐步变化。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 0. 一句话总结与总体架构
 
@@ -56,6 +82,9 @@ rollout_id:
 > **时序要点**：权重同步 `actor_model.update_weights()` 发生在**本次迭代末尾、下一次 `generate` 之前**（步骤 7），所以它推送的就是步骤 3 刚训练出来的最新权重。下一轮 rollout 用这组新权重，不存在额外滞后一拍。脚本未启用真正的参数 `--use-rollout-logprobs`（见 §4.4），本例由训练侧在更新前重算旧策略 logprob。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 1. 启动脚本逐段解读（`run_qwen3_4B.sh`）
 
@@ -172,6 +201,9 @@ ray job submit ... -- python3 train.py \
 
 ---
 
+
+<a id="read-03"></a>
+
 ## 2. 入口：`train.py` 主循环
 
 `train.py` 的 `train(args)` 是真正的主循环（不是某个 `async_run_actor`）：
@@ -215,6 +247,9 @@ for rollout_id in range(args.start_rollout_id, args.num_rollout):
 > 注意：`rollout_manager.generate` **只返回** `rollout_data_ref`（一个 `list[Box]`，每个 DP rank 一个 `ray.put` 出来的引用），`metrics` 在 `generate` 内部通过 `_log_rollout_data` 打印，并不作为返回值。`train.py` 也只接收这一个值。这与早期 slime 版本「返回 `(ref, metrics)` 元组」的写法不同。
 
 ---
+
+
+<a id="read-04"></a>
 
 ## 3. Rollout 阶段（生成 / 采样）
 
@@ -412,6 +447,9 @@ def _split_train_data_by_dp(self, data):
 
 ---
 
+
+<a id="read-05"></a>
+
 ## 4. 训练阶段（Megatron actor 更新）
 
 ### 4.1 `MegatronTrainRayActor` 初始化
@@ -556,6 +594,9 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean, ...):
 
 ---
 
+
+<a id="read-06"></a>
+
 ## 5. 与 sglang 训练引擎的对接（重点）
 
 ### 5.1 启动与注册
@@ -652,6 +693,9 @@ eval(rollout_id)
 - `onload_kv` 放在权重覆盖之后，最后恢复 KV pool。下一次 `generate` 开始时，SGLang 同时具备新权重和可用 KV cache。
 
 ---
+
+
+<a id="read-07"></a>
 
 ## 6. 一条数据的完整旅程（字段演变）
 
@@ -767,6 +811,9 @@ ref = ray.put(rollout_data)         # 默认 object-store transport；值仍保�
 
 ---
 
+
+<a id="read-08"></a>
+
 ## 7. 关键参数对照表（本脚本实际取值）
 
 | 参数 | 取值 | 含义 / 备注 |
@@ -797,6 +844,9 @@ ref = ray.put(rollout_data)         # 默认 object-store transport；值仍保�
 | `--save-interval` | 20 | 每 20 次迭代保存 |
 
 ---
+
+
+<a id="read-09"></a>
 
 ## 8. 关键函数速查（不常见函数）
 
@@ -829,6 +879,9 @@ ref = ray.put(rollout_data)         # 默认 object-store transport；值仍保�
 | `_start_router` | `slime/ray/rollout.py` | 启动 sglang_router 并把 `sglang_router_ip/port` 写回 `args`(agent 连接用) |
 
 ---
+
+
+<a id="read-10"></a>
 
 ## 附：常见疑问
 

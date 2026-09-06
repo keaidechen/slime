@@ -1,6 +1,36 @@
 # 4.2 模型支持、多模态与 Transformers Fallback
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先看结论：模型支持是六层能力矩阵](#read-01)
+- [2. 模型类如何注册](#read-02)
+- [3. 原生实现和 Transformers fallback 如何决策](#read-03)
+- [4. 如何确认实际加载的是哪个模型类](#read-04)
+- [5. 一个新原生模型需要满足哪些 runtime contract](#read-05)
+- [6. 多模态请求在 tokenizer 侧发生什么](#read-06)
+- [7. 为什么媒体会改变 prompt token 数](#read-07)
+- [8. 多模态状态如何进入 GPU batch](#read-08)
+- [9. 多模态性能应该拆成哪几段](#read-09)
+- [10. Generation、Embedding、Rerank、Classify 怎样分流](#read-10)
+- [11. 新模型接入的验证顺序](#read-11)
+- [12. 常见问题定位](#read-12)
+- [13. 源码定位](#read-13)
+- [14. 与其他章节的边界](#read-14)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：模型注册、加载、fallback 契约先读；多模态分支专项。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 “SGLang 支持这个模型吗”不是一个布尔问题。至少要分别回答：配置能否识别、最终选择哪个实现、权重能否映射、forward 是否适配 runtime、任务输出是否正确，以及高级优化是否兼容。本章沿着这些决策点阅读代码。
+
+
+<a id="read-01"></a>
 
 ## 1. 先看结论：模型支持是六层能力矩阵
 
@@ -14,6 +44,9 @@
 | Optimization | TP、quantization、CUDA Graph、LoRA、speculative 是否可用 | 能跑但慢，或高级路径崩溃 |
 
 模型被 Hugging Face `AutoModel` 加载成功，只覆盖其中一部分。
+
+
+<a id="read-02"></a>
 
 ## 2. 模型类如何注册
 
@@ -44,6 +77,9 @@ ModelRegistry.register("sglang.srt.models")
 环境变量 `SGLANG_EXTERNAL_MODEL_PACKAGE` 指向的 package 会在内置模型后注册，并使用 `overwrite=True`。这允许外部实现覆盖同名 architecture，也意味着部署环境中的 registry 结果可能与纯仓库源码不同。
 
 记录可复现配置时，应包含该环境变量和外部 package 版本。
+
+
+<a id="read-03"></a>
 
 ## 3. 原生实现和 Transformers fallback 如何决策
 
@@ -88,6 +124,9 @@ flowchart TD
 
 显式强制代表用户接受风险，不代表 runtime 自动获得兼容性。上线前仍需验证 attention/KV、batch、长上下文和数值结果。
 
+
+<a id="read-04"></a>
+
 ## 4. 如何确认实际加载的是哪个模型类
 
 建议按以下顺序查：
@@ -100,6 +139,9 @@ flowchart TD
 6. 查看模型类自己的 `load_weights()` 和 forward 方法。
 
 只依据文件名判断很容易忽略量化特例、fallback 或外部覆盖。
+
+
+<a id="read-05"></a>
 
 ## 5. 一个新原生模型需要满足哪些 runtime contract
 
@@ -135,6 +177,9 @@ flowchart TD
 - pooling 或 logits processor 所需输出。
 
 验证不能只跑一条 prefill。至少覆盖 prefill、单步 decode、continuous batch 中请求加入/退出、prefix cache hit 和 context boundary。
+
+
+<a id="read-06"></a>
 
 ## 6. 多模态请求在 tokenizer 侧发生什么
 
@@ -193,6 +238,9 @@ flowchart TD
 - 每个媒体 item 的位置、grid/size/hash 等元数据；
 - 某些模型需要的 token type 或 M-RoPE positions。
 
+
+<a id="read-07"></a>
+
 ## 7. 为什么媒体会改变 prompt token 数
 
 消息模板中的 `<image>` 一类占位符通常只是逻辑标记。processor 根据图片尺寸、patch 数、frame 数等把它扩成模型需要的 placeholder token 区间，并生成相应 features。
@@ -208,6 +256,9 @@ flowchart TD
 context length、prefill 成本和 KV 占用必须按最终扩展长度估算。
 
 Scheduler 的 `_try_apply_padded_mm_input_ids()` 会在 processor 已给出 `padded_input_ids` 且长度条件吻合时替换对应 token 区间；`_maybe_compute_mrope_positions()` 为缺失的多模态位置编码补算。之后才进入普通 admission/context 检查。
+
+
+<a id="read-08"></a>
 
 ## 8. 多模态状态如何进入 GPU batch
 
@@ -226,6 +277,9 @@ feature path:  pixel/audio/video/precomputed features + item metadata
 ### 8.1 多模态缓存 key 为什么需要媒体 hash
 
 只有文本 token 不能区分“同一 prompt、不同图片”。`GenerateReqInput.mm_hashes` 和 processor 生成的媒体 hash/pad value 用于让 prefix/cache key 纳入媒体内容。外部 router 若自己计算 hash，需要与 SGLang 产生相同的 namespace/key 语义，否则会路由到错误前缀或降低命中率。
+
+
+<a id="read-09"></a>
 
 ## 9. 多模态性能应该拆成哪几段
 
@@ -250,6 +304,9 @@ media fetch
 - LLM decode 慢才更接近文本模型常规路径。
 
 多模态 encoder 的 DP/CUDA Graph 与 LLM continuous batching 是不同优化面，应分别验证 shape 集合、batching 和 graph capture 命中。
+
+
+<a id="read-10"></a>
 
 ## 10. Generation、Embedding、Rerank、Classify 怎样分流
 
@@ -279,6 +336,9 @@ Rerank 至少有三条路径：
 
 所以 rerank 的有效 batch size 通常是 document 数，而不是 API request 数。
 
+
+<a id="read-11"></a>
+
 ## 11. 新模型接入的验证顺序
 
 建议从最小正确性逐层打开能力：
@@ -293,6 +353,9 @@ Rerank 至少有三条路径：
 8. 最后跑 serving accuracy 和真实 workload benchmark。
 
 每打开一个高级功能，只改变一个变量，避免“原生实现、量化、TP、graph 同时开启”后无法归因。
+
+
+<a id="read-12"></a>
 
 ## 12. 常见问题定位
 
@@ -311,6 +374,9 @@ Rerank 至少有三条路径：
 ### 12.4 Rerank 分数与 reference 不一致
 
 先确认走 cross-encoder 还是 decoder-only；再对齐 template、pair tokenization、`token_type_ids`、截断方向、score token/pooling 和输出归一化。
+
+
+<a id="read-13"></a>
 
 ## 13. 源码定位
 
@@ -331,6 +397,9 @@ Rerank 至少有三条路径：
 | embedding API | `srt/entrypoints/openai/serving_embedding.py` |
 | classify API | `srt/entrypoints/openai/serving_classify.py` |
 | rerank API | `srt/entrypoints/openai/serving_rerank.py` |
+
+
+<a id="read-14"></a>
 
 ## 14. 与其他章节的边界
 

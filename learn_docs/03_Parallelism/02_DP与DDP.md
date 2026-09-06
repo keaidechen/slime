@@ -1,5 +1,24 @@
 # Data Parallelism 与 DistributedDataParallel
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：梯度平均、bucket、累积/no_sync、不同 token 数的归一化。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：两卡梯度平均的成立条件
+
+单个参数 w=1，样本目标 a=[0,2,8]，每 token loss 为 (w−a)^2/2。全局 token mean 的梯度是 ((1−0)+(1−2)+(1−8))/3=−7/3。若前两枚给 rank 0、后一枚给 rank 1，平均两个 local mean 梯度会得到 (0−7)/2=−3.5，目标已经改变。
+
+这不是 DDP 通信错误，而是 local loss 的缩放与目标不一致。日志的全局 sum/count 和 backward 的梯度缩放要分别处理。完整推导和 CPU 算例见[RL 数据正确性](../00_Foundations/08_RL数据与数值正确性.md)。
+
+验收：分别用等长和不等长 local batch 手算；再加入两个 microbatch，指出累积前后除以了哪个量。下面的 no_sync 片段是执行结构示意，使用时需导入 contextlib.nullcontext 并定义实际 model/loss。
+
+## 机制与实现
+
 Data Parallelism（DP，数据并行）复制模型，把 global batch 切给不同 rank。DistributedDataParallel（DDP，分布式数据并行）是 PyTorch 的多进程实现：每个 rank 独立 forward/backward，再同步 gradient。
 
 ## 为什么梯度平均等价
@@ -88,4 +107,3 @@ DP degree 增加时：
 - [PyTorch DDP Tutorial](https://docs.pytorch.org/tutorials/intermediate/ddp_tutorial.html)
 - [PyTorch DDP Notes](https://docs.pytorch.org/docs/stable/notes/ddp.html)
 - [DDP Join Context](https://docs.pytorch.org/tutorials/advanced/generic_join.html)
-

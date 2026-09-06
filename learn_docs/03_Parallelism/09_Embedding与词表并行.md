@@ -1,5 +1,24 @@
 # Embedding 与词表并行
 
+<!-- learning-position -->
+> **学习定位**：A3/A5 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：分布式 logits/logsumexp、词表切分与全局 token loss。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：不聚合大 logits，也能求全局归一化
+
+词表切到两卡：rank 0 保存 logits [1,2]，rank 1 保存 [3,4]。稳定 softmax 先求各卡 local max，再做 MAX 得到全局 m=4；随后局部计算 sum(exp(logits−m))，再 SUM 得到全局分母。
+
+目标 token 若在 rank 1，其对应 logit 由该 owner 提供；目标 logprob 是 target_logit−m−log(global_exp_sum)。这样不必把所有 vocabulary logits 聚到每卡，但仍需要正确的规约与 autograd 路径。
+
+练习：与完整四元素 softmax 对照，核对目标 id 到 local id 的转换。shift、padding、mask 和 token mean 是另一层语义，词表并行正确不代表 RL loss 已正确。
+
+## 机制与实现
+
 Large Language Model（LLM，大语言模型）的 token embedding 与 Language Model head（LM head，语言模型输出头）形状通常为 $V\times H$，其中 $V$ 是 vocabulary size，$H$ 是 hidden size。大词表或 weight tying 下，它们可能是显存和通信的重要部分。
 
 ## Vocabulary Parallel Embedding
@@ -69,4 +88,3 @@ $$
 - [Megatron Core Vocab Parallel Cross Entropy](https://docs.nvidia.com/megatron-core/developer-guide/latest/apidocs/core/core.tensor_parallel.cross_entropy.html)
 - [Megatron Core Tensor Parallel](https://docs.nvidia.com/megatron-core/developer-guide/latest/apidocs/core/core.tensor_parallel.html)
 - [Megatron-LM](https://arxiv.org/abs/1909.08053)
-

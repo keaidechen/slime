@@ -1,5 +1,24 @@
 # 6.3 Profiling、新模型接入与正确性
 
+<!-- learning-position -->
+> **学习定位**：A8 · 参考。
+> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：Diffusion profiling 与正确性验证，后续方向使用。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：先定位阶段，再检查扩展后的结果
+
+对一次 pipeline 分别计编码、去噪迭代、解码和输出 I/O。长阶段内再进入算子/Kernel；第一次编译与稳态迭代分开统计，避免把冷启动误当持续吞吐。
+
+接入新模型后，先使用固定小输入验证 shape、dtype、状态生命周期和输出，再增加分辨率、并发与多卡。只比较一张随机生成图的肉眼观感不足以判断数值或质量正确性。
+
+验收：保存环境、输入配置、阶段 trace、参考输出/评价与回归条件。通用 profiler 步骤直接使用统一性能教材，避免另外维护一套安装命令。
+
+## 机制与实现
+
 ## 1. Profiling 路线
 
 先用阶段计时定位 text encoder、denoising、scheduler、VAE、后处理、通信或存储，再用 PyTorch Profiler 看 operator/CPU-GPU 关系，最后用 Nsight Systems 看 kernel、collective 和空洞。
@@ -41,4 +60,3 @@ Trace 只覆盖少量稳定 denoising steps，排除首次编译、加载和 war
 - `sglang/docs_new/docs/sglang-diffusion/support_new_models.mdx`
 - `sglang/docs_new/docs/sglang-diffusion/compatibility_matrix.mdx`
 - `sglang/docs_new/docs/sglang-diffusion/contributing.mdx`
-

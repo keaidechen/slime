@@ -1,5 +1,24 @@
 # Pipeline Parallelism：切 Layer、排 Micro-batch
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：GPipe/1F1B、activation 生命周期与 bubble；Zero Bubble 二读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：两个 stage、四个 microbatch 的生命周期
+
+PP 将不同层放到不同 stage。microbatch m 在 stage 0 forward 后，activation 发给 stage 1；stage 1 backward 后，把对输入 activation 的梯度发回 stage 0。参数更新需要本次更新包含的梯度都满足同步条件。
+
+先画每个 microbatch 的 F0→F1→B1→B0 依赖，再安排不同 microbatch 的工作穿插。1F1B 的 F 和 B 通常不是同一个 microbatch，不能理解成每个 stage 永远立即反向刚完成的那个前向。
+
+在 stage 等时、忽略额外通信的简化流水模型中，bubble 常随 (P−1)/M 增大，其中 P 为 stage 数、M 为 microbatch 数；实际占比和时序取决于 schedule。验收：画出 warmup、稳态、drain，数出仍需保留的 activation；不要只背 bubble 公式。
+
+## 机制与实现
+
 Pipeline Parallelism（PP，流水线并行）把模型的 layer/graph 切成 stage，各 stage 处理不同 micro-batch。它减少每卡常驻 layer 参数，但引入 activation/gradient P2P、pipeline bubble 和 stage imbalance。
 
 ## 基本数据流
@@ -72,4 +91,3 @@ Megatron Core 支持 custom pipeline layout，可表达不均匀 layer 分配和
 - [PipeDream](https://arxiv.org/abs/1806.03377)
 - [PyTorch Pipeline Parallelism 2.14](https://docs.pytorch.org/docs/stable/distributed.pipelining.html)
 - [Megatron Core Custom Pipeline Layout](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/pipeline_model_parallel_layout.html)
-

@@ -1,5 +1,12 @@
 # 2.1 Scheduler、请求状态机与连续批处理
 
+<!-- learning-position -->
+> **学习定位**：A4 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：waiting/running、token budget、prefill/decode、overlap 与请求状态。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 三个核心对象
 
 - `Req`：`srt/managers/schedule_batch.py:713`，单请求的 token、采样、KV、状态；

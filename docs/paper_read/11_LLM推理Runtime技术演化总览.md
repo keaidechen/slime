@@ -1,5 +1,46 @@
 # 11｜LLM 推理 Runtime 技术演化总览：从 FlashAttention 到 vLLM / SGLang / TensorRT-LLM
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 整条技术线先看一遍](#read-01)
+- [2. 第一条：Kernel 演化线](#read-02)
+- [FlashAttention-1](#read-03)
+- [FlashAttention-2](#read-04)
+- [FlashAttention-3](#read-05)
+- [3. 第二条：Batching / Scheduler 演化线](#read-06)
+- [Static Batching](#read-07)
+- [Orca](#read-08)
+- [4. 第三条：KV Memory 演化线](#read-09)
+- [5. 第四条：KV Reuse 演化线](#read-10)
+- [6. 第五条：Irregular Attention 演化线](#read-11)
+- [7. 第六条：Prefill / Decode 干扰演化线](#read-12)
+- [8. 现代 Runtime 到底有几层？](#read-13)
+- [9. 三种 Scheduler 不要混](#read-14)
+- [Cluster Scheduler / Router](#read-15)
+- [Engine Scheduler](#read-16)
+- [Kernel Scheduler](#read-17)
+- [10. TensorRT-LLM / vLLM / SGLang 怎么比较？](#read-18)
+- [11. 为什么现代 Runtime 越来越像操作系统？](#read-19)
+- [12. 你现在的论文学习地图](#read-20)
+- [13. 下一阶段可以继续读什么？](#read-21)
+- [A. Serving Scheduler](#read-22)
+- [B. Distributed Inference](#read-23)
+- [C. Speculative Decoding](#read-24)
+- [D. MoE Inference](#read-25)
+- [14. 最值得形成的系统思维](#read-26)
+- [15. 最终浓缩成 12 句话](#read-27)
+- [参考资料范围](#read-28)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A0/A4 · 导航。
+> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **首读/二读**：先看调度、KV、Kernel 三条线；不作为全部论文读完的要求。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；GPU = **Graphics Processing Unit（图形处理器）**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出，本文主要指数据搬运）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级矩阵乘加）**；JIT = **Just-In-Time（即时编译）**；NCCL = **NVIDIA Collective Communications Library（NVIDIA 集合通信库）**；NVSHMEM 是 NVIDIA 的 GPU 对称共享内存通信库；IB = **InfiniBand（高带宽低延迟集群网络）**；IPC = **Inter-Process Communication（进程间通信）**；SLO = **Service Level Objective（服务等级目标）**；NIXL = **NVIDIA Inference Xfer Library（NVIDIA 推理数据传输库）**；RDMA = **Remote Direct Memory Access（远程直接内存访问）**；EAGLE = **Extrapolation Algorithm for Greater Language-model Efficiency（推测解码方法族）**；MTP = **Multi-Token Prediction（多 Token 预测）**；EPLB = **Expert Parallelism Load Balancer（专家并行负载均衡器）**。本文中的 **runtime** 是运行时系统，**kernel** 是 GPU 核函数，**scheduler** 是调度器，**router** 是请求路由层，**disaggregation** 指阶段/资源池解耦。 另外：KV Cache = **Key-Value Cache（键值缓存）**；FP8 = **8-bit Floating Point（8 位浮点格式）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；OS = **Operating System（操作系统）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；CTA = **Cooperative Thread Array（协作线程阵列）**；SM = **Streaming Multiprocessor（流式多处理器）**；PD = **Prefill-Decode（预填充-解码）**；CPU = **Central Processing Unit（中央处理器）**；FA1/FA2/FA3 = **FlashAttention-1/2/3**。 另外：AI = **Artificial Intelligence（人工智能）**；MoE = **Mixture of Experts（混合专家模型）**。
 
 > 这份文档不是单篇论文，而是 `AI Infra 论文讲解/` 的阶段性总索引。
@@ -7,6 +48,9 @@
 > 目标：当你读完某个概念后，知道它是在 **GPU kernel、KV memory、engine scheduler、cluster scheduler** 中的哪一层，以及下一篇论文为什么会出现。
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 整条技术线先看一遍
 
@@ -74,7 +118,13 @@ Router + P Pool + D Pool + KV Transfer Fabric
 
 ---
 
+
+<a id="read-02"></a>
+
 # 2. 第一条：Kernel 演化线
+
+
+<a id="read-03"></a>
 
 ## FlashAttention-1
 
@@ -97,6 +147,9 @@ Tiling + Online Softmax
 > IO-aware
 
 ---
+
+
+<a id="read-04"></a>
 
 ## FlashAttention-2
 
@@ -127,6 +180,9 @@ better warp work partition
 
 ---
 
+
+<a id="read-05"></a>
+
 ## FlashAttention-3
 
 H100 新能力：
@@ -153,7 +209,13 @@ FP8
 
 ---
 
+
+<a id="read-06"></a>
+
 # 3. 第二条：Batching / Scheduler 演化线
+
+
+<a id="read-07"></a>
 
 ## Static Batching
 
@@ -166,6 +228,9 @@ FP8
 对自回归 LLM 很差，因为每个请求输出长度不同。
 
 ---
+
+
+<a id="read-08"></a>
 
 ## Orca
 
@@ -201,6 +266,9 @@ In-flight Batching
 
 ---
 
+
+<a id="read-09"></a>
+
 # 4. 第三条：KV Memory 演化线
 
 Continuous batching 之后 KV lifecycle 变得高度动态：
@@ -231,6 +299,9 @@ PagedAttention
 
 ---
 
+
+<a id="read-10"></a>
+
 # 5. 第四条：KV Reuse 演化线
 
 PagedAttention 主要回答：
@@ -260,6 +331,9 @@ RadixAttention
 > Prefix Reuse
 
 ---
+
+
+<a id="read-11"></a>
 
 # 6. 第五条：Irregular Attention 演化线
 
@@ -294,6 +368,9 @@ Dynamic scheduler
 > Unified Serving Attention Engine
 
 ---
+
+
+<a id="read-12"></a>
 
 # 7. 第六条：Prefill / Decode 干扰演化线
 
@@ -341,6 +418,9 @@ Decode GPU Pool
 
 ---
 
+
+<a id="read-13"></a>
+
 # 8. 现代 Runtime 到底有几层？
 
 建议以后永远用这张图定位概念：
@@ -381,7 +461,13 @@ Decode GPU Pool
 
 ---
 
+
+<a id="read-14"></a>
+
 # 9. 三种 Scheduler 不要混
+
+
+<a id="read-15"></a>
 
 ## Cluster Scheduler / Router
 
@@ -391,6 +477,9 @@ Decode GPU Pool
 request 去哪个 engine / 哪个 GPU pool？
 ```
 
+
+<a id="read-16"></a>
+
 ## Engine Scheduler
 
 决定：
@@ -398,6 +487,9 @@ request 去哪个 engine / 哪个 GPU pool？
 ```text
 这个 engine 下一 model iteration 算哪些 requests/tokens？
 ```
+
+
+<a id="read-17"></a>
 
 ## Kernel Scheduler
 
@@ -420,6 +512,9 @@ FlashInfer kernel scheduler
 三个都叫 scheduling，但完全不同。
 
 ---
+
+
+<a id="read-18"></a>
 
 # 10. TensorRT-LLM / vLLM / SGLang 怎么比较？
 
@@ -444,6 +539,9 @@ FlashInfer kernel scheduler
 三个项目都高速演化，具体版本、模型、GPU、batch、context、量化、spec decode 配置都可能改变结果。
 
 ---
+
+
+<a id="read-19"></a>
 
 # 11. 为什么现代 Runtime 越来越像操作系统？
 
@@ -484,6 +582,9 @@ OS / distributed systems / computer architecture
 
 ---
 
+
+<a id="read-20"></a>
+
 # 12. 你现在的论文学习地图
 
 推荐按下面顺序：
@@ -520,9 +621,15 @@ FlashInfer
 
 ---
 
+
+<a id="read-21"></a>
+
 # 13. 下一阶段可以继续读什么？
 
 完成这一组以后，建议分成四个方向。
+
+
+<a id="read-22"></a>
 
 ## A. Serving Scheduler
 
@@ -531,6 +638,9 @@ FlashInfer
 - DeepSpeed-FastGen / SplitFuse 类工作
 - modern SLO-aware schedulers
 
+
+<a id="read-23"></a>
+
 ## B. Distributed Inference
 
 - Splitwise
@@ -538,12 +648,18 @@ FlashInfer
 - Dynamo / disaggregated serving
 - KV transfer / NIXL / RDMA
 
+
+<a id="read-24"></a>
+
 ## C. Speculative Decoding
 
 - Speculative Decoding 基础论文
 - Medusa
 - EAGLE / EAGLE-2 / EAGLE-3
 - MTP
+
+
+<a id="read-25"></a>
 
 ## D. MoE Inference
 
@@ -554,6 +670,9 @@ FlashInfer
 - wide-EP
 
 ---
+
+
+<a id="read-26"></a>
 
 # 14. 最值得形成的系统思维
 
@@ -584,6 +703,9 @@ FlashInfer
 
 ---
 
+
+<a id="read-27"></a>
+
 # 15. 最终浓缩成 12 句话
 
 1. **FlashAttention-1：少搬 HBM。**
@@ -600,6 +722,9 @@ FlashInfer
 12. **现代推理系统的核心，已经是 Compute + Memory + Scheduling + Network 的联合优化。**
 
 ---
+
+
+<a id="read-28"></a>
 
 ## 参考资料范围
 

@@ -1,5 +1,29 @@
 # 生态、安装、首次训练与数据管线
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：环境、数据、第一次 step；明确预训练示例与 RL backend 的关系。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：第一次训练只走最小闭环
+
+先选择仓库已有的小模型与最小可行配置，记录源码版本、模型/tokenizer、数据格式和并行度。首次运行只确认能完成初始化、一个 forward/backward、optimizer update 与保存，不同时打开所有优化选项。
+
+| 阶段 | 要看到的证据 | 常见前置错误 |
+|---|---|---|
+| 数据准备 | 样本数、tokenizer 与索引匹配 | 路径存在但格式或 vocab 不符 |
+| 分布式初始化 | 所有 rank 都打印 group/设备身份 | 只检查 rank 0 |
+| 首个 update | loss、grad norm、有效 token、step 递增 | 把仅 forward 当作完成训练 |
+| 保存与接续 | 恢复后 step、LR、数据位置一致 | 只看模型能加载 |
+
+正式源码调用在下一篇训练主线中跟踪。实验启动参数以本快照 parser 与已有配置为准，不把教程的示意参数当作跨版本通用命令。
+
+## 机制与实现
+
 ## 1. 先分清三个项目
 
 `Megatron Core` 提供 Transformer 组件、并行状态、pipeline schedule、分布式 optimizer/checkpoint 等库能力；`Megatron-LM` 提供参数解析、训练循环、数据集和模型入口；`Megatron Bridge` 负责外部模型格式转换。排错时先判断问题属于库层、应用层还是转换层。

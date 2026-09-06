@@ -1,5 +1,12 @@
 # CUDA 算子库、CUTLASS 与 CuTe
 
+<!-- learning-position -->
+> **学习定位**：A8 · 分层必修。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：先区分 CUDA/cuBLAS/CUTLASS 的职责；CuTe layout 和模板实现按热点深入。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 ## 1. 不要把 CUDA、cuBLAS、CUTLASS 当成同一层
 
 | 名称 | 全称与定位 | 你交付什么 | 主要控制权 |
@@ -125,3 +132,163 @@ PyTorch 2.14 的 NVGEMM 把 CuTe DSL 生成的 CUTLASS Kernel 带进 Inductor，
 - [cuBLAS Documentation](https://docs.nvidia.com/cuda/cublas/)
 - [PyTorch 2.14 Release](https://pytorch.org/blog/pytorch-2-14-release-blog/)
 
+
+
+<a id="notebook-07-01"></a>
+
+## 07.1｜先建立软件栈：CUDA、cuBLAS、CUTLASS、Triton 分别是什么？
+
+
+先看一张总图：
+
+```text
+                         上层 Framework
+                  PyTorch / Transformer Engine
+                            │
+                 dispatch / compile / autotune
+                            │
+          ┌─────────────────┼──────────────────┐
+          │                 │                  │
+       cuBLAS/Lt         CUTLASS            Triton
+      成熟数学库       C++ Kernel模板库      Kernel DSL/Compiler
+          │                 │                  │
+          │                 │            TTIR/TTGIR/LLVM
+          │                 │                  │
+          └─────────────────┼──────────────────┘
+                            │
+                       PTX / cubin
+                            │
+                           SASS
+                            │
+                            ▼
+                           GPU
+```
+
+#### CUDA：平台与编程/运行时基础
+
+CUDA 不是“一个 GEMM 库”，而是一整套 NVIDIA GPU 计算平台，包括：
+
+- CUDA C++ 编程模型；
+- CUDA Runtime API；
+- CUDA Driver API；
+- 编译工具链；
+- 各类数学与通信库所依赖的底层运行环境。
+
+#### cuBLAS：NVIDIA 已经帮你优化好的 BLAS 数学库
+
+BLAS = **Basic Linear Algebra Subprograms（基础线性代数子程序）**。
+
+cuBLAS 是 NVIDIA 针对 GPU 提供的高性能 BLAS 实现。最典型的工作就是矩阵乘：
+
+```text
+A[M,K] @ B[K,N] → C[M,N]
+```
+
+使用者主要表达“我要做什么 GEMM”，而真正的 tile size、Tensor Core 指令、pipeline、memory layout 等大量底层细节由 NVIDIA 的库实现与 heuristic 处理。
+
+#### cuBLASLt：更灵活、以 GEMM 为中心的新接口
+
+`Lt` 可以先理解成更现代、更灵活的 GEMM API。相比传统 cuBLAS，它更方便描述：
+
+- input/output layout；
+- dtype / compute dtype；
+- workspace；
+- algorithm heuristic；
+- bias / activation 等 epilogue；
+- 新的低精度与 Grouped GEMM 能力。
+
+所以可以粗略理解：
+
+```text
+cuBLAS：
+“帮我做 GEMM。”
+
+cuBLASLt：
+“帮我做这个具体 layout/dtype/epilogue/workspace 约束下的 GEMM，
+并从可用 algorithm 中帮我挑合适实现。”
+```
+
+#### CUTLASS：不是 CUDA 的下一层，而是构建高性能 Kernel 的模板/抽象库
+
+CUTLASS 是 NVIDIA 开源的高性能 GEMM/相关 Kernel 构建库。它不是 `cuBLAS → CUTLASS → GPU` 这种调用关系。
+
+更准确是：
+
+```text
+                  想实现一个 GEMM
+                       │
+            ┌──────────┴──────────┐
+            ▼                     ▼
+         cuBLAS                  CUTLASS
+   调成熟 NVIDIA 库          用模板/抽象构建 Kernel
+            │                     │
+            └──────────┬──────────┘
+                       ▼
+                   GPU machine code
+```
+
+CUTLASS 允许 Kernel 工程师控制或组合：
+
+- tile shape；
+- warp / warp-group 划分；
+- Tensor Core MMA/WGMMA；
+- Shared Memory layout；
+- TMA / async copy；
+- pipeline stages；
+- scheduler；
+- epilogue。
+
+可以把 cuBLAS 比作“已经调好的赛车”，CUTLASS 更像“提供发动机、变速箱、底盘和大量高性能组件让你造赛车”。
+
+---
+
+
+<a id="notebook-07-14"></a>
+
+## 07.14｜本章最容易混淆的术语
+
+
+| 概念 | 类型 | 不要误解成 |
+|---|---|---|
+| CUDA Runtime | Host 侧运行时 API/软件层 | GPU 指令集 |
+| CUDA Stream | operation 有序队列/依赖模型 | SM 内 Warp 调度器 |
+| cuBLAS | NVIDIA 高性能 BLAS 库 | 编程语言 |
+| cuBLASLt | 更灵活的 GEMM library/API | CUTLASS 的别名 |
+| CUTLASS | 高性能 CUDA C++ Kernel 模板/抽象库 | cuBLAS 内部必经的一层 |
+| Triton | Kernel DSL + compiler | CUTLASS frontend |
+| TileLang | 基于 TVM 的 tile-level Kernel DSL | 默认一定走 CUTLASS |
+| PTX | NVIDIA 虚拟 GPU ISA | 最终硬件机器码本身 |
+| cubin | GPU binary container | CUDA Runtime |
+| SASS | 具体 GPU 真正执行的机器指令 | CUDA C++ 源码 |
+| GEMM | 一个矩阵乘 workload | 某个固定 Kernel 实现 |
+| Grouped GEMM | 一组可不同 shape 的 GEMM workload | 必须由单个 kernel 实现 |
+
+---
+
+
+<a id="notebook-07-15"></a>
+
+## 07.15｜官方资料与版本证据（截至 2026-08）
+
+
+- CUDA Programming Guide：CUDA Stream、异步执行、Thread/Block/Warp execution model。
+  - https://docs.nvidia.com/cuda/cuda-programming-guide/
+- cuBLAS / cuBLASLt Documentation：GEMM、algorithm heuristic、Grouped GEMM。
+  - https://docs.nvidia.com/cuda/cublas/
+- CUDA 13.1 Release Notes：cuBLASLt experimental Grouped GEMM。
+  - https://docs.nvidia.com/cuda/archive/13.1.0/cuda-toolkit-release-notes/index.html
+- CUTLASS Documentation：GEMM、Grouped GEMM、CuTe DSL。
+  - https://docs.nvidia.com/cutlass/latest/
+- Triton source/compiler：NVIDIA backend 的 TTIR → TTGIR → LLIR → PTX → cubin lowering。
+  - https://github.com/triton-lang/triton
+- TileLang Targets：`cuda` / `cutedsl` / `hip` 等 backend。
+  - https://www.tilelang.com/get_started/targets.html
+- PyTorch main docs：`torch.nn.functional.grouped_mm`、`prefer_cublaslt_grouped_gemm`。
+  - https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html
+  - https://docs.pytorch.org/docs/main/backends.html
+- PyTorch issue #163425：2025-09-20，H200 / BF16 / PyTorch 2.8 / CUDA 12.8 的历史性能问题。
+  - https://github.com/pytorch/pytorch/issues/163425
+- Transformer Engine 2.18 Grouped GEMM / environment variables / release notes。
+  - https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/c/gemm.html
+  - https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/envvars.html
+  - https://docs.nvidia.com/deeplearning/transformer-engine/release-notes/

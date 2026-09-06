@@ -1,5 +1,24 @@
 # 07 循序渐进实验课
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [实验 1：学会正确计时和做可信基线](#read-01)
+- [实验 2：从 PyTorch 调用追到 ATen 算子和 CUDA kernel](#read-02)
+- [实验 3：Nsight Systems 定位，再用 Nsight Compute 下钻](#read-03)
+- [实验 4：Megatron 训练 step 分解](#read-04)
+- [实验 5：SGLang 或 vLLM 容量曲线](#read-05)
+- [实验 6：Slime 端到端瓶颈闭环](#read-06)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A1/A3/A4/A5/A8 · 必修。
+> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：实验 1–2 在 A1，3 在 A8 或热点出现时，4/5/6 随训练/推理/RL。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 这六个实验按依赖关系排列。前 3 个单卡即可完成；后 3 个需要能够运行对应框架。每个实验都要求保存原始结果，不以截图代替数据。
 
 建议为每次练习建立独立目录：
@@ -7,6 +26,9 @@
 ```bash
 mkdir -p /tmp/perf_labs/{lab1,lab2,lab3,lab4,lab5,lab6}
 ```
+
+
+<a id="read-01"></a>
 
 ## 实验 1：学会正确计时和做可信基线
 
@@ -77,6 +99,9 @@ PY
 ### 完成标准
 
 你能解释 warmup、CUDA synchronize、重复测量和单变量原则，且不会用一次 `time.time()` 判断 GPU 算子快慢。
+
+
+<a id="read-02"></a>
 
 ## 实验 2：从 PyTorch 调用追到 ATen 算子和 CUDA kernel
 
@@ -161,6 +186,9 @@ torch.cuda.max_memory_allocated()
 
 你能指出 trace 中 CPU 发射、GPU 执行和同步分别在哪里，并知道 PyTorch Profiler 适合“哪个算子”，不直接回答“kernel 内部为什么慢”。
 
+
+<a id="read-03"></a>
+
 ## 实验 3：Nsight Systems 定位，再用 Nsight Compute 下钻
 
 ### 目标
@@ -236,6 +264,9 @@ ncu \
 
 你不会一看到整体慢就直接对所有 kernel 跑 ncu，并能说明 nsys 和 ncu 的职责边界。
 
+
+<a id="read-04"></a>
+
 ## 实验 4：Megatron 训练 step 分解
 
 ### 目标
@@ -287,6 +318,9 @@ ncu \
 
 交付基线表、rank 对比、trace 和 A/B 结论。完成标准是能用时间线证明“慢在什么等待关系”，而不是只说 NCCL 百分比高。
 
+
+<a id="read-05"></a>
+
 ## 实验 5：SGLang 或 vLLM 容量曲线
 
 ### 目标
@@ -337,6 +371,9 @@ SGLang 使用 `/start_profile` 或 `--profile`；vLLM 使用当前 `--profiler-c
 ### 交付物与完成标准
 
 交付原始 benchmark JSON/JSONL、两张曲线、两个短 trace 和建议生产并发。建议必须说明质量/延迟 SLO 和预留余量，不能直接采用实验中的最高吞吐点。
+
+
+<a id="read-06"></a>
 
 ## 实验 6：Slime 端到端瓶颈闭环
 

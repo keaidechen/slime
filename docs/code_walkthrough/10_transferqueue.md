@@ -1,5 +1,12 @@
 # 10 TransferQueue：RL 系统的独立数据平面
 
+<!-- learning-position -->
+> **学习定位**：A5→A8 · 专项。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：主线 buffer 学完后比较独立数据平面；标明不是 slime 当前依赖。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§3.10 与趋势 #2。
 > 本篇基于你补充到仓库根目录的第三方源码 `TransferQueue/`（Ascend 开源，论文 *AsyncFlow: An Asynchronous Streaming RL Framework*，arXiv 2507.01663）。它不是 slime 的一部分，而是"数据流中间件"这一新兴子领域的代表实现——值得单独精读。
 

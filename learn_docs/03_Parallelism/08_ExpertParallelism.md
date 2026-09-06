@@ -1,5 +1,24 @@
 # Expert Parallelism：模型稀疏，系统不一定轻松
 
+<!-- learning-position -->
+> **学习定位**：A3→A8 · 分层必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：expert/token/rank 映射及 A2A 先学；ETP/folding 后读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：EP 的卡数不能脱离其他并行维度理解
+
+EP 决定 expert 如何分布，expert data parallel 则表示哪些 rank 复制同一个 expert。Attention 与 expert 层可能在同一批物理 rank 上采用不同布局，所以不能简单把 TP×PP×DP 再乘一个 EP 当作总卡数。
+
+先画普通层的 group，再画 expert 层的 group；检查每个专家的权重副本、输入 token 与梯度规约范围。实际 Megatron 的布局约束由 parallel_state 构建，见[源码问题](../../docs/megatron_code_walkthrough/06_reference/03_source_questions.md)。
+
+练习：四枚 token 全去同一个 expert 时，哪张卡忙、哪张卡等待？即使输入 DP 均分也会出现这种倾斜。验收要同时覆盖通信正确性和负载分布。
+
+## 机制与实现
+
 Expert Parallelism（EP，专家并行）把 Mixture of Experts（MoE，混合专家模型）的不同 expert 放到不同 rank。每个 token 只激活 top-k expert，但 token 必须被动态路由到 expert owner，再把结果送回。
 
 通信 kernel 与 DeepEP 细节见上一专题的[MoE All-to-All 案例](../02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md)。本章关注并行布局。
@@ -63,4 +82,3 @@ Wide Expert Parallelism（WideEP，宽专家并行）让一个 replica 的 exper
 - [Megatron Core MoE Roadmap 2026 Q3](https://github.com/NVIDIA/Megatron-LM/issues/6757)
 - [vLLM Expert Parallel Deployment](https://docs.vllm.ai/en/latest/serving/expert_parallel_deployment/)
 - [DeepEP](https://github.com/deepseek-ai/DeepEP)
-

@@ -1,5 +1,24 @@
 # Context Parallelism：长上下文 Attention 如何跨 GPU
 
+<!-- learning-position -->
+> **学习定位**：A3→A8 · 分层必修。
+> **前置**：[通信与 tensor 基础](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：理解切序列、交换 KV 和负载不均；具体算法与大规模实测后读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：切分序列后，attention 还需要远端历史
+
+序列有 8 枚 token，CP=2，两卡各保存 4 枚 query。对于 causal attention，后半段 query 仍需要前半段的 key/value；不能简单让每卡独立做长度 4 的 attention，否则模型变了。
+
+环式交换、AllGather 或布局转置是不同的通信组织方式。causal mask 使早期 query 与后期 query 的可见 pair 数不同，等 token 数不必然等计算量。实现还可能采用交错或分块分配来均衡。
+
+练习：列第 0–7 个 query 各能看到多少 key，再计算两个连续分块的工作量。说明重分配 query、交换 KV 与改 attention mask 是三种不同操作。
+
+## 机制与实现
+
 Context Parallelism（CP，上下文并行）沿 sequence/context 维切 activation，让每个 rank 只常驻部分 token。困难在于 self-attention：每个 query 必须看到允许范围内的全部 Key/Value（KV，键值）。
 
 ## Ring Attention
@@ -68,4 +87,3 @@ Megatron 团队在 2026 年公开的结果显示，针对真实变长数据可�
 - [USP](https://arxiv.org/abs/2405.07719)
 - [PyTorch Context Parallel Tutorial](https://docs.pytorch.org/tutorials/unstable/context_parallel.html)
 - [Megatron Dynamic CP](https://forums.developer.nvidia.com/t/speeding-up-variable-length-training-with-dynamic-context-parallelism-and-nvidia-megatron-core/358971)
-

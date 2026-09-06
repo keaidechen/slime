@@ -1,6 +1,36 @@
 # 4.3 控制面、在线权重更新与后训练
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先纠正三个常见误解](#read-01)
+- [2. 控制面入口有哪些](#read-02)
+- [3. 普通 inference 如何与换权隔离](#read-03)
+- [4. 从磁盘更新权重的完整链路](#read-04)
+- [5. Distributed、Tensor、IPC 三条路径的差异](#read-05)
+- [6. 为什么换权后要 flush cache](#read-06)
+- [7. CUDA Graph 和其他派生状态](#read-07)
+- [8. `weight_version` 能保证什么](#read-08)
+- [9. LoRA 动态加载为什么是另一套协议](#read-09)
+- [10. RL / 后训练闭环怎样建立](#read-10)
+- [11. 故障矩阵](#read-11)
+- [12. 源码定位](#read-12)
+- [13. 与 slime 后训练代码的衔接](#read-13)
+- [训练端与服务端共同维护的字节桶协议](#read-14)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：在线换权、暂停/恢复、cache 失效、失败边界；不假设事务保证。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 控制面请求会改变整个服务的共享状态，不能按普通 inference request 理解。本章重点回答：换权时在途请求怎样隔离、哪些路径能回滚、KV/Graph 为什么要失效、LoRA 如何安全上下线，以及 RL 系统应如何建立 policy version 闭环。
+
+
+<a id="read-01"></a>
 
 ## 1. 先纠正三个常见误解
 
@@ -15,6 +45,9 @@ writer lock 主要保证请求隔离：更新与 inference request 不并发。�
 ### 误解三：更新权重后只需要改版本号
 
 权重决定 KV 的语义，部分派生 buffer、draft model 和 CUDA Graph 也可能依赖权重/模型状态。默认换权请求会 flush cache，但 CUDA Graph 只有在对应参数要求且路径支持时才 recapture。
+
+
+<a id="read-02"></a>
 
 ## 2. 控制面入口有哪些
 
@@ -31,6 +64,9 @@ HTTP 路由集中在 `srt/entrypoints/http_server.py`，常见操作包括：
 | release/resume memory occupation | 权重、KV、graph 等显存状态 |
 
 入口层只负责协议和调用；真正的状态更新跨越 TokenizerManager、scheduler 和 TP worker/ModelRunner。
+
+
+<a id="read-03"></a>
 
 ## 3. 普通 inference 如何与换权隔离
 
@@ -68,6 +104,9 @@ reader lock 覆盖的不只是入队瞬间，而是请求的 tokenization、sche
 ### 3.3 `abort_all_requests` 的实际语义
 
 disk/distributed/tensor request 可要求先 abort 全部请求。它会加速从旧版本清空请求，但 abort 本身仍需经过异步调度和资源回收。不能在发出 abort 后立刻假设所有 GPU work、KV 和 reader lock 已经消失；后续 writer lock/idle 检查才构成真正的同步边界。
+
+
+<a id="read-04"></a>
 
 ## 4. 从磁盘更新权重的完整链路
 
@@ -128,6 +167,9 @@ TokenizerManager 只有在收到总体成功后才更新 tokenizer 侧 model pat
 
 这保证“控制面元数据不会主动宣布一个明确失败的版本”，但不能反推底层所有参数一定处于旧版本：底层可能已经部分写入而最终聚合失败。
 
+
+<a id="read-05"></a>
+
 ## 5. Distributed、Tensor、IPC 三条路径的差异
 
 | 路径 | 数据来源 | 关键实现 | 失败边界 |
@@ -158,6 +200,9 @@ Tokenizer control mixin 通过 communicator 向 worker/DP fan-out，再用 `FanO
 Scheduler 的 tensor update 根据 `disable_draft_model` 选择 target worker 或 draft worker；具体语义需要结合调用者用途检查。不要默认一次 tensor update 总是同时更新 target 和 draft。
 
 Disk 和 IPC 路径在 target 成功且存在 draft worker 时会继续更新 draft；最终 success 可能反映后一步结果，但 cache flush 条件又基于 target success。对 speculative 部署要单独验证 target/draft version 配对。
+
+
+<a id="read-06"></a>
 
 ## 6. 为什么换权后要 flush cache
 
@@ -194,6 +239,9 @@ KV cache 是旧权重对历史 token 计算出的派生状态。权重改变后�
 
 关闭 flush 只有在调用者能证明缓存与更新后权重语义兼容时才安全。普通 RL policy 更新通常不满足这个条件。仅因为参数名只更新了一部分，也不能自动证明所有历史 KV 可复用。
 
+
+<a id="read-07"></a>
+
 ## 7. CUDA Graph 和其他派生状态
 
 Disk update request 有 `recapture_cuda_graph`，ModelRunner 只在该值为真且设备支持时 recapture。默认值是 `False`。
@@ -206,6 +254,9 @@ Disk update request 有 `recapture_cuda_graph`，ModelRunner 只在该值为真�
 - 量化 scales、derived weight cache、draft state 等需要各自检查实现。
 
 当 `weight_cache_mode != off` 时，ModelRunner 明确拒绝原地换权/部分内存操作，因为参数可能是通过 CUDA IPC 与 daemon/其他实例共享的 master copy。绕过该检查会同时污染所有共享者。
+
+
+<a id="read-08"></a>
 
 ## 8. `weight_version` 能保证什么
 
@@ -226,6 +277,9 @@ Disk update request 有 `recapture_cuda_graph`，ModelRunner 只在该值为真�
 - cache/graph 全部符合新版本。
 
 版本号必须与 readback/checksum、health 和部署状态结合使用。
+
+
+<a id="read-09"></a>
 
 ## 9. LoRA 动态加载为什么是另一套协议
 
@@ -289,6 +343,9 @@ sequenceDiagram
 
 当前动态 LoRA load/unload 代码还明确限制 `dp_size == 1`。不要仅因为 registry 设计支持并发，就推断动态操作已经覆盖所有 DP 拓扑。
 
+
+<a id="read-10"></a>
+
 ## 10. RL / 后训练闭环怎样建立
 
 ```text
@@ -333,6 +390,9 @@ reader/writer lock 能防止单个正常请求跨换权，但训练 batch 是否
 
 这是生产建议，不是当前 SGLang API 自动完成的完整协议。
 
+
+<a id="read-11"></a>
+
 ## 11. 故障矩阵
 
 | 故障点 | 当前可观察结果 | 安全动作 |
@@ -346,6 +406,9 @@ reader/writer lock 能防止单个正常请求跨换权，但训练 batch 是否
 | LoRA load backend 失败 | registry 不发布新 adapter | 修复权重/path 后重试 |
 | LoRA unload 卡住 | 仍有 request counter 未归零 | 定位持有该 `lora_id` 的在途请求 |
 | weight cache mode 拒绝换权 | CUDA IPC master copy 正共享 | 以 `weight-cache-mode off` 的隔离实例执行 |
+
+
+<a id="read-12"></a>
 
 ## 12. 源码定位
 
@@ -363,6 +426,9 @@ reader/writer lock 能防止单个正常请求跨换权，但训练 batch 是否
 | deferred flush | `srt/managers/scheduler_components/flush_wrapper.py` |
 | LoRA registry/引用计数 | `srt/lora/lora_registry.py`：`LoRARef`、`LoRARegistry` |
 
+
+<a id="read-13"></a>
+
 ## 13. 与 slime 后训练代码的衔接
 
 SGLang 说明“服务端如何接收和发布权重”，slime 说明“trainer 如何触发并管理这次同步”。继续阅读：
@@ -371,3 +437,19 @@ SGLang 说明“服务端如何接收和发布权重”，slime 说明“trainer
 - [slime 权重同步与显存状态](../../code_walkthrough/04_weight_sync_and_memory.md)
 
 对照时用同一组问题：谁暂停请求、谁选择版本、谁等待所有 rank、失败后谁让实例退出 ready、何时允许下一批 rollout 进入。
+
+
+<a id="slime-byte-bucket"></a>
+
+
+<a id="read-14"></a>
+
+## 训练端与服务端共同维护的字节桶协议
+
+### 字节桶：以三个张量手算 offset
+
+假设 A 有 4 个 BF16 元素（8 字节），B 有 3 个 FP32 元素（12 字节），C 有 8 个 uint8 元素（8 字节）。一个按字节打包的桶可记录 A=[0,8)、B=[8,20)、C=[20,28)。接收端必须用相同的名字、shape、dtype、字节 offset 还原，并满足 dtype view 的布局/对齐要求；元素数与字节数不能混用。
+
+把 BF16 原始存储 view 成 uint8 是按位重解释，不是把浮点数转成 0–255 的数值。传输完成前不能提前释放或覆盖发送 buffer。具体实现见 `sglang/python/sglang/srt/weight_sync/tensor_bucket.py` 中 `FlattenedTensorBucket`。
+
+分桶减少固定启动次数，但会增加拼接、拆解和临时内存。教学假设：3000 次广播每次固定成本 0.5 ms，仅固定成本为 1.5 s；若变成 30 次则为 15 ms。这个数字不是实测，总时长还要加数据传输与打包成本。先测 bucket 大小扫描，再选择配置。

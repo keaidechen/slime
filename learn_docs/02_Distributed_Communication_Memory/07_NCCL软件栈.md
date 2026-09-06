@@ -1,5 +1,24 @@
 # NCCL 软件栈：从 API 到传输路径
 
+<!-- learning-position -->
+> **学习定位**：A2→A7 · 分层必修。
+> **前置**：[两卡通信](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：通信组初始化、传输与 hang 排查；device-side 新能力参考。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：把初始化、传输与等待分开
+
+一组 worker 先通过 rendezvous 交换建立通信所需的信息，再形成进程组；之后 collective 才能在对应 group 上提交。模型 TP 通信组和训练到推理的换权组可能是不同对象，即便它们包含部分相同 GPU。
+
+例如 rank 0 完成初始化后进入 broadcast，而 rank 1 仍在下载权重，rank 0 的长等待不能直接解释成链路带宽低。先对齐各 rank 最后的进度点，再问传输是否慢。
+
+练习：记录初始化耗时与稳态 collective 耗时为两个指标。遇到 hang，先检查参与者是否全部存活、顺序是否匹配、shape/dtype 是否一致，再查实际传输路径。所有临时环境变量都写进实验配置；没有前后对照的“玄学参数组合”不算结论。
+
+## 机制与实现
+
 NVIDIA Collective Communications Library（NCCL，英伟达集合通信库）是 topology-aware 的 GPU collective/P2P library。它不是 rendezvous service、job scheduler 或完整分布式框架。PyTorch c10d/process group 负责上层语义与 rank 管理，NCCL 负责 communicator 内的数据移动与 reduction。
 
 ```mermaid
@@ -79,4 +98,3 @@ NCCL 2.31 RAS 可以缩短信息收集，但官方明确它不是完整 data-pat
 - [NCCL 2.28 Device API 与 Copy Engine Collectives](https://developer.nvidia.com/blog/fusing-communication-and-compute-with-new-device-api-and-copy-engine-collectives-in-nvidia-nccl-2-28/)
 - [NCCL RAS](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/troubleshooting/ras.html)
 - [NCCL 2026 Roadmap](https://github.com/NVIDIA/nccl/issues/2272)
-

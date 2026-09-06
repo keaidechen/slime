@@ -1,5 +1,24 @@
 # 3.2 部署拓扑、多节点与路由
 
+<!-- learning-position -->
+> **学习定位**：A4/A5 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：副本、路由、readiness、多节点启动，关联 RL placement。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：路由是一种状态取舍
+
+两个副本都能生成相同模型的答案，但它们的 prefix cache 不一定相同。把后续轮次送回原副本有机会复用 KV；若该副本排队严重，坚持亲和也可能增加延迟。路由需要同时考虑工作量和缓存收益。
+
+记录请求 id/session、目标实例、输入输出长度、排队、cache hit 与完成状态。实例 ready 表示能接工作，不能仅用进程存活代替；扩容后新实例的加载/预热与缓存冷启动要单独观察。
+
+练习：相同总卡数下比较单实例、多副本与缓存亲和策略，固定输入分布。验收：解释路由变更后 TTFT 改善来自减少排队还是复用前缀。
+
+## 机制与实现
+
 本章讨论实例如何组成服务，不重复 3.1 中单次 forward 的 TP/DP/EP 通信细节。
 
 ## 1. 从 workload 和 SLO 开始
@@ -72,4 +91,3 @@ Kubernetes Deployment、LWS、RBG 等是实现手段，不会改变这些不变�
 - `sglang/docs_new/docs/advanced_features/sgl_model_gateway.mdx`
 - `sglang/docs_new/docs/advanced_features/pd_disaggregation.mdx`
 - `sglang/docs_new/docs/advanced_features/llm-d.mdx`
-

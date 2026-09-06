@@ -1,5 +1,40 @@
 # 06｜Orca 与 Continuous Batching：LLM Serving 为什么不能使用传统“静态 Batch”？
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先从传统 Batch 说起](#read-01)
+- [2. 但 LLM 是自回归、多 iteration 的](#read-02)
+- [3. 静态 batching 会产生什么问题？](#read-03)
+- [4. Orca 的第一个关键思想：Iteration-Level Scheduling](#read-04)
+- [5. Continuous Batching 的直觉](#read-05)
+- [6. 为什么它对 LLM 吞吐特别重要？](#read-06)
+- [7. 但 Iteration-Level Scheduling 引入了一个新问题](#read-07)
+- [8. Selective Batching 是什么？](#read-08)
+- [9. 为什么 Orca 时代还没有直接用 PagedAttention？](#read-09)
+- [10. Request-Level vs Iteration-Level：画成时间线](#read-10)
+- [Request-Level](#read-11)
+- [Iteration-Level / Continuous](#read-12)
+- [11. Continuous Batching 和 Dynamic Batching 是一回事吗？](#read-13)
+- [12. Continuous Batching 和 Chunked Prefill 又不是一回事](#read-14)
+- [13. 为什么 Prefill 会干扰 Decode？](#read-15)
+- [14. Orca 在历史上的真正价值](#read-16)
+- [15. Orca 论文的 Selective Batching 为什么后来没有成为最常听到的词？](#read-17)
+- [16. Orca 和 vLLM 的关系](#read-18)
+- [17. 一个公交车比喻](#read-19)
+- [18. AI Infra 最值得记住的 8 个 Insight](#read-20)
+- [19. 读完后应该能回答](#read-21)
+- [主要参考资料](#read-22)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：静态 batch→iteration-level；区分论文设计与当前引擎实现。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**。**Static batching（静态批处理）**是整批请求绑定到一起直到全部完成；**iteration-level scheduling（迭代级调度）**是在每一轮生成迭代重新决定 batch；**continuous batching（连续批处理）**允许运行过程中动态加入、移出请求；**selective batching（选择性批处理）**是 Orca 对不同算子采用不同 batching 方式的设计。 另外：MLP = **Multi-Layer Perceptron（多层感知机）**；AI = **Artificial Intelligence（人工智能）**。
 
 > 论文：Gyeong-In Yu et al., **Orca: A Distributed Serving System for Transformer-Based Generative Models**，OSDI 2022。
@@ -9,6 +44,9 @@
 > 推荐前置：`00_共享基础_GPU与LLM推理硬件基础.md` 中 Prefill / Decode、KV Cache、batch、GPU memory 相关章节。
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 先从传统 Batch 说起
 
@@ -46,6 +84,9 @@ model(batch)
 ```
 
 ---
+
+
+<a id="read-02"></a>
 
 # 2. 但 LLM 是自回归、多 iteration 的
 
@@ -97,6 +138,9 @@ Decode 3
 
 ---
 
+
+<a id="read-03"></a>
+
 # 3. 静态 batching 会产生什么问题？
 
 假设一开始把：
@@ -142,6 +186,9 @@ GPU batch 越跑越“空”。
 
 ---
 
+
+<a id="read-04"></a>
+
 # 4. Orca 的第一个关键思想：Iteration-Level Scheduling
 
 传统 request-level scheduling：
@@ -177,6 +224,9 @@ iteration t 完成
 > **Iteration-Level Scheduling**。
 
 ---
+
+
+<a id="read-05"></a>
 
 # 5. Continuous Batching 的直觉
 
@@ -225,6 +275,9 @@ step 4:
 
 ---
 
+
+<a id="read-06"></a>
+
 # 6. 为什么它对 LLM 吞吐特别重要？
 
 Decode 经常是 memory-bound。
@@ -267,6 +320,9 @@ Continuous batching 则不断补充新请求：
 
 ---
 
+
+<a id="read-07"></a>
+
 # 7. 但 Iteration-Level Scheduling 引入了一个新问题
 
 现在 batch 里可能是：
@@ -300,6 +356,9 @@ C 需要 attend 17 个 KV
 > **Selective Batching。**
 
 ---
+
+
+<a id="read-08"></a>
 
 # 8. Selective Batching 是什么？
 
@@ -343,6 +402,9 @@ Orca 的思路是：
 
 ---
 
+
+<a id="read-09"></a>
+
 # 9. 为什么 Orca 时代还没有直接用 PagedAttention？
 
 注意历史顺序：
@@ -380,7 +442,13 @@ vLLM：
 
 ---
 
+
+<a id="read-10"></a>
+
 # 10. Request-Level vs Iteration-Level：画成时间线
+
+
+<a id="read-11"></a>
 
 ## Request-Level
 
@@ -392,6 +460,9 @@ Batch 2:                              [D E F] ========
 
 D/E/F 必须一直等 Batch 1
 ```
+
+
+<a id="read-12"></a>
 
 ## Iteration-Level / Continuous
 
@@ -410,6 +481,9 @@ step5 [D F E]   B done, F enters
 这是一个非常深的 serving abstraction 变化。
 
 ---
+
+
+<a id="read-13"></a>
 
 # 11. Continuous Batching 和 Dynamic Batching 是一回事吗？
 
@@ -441,6 +515,9 @@ LLM continuous batching 则是：
 > **跨 autoregressive iterations 动态重组 batch。**
 
 ---
+
+
+<a id="read-14"></a>
 
 # 12. Continuous Batching 和 Chunked Prefill 又不是一回事
 
@@ -480,6 +557,9 @@ Chunked Prefill：
 它是 Orca 思想之后进一步发展的 scheduler 技术。
 
 ---
+
+
+<a id="read-15"></a>
 
 # 13. 为什么 Prefill 会干扰 Decode？
 
@@ -526,6 +606,9 @@ decode step
 
 ---
 
+
+<a id="read-16"></a>
+
 # 14. Orca 在历史上的真正价值
 
 不要只记：
@@ -562,6 +645,9 @@ iteration
 
 ---
 
+
+<a id="read-17"></a>
+
 # 15. Orca 论文的 Selective Batching 为什么后来没有成为最常听到的词？
 
 因为后续系统把 variable-length attention 本身做得更强了。
@@ -596,6 +682,9 @@ chunked prefill
 
 ---
 
+
+<a id="read-18"></a>
+
 # 16. Orca 和 vLLM 的关系
 
 可以这样分工：
@@ -614,14 +703,17 @@ vLLM
 
 所以：
 
-\[
+$$
 \boxed{\text{Modern Serving} \approx
 \text{Continuous Batching} + \text{Paged KV Management} + \text{Fast Kernels}}
-\]
+$$
 
 当然现代框架还远不止这些，但这是非常好的最小认知模型。
 
 ---
+
+
+<a id="read-19"></a>
 
 # 17. 一个公交车比喻
 
@@ -660,6 +752,9 @@ Orca 像城市公交：
 
 ---
 
+
+<a id="read-20"></a>
+
 # 18. AI Infra 最值得记住的 8 个 Insight
 
 1. **LLM request 是 multi-iteration workload，不适合传统 request-level batching。**
@@ -673,6 +768,9 @@ Orca 像城市公交：
 
 ---
 
+
+<a id="read-21"></a>
+
 # 19. 读完后应该能回答
 
 1. 为什么 static batching 对 autoregressive LLM 很差？
@@ -684,6 +782,9 @@ Orca 像城市公交：
 7. Orca 和 PagedAttention/vLLM 各自解决哪一层问题？
 
 ---
+
+
+<a id="read-22"></a>
 
 ## 主要参考资料
 

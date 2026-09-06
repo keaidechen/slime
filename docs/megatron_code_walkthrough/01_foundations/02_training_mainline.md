@@ -1,5 +1,12 @@
 # 从入口到一次参数更新
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：microbatch→forward/backward→optimizer；含 loss closure 与更新边界。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 三个用户注入点
 
 `Megatron-LM/pretrain_gpt.py` 最值得先读的不是参数列表，而是传给训练框架的三个函数：

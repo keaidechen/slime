@@ -1,5 +1,12 @@
 # 04 权重同步与显存管理：RL 系统的"头号瓶颈"是如何被攻克的
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：布局转换、NCCL/IPC/disk、offload；“头号瓶颈”应按 workload 限定。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.3「权重同步」与 §2.9「精度」。
 > 每步训练后，数百 GB 权重要从 Megatron 训练栈搬进 SGLang 推理引擎——训练侧是 TP/PP/EP 切分的 Megatron 格式，推理侧是 HF 命名、另一种 TP 切分。本篇解读 slime 的完整链路。
 

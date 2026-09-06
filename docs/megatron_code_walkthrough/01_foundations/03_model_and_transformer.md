@@ -1,5 +1,12 @@
 # 模型、Transformer 组件与 ModuleSpec
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：GPTModel/ModuleSpec/Transformer Engine、local shape 与模型构建。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 从 `GPTModel` 看组合关系
 
 主类位于 `megatron/core/models/gpt/gpt_model.py:47`。逻辑结构是：

@@ -1,5 +1,24 @@
 # 案例：MoE 的 All-to-All 为什么难
 
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：逐步走 dispatch→expert→combine；用真实 token 分布解释通信。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：四个 token、两个 expert 的路由账
+
+rank 0 和 rank 1 各持有两枚 token；expert E0 在 rank 0，E1 在 rank 1。若 rank 0 的两枚都去 E1、rank 1 的两枚都去 E1，则 E1 必须处理四枚，E0 没有工作。通信正确也无法消除 expert 计算长尾。
+
+top-k>1 时一枚 token 可产生多个 expert assignment，combine 再按原 token 和权重合并。通信量应按实际 assignment 和 dtype 计，而不是仅按原 token 数。pack/unpack、padding 与路由排序同样有成本。
+
+练习：手写 token id、源 rank、目标 expert、目标 rank、返回位置五列；先检查 combine 后顺序正确，再比较均匀与倾斜路由。不要为了均衡擅自丢弃 token；drop/capacity 会改变模型语义。
+
+## 机制与实现
+
 Mixture of Experts（MoE，混合专家模型）让每个 token 只经过少数 expert，从而以较低 active FLOPs 扩大参数量。但 expert 分散在不同 rank 后，router 选择会立即变成动态通信问题。
 
 ## 一次 MoE layer 的数据流
@@ -68,4 +87,3 @@ PyTorch 2.14 还引入 TokenSwitch 抽象，把 token dispatch/combine 与 backe
 - [DeepEP Repository](https://github.com/deepseek-ai/DeepEP)
 - [DeepEP V1 Legacy Notes](https://github.com/deepseek-ai/DeepEP/blob/main/docs/legacy.md)
 - [PyTorch 2.14：TokenSwitch](https://pytorch.org/blog/pytorch-2-14-release-blog/)
-

@@ -1,5 +1,12 @@
 # PyTorch 编译栈：从 Python 模型到高性能 Kernel
 
+<!-- learning-position -->
+> **学习定位**：A1→A8 · 分层必修。
+> **前置**：[基础课程](<../00_Foundations/README.md>)。
+> **首读/二读**：首读 eager/compile、fusion、graph break、冷启动；编译器内部二读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 ## 1. `torch.compile` 编译的不是“整个 Python 程序”
 
 `torch.compile(model)` 的核心目标，是从动态 Python 执行中捕获可编译的 Tensor 计算区域，构造 Graph（计算图），对前向和反向做变换，再交给 Backend 生成或选择高性能实现。
@@ -153,4 +160,3 @@ AOTInductor 则以 `torch.export` 捕获的 Graph 为输入，提前生成部署
 - [PyTorch Compiler Troubleshooting](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/torch.compiler_troubleshooting.html)
 - [AOTInductor](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/torch.compiler_aot_inductor.html)
 - [PyTorch 2.14 Release](https://pytorch.org/blog/pytorch-2-14-release-blog/)
-

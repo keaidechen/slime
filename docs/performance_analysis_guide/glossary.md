@@ -1,6 +1,34 @@
 # 大模型性能分析缩写与术语词典
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 最先掌握的 30 个词](#read-01)
+- [2. 单位与数字](#read-02)
+- [3. 计算机与 GPU 硬件](#read-03)
+- [4. CUDA 与底层算子](#read-04)
+- [5. PyTorch 与编译器](#read-05)
+- [6. 分布式训练与 Megatron](#read-06)
+- [7. Transformer 与 MoE](#read-07)
+- [8. 推理、SGLang 与 vLLM](#read-08)
+- [9. 强化学习与 Slime](#read-09)
+- [10. 性能分析与可观测性](#read-10)
+- [11. 一词多义和高频误区](#read-11)
+- [12. 查词后的固定动作](#read-12)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A1–A8 · 参考。
+> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：首次读最先掌握的 30 词，后续随问题查，不先背完整词典。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 这不是需要背诵的单词表。第一次阅读其他章节时，遇到缩写就回到这里查。每个词条都回答三个问题：全称是什么、中文是什么意思、在性能分析中应该想到什么。
+
+
+<a id="read-01"></a>
 
 ## 1. 最先掌握的 30 个词
 
@@ -39,6 +67,9 @@
 
 掌握这 30 个词后，就可以开始第 0～2 章；其余词按需查阅。
 
+
+<a id="read-02"></a>
+
 ## 2. 单位与数字
 
 ### 时间
@@ -68,6 +99,9 @@
 - **MFU**：Model FLOPs Utilization，模型 FLOPs 利用率；通常是实际模型计算吞吐与理论峰值的比例。不同项目的 FLOPs 公式可能不同，不能只比百分比。
 - **HFU**：Hardware FLOPs Utilization，硬件 FLOPs 利用率；可能把 recompute 等实际执行计算计入。必须先看项目定义。
 
+
+<a id="read-03"></a>
+
 ## 3. 计算机与 GPU 硬件
 
 | 缩写 | 全称 | 中文与性能含义 |
@@ -93,6 +127,9 @@
 | GPUDirect RDMA | GPU Direct RDMA | NIC 与 GPU memory 直接传输数据的技术路径。 |
 
 看到“通信慢”，要先问走的是 NVLink、PCIe 还是跨机 NIC，而不是直接调整 NCCL 参数。
+
+
+<a id="read-04"></a>
 
 ## 4. CUDA 与底层算子
 
@@ -156,6 +193,9 @@
 | nsys | Nsight Systems CLI | 系统时间线采集/分析命令。 |
 | ncu | Nsight Compute CLI | 单 kernel 硬件指标采集命令。 |
 
+
+<a id="read-05"></a>
+
 ## 5. PyTorch 与编译器
 
 | 缩写/术语 | 全称 | 含义 |
@@ -195,6 +235,9 @@
 | INT8/INT4 | 8/4-bit integer | 常用于量化推理或权重压缩。 |
 
 理论峰值会随 dtype、是否使用 Tensor Core、稀疏条件而变化，因此“这张 GPU 有多少 TFLOPS”必须同时问是哪种 dtype。
+
+
+<a id="read-06"></a>
 
 ## 6. 分布式训练与 Megatron
 
@@ -254,6 +297,9 @@
 | SHARP | Scalable Hierarchical Aggregation and Reduction Protocol | 网络侧 collective 加速技术。 |
 | ZeRO | Zero Redundancy Optimizer | 分片 optimizer/gradient/parameter 以减少冗余。 |
 
+
+<a id="read-07"></a>
+
 ## 7. Transformer 与 MoE
 
 | 缩写/术语 | 全称 | 含义 |
@@ -274,6 +320,9 @@
 | router/gate | routing/gating network | 决定 token 去哪些 expert。 |
 | top-k | top-k routing | 每个 token 选择分数最高的 k 个 expert。 |
 | load balance | load balancing | expert 间 token 数是否均衡。 |
+
+
+<a id="read-08"></a>
 
 ## 8. 推理、SGLang 与 vLLM
 
@@ -317,6 +366,9 @@
 - **SGLang**：面向大模型/多模态模型的高性能 serving 与编程框架；名称本身在使用中通常不展开。
 - **vLLM**：高吞吐、内存高效的 LLM serving 引擎；通常作为项目名使用，不必强行展开。
 - **Ray**：分布式任务/actor 执行框架，Slime 用它编排训练和 rollout 进程。
+
+
+<a id="read-09"></a>
 
 ## 9. 强化学习与 Slime
 
@@ -365,6 +417,9 @@
 - **fully async**：训练和生成更彻底解耦的异步流程。
 - **effective token**：算法定义下真正参与有效目标/统计的 token；以项目代码为准。
 - **non-generation time**：tool、环境、reward 等非模型生成时间。
+
+
+<a id="read-10"></a>
 
 ## 10. 性能分析与可观测性
 
@@ -415,6 +470,9 @@
 
 Metrics 告诉你“何时异常”，trace 帮你解释“时间花在哪里”，logs 提供“当时发生了什么和配置是什么”。
 
+
+<a id="read-11"></a>
+
 ## 11. 一词多义和高频误区
 
 ### `kernel`
@@ -452,6 +510,9 @@ Metrics 告诉你“何时异常”，trace 帮你解释“时间花在哪里”
 ### `overlap`
 
 时间线上两个事件重叠，只说明同时发生。只有关键路径缩短且正确性不变，才能说 overlap 带来了有效优化。
+
+
+<a id="read-12"></a>
 
 ## 12. 查词后的固定动作
 

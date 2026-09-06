@@ -6,4 +6,3 @@
 2. [进程拓扑与端到端请求路径](02_process_topology_and_request_path.md)
 
 读完后应能画出进程与 IPC 拓扑，区分 TTFT、ITL、TPOT、E2E、throughput 和 goodput，并说清 request、batch、KV 三种生命周期。
-

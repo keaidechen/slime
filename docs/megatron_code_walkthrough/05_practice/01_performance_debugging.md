@@ -1,5 +1,12 @@
 # 性能、排障与工程实战
 
+<!-- learning-position -->
+> **学习定位**：A3/A6/A7 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：OOM/hang/straggler→源码与配置；通用采集操作接性能指南。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 先定义指标
 
 训练性能至少记录：

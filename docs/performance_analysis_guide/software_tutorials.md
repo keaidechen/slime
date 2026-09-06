@@ -1,6 +1,36 @@
 # 常用性能分析软件：安装、采集与界面操作教程
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先理解两台机器的分工](#read-01)
+- [2. 五分钟安装检查](#read-02)
+- [3. `nvidia-smi`：先看 GPU 生命体征](#read-03)
+- [4. DCGM：多卡和长期 GPU 遥测](#read-04)
+- [5. PyTorch Profiler + Perfetto：最适合第一次看 trace](#read-05)
+- [6. TensorBoard：训练曲线和 PyTorch trace](#read-06)
+- [7. PyTorch Memory Viz：看 CUDA allocator](#read-07)
+- [8. Nsight Systems：读 CPU/GPU/NCCL 全局时间线](#read-08)
+- [9. Nsight Compute：解释一个 kernel 为什么慢](#read-09)
+- [10. py-spy：Python 进程卡在哪里](#read-10)
+- [11. Memray：Python/native 主机内存](#read-11)
+- [12. Prometheus + Grafana：持续观测，而不是单次 profile](#read-12)
+- [13. 软件学习顺序](#read-13)
+- [14. 常见安装与界面问题](#read-14)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A1/A6/A7 · 分层必修。
+> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：按首次使用取章节；先 nvidia-smi/Profiler/Perfetto/nsys，后 DCGM/ncu。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章写给第一次使用性能工具的人。你不需要一次安装所有软件。先根据问题选择一个工具，完成“检查安装 → 采集最小数据 → 打开结果 → 回答一个问题”这四步。
+
+
+<a id="read-01"></a>
 
 ## 1. 先理解两台机器的分工
 
@@ -20,6 +50,9 @@ GPU 服务器（target）
 不必为了看 GUI 给训练服务器安装桌面环境。Nsight Systems 官方支持在 Linux target 采集，再在 Windows、Linux 或 macOS host 查看；具体 host/target 组合以当前 [安装指南](https://docs.nvidia.com/nsight-systems/InstallationGuide/index.html) 为准。
 
 Trace 可能包含源码路径、kernel 名、主机名、进程参数、prompt shape，甚至业务数据。复制或上传前先脱敏。Perfetto 和 PyTorch Memory Viz 的官方网页查看器默认在浏览器本地处理文件，但仍应遵守所在组织的数据规则。
+
+
+<a id="read-02"></a>
 
 ## 2. 五分钟安装检查
 
@@ -50,6 +83,9 @@ which dcgmi || true
 | DCGM | 单机学习可先用 `nvidia-smi`；集群监控再部署 |
 
 不要擅自在共享集群安装驱动、修改性能计数器权限或启动系统服务。驱动、DCGM、容器权限通常由管理员负责。
+
+
+<a id="read-03"></a>
 
 ## 3. `nvidia-smi`：先看 GPU 生命体征
 
@@ -98,6 +134,9 @@ nvidia-smi \
 
 官方字段说明：[NVIDIA System Management Interface](https://docs.nvidia.com/deploy/nvidia-smi/index.html)。
 
+
+<a id="read-04"></a>
+
 ## 4. DCGM：多卡和长期 GPU 遥测
 
 DCGM（Data Center GPU Manager）适合集群遥测、健康检查和 Prometheus exporter。安装和 host engine 通常需要管理员处理。
@@ -127,6 +166,9 @@ dcgmi dmon --field-id 150,155 --count 5
 - 需要 NVLink/NVSwitch、健康和诊断；
 - 要让 Prometheus 定期抓 GPU 指标；
 - 需要把 GPU 指标与 job/rank 对齐。
+
+
+<a id="read-05"></a>
 
 ## 5. PyTorch Profiler + Perfetto：最适合第一次看 trace
 
@@ -184,6 +226,9 @@ Perfetto 支持 legacy JSON trace。完整快捷键和界面说明见 [Perfetto 
 
 不要一开始打开几十 GB 的多 rank trace。先学会读一个算子，再读两个 step。
 
+
+<a id="read-06"></a>
+
 ## 6. TensorBoard：训练曲线和 PyTorch trace
 
 ### 6.1 安装
@@ -232,6 +277,9 @@ ssh -L 6006:127.0.0.1:6006 user@server
 
 官方入口：[PyTorch TensorBoard](https://docs.pytorch.org/docs/stable/tensorboard) 和 [TensorBoard Get Started](https://www.tensorflow.org/tensorboard/get_started)。
 
+
+<a id="read-07"></a>
+
 ## 7. PyTorch Memory Viz：看 CUDA allocator
 
 ### 7.1 生成 snapshot
@@ -261,6 +309,9 @@ torch.cuda.memory._record_memory_history(enabled=None)
 7. 对比 `nvidia-smi`，判断是否存在 PyTorch allocator 不可见的显存。
 
 Memory Viz 只看到 PyTorch allocator 管理的分配；NCCL 和直接 CUDA API 分配可能不可见。官方教程：[Understanding CUDA Memory Usage](https://docs.pytorch.org/docs/stable/torch_cuda_memory.html)。
+
+
+<a id="read-08"></a>
 
 ## 8. Nsight Systems：读 CPU/GPU/NCCL 全局时间线
 
@@ -315,6 +366,9 @@ nsys stats /tmp/first_nsys.nsys-rep
 - 某个 rank 最后进入 collective，其他 rank 的 NCCL 会表现为等待；
 - 采集只有 driver、没有 worker，通常是 multiprocess capture 范围不对。
 
+
+<a id="read-09"></a>
+
 ## 9. Nsight Compute：解释一个 kernel 为什么慢
 
 ### 9.1 前提
@@ -351,6 +405,9 @@ ncu \
 
 官方 Quickstart 说明 `ncu` 是 CLI、`ncu-ui` 是 GUI，并提供 report 比较功能：[Nsight Compute User Guide](https://docs.nvidia.com/nsight-compute/NsightCompute/index.html)。
 
+
+<a id="read-10"></a>
+
 ## 10. py-spy：Python 进程卡在哪里
 
 ### 10.1 安装和三种模式
@@ -383,6 +440,9 @@ py-spy record -o profile.svg -- python your_script.py
 - 大量线程停在同一锁/queue，可形成等待线索；
 - Python 火焰图不会自动解释 GPU kernel 内部。
 
+
+<a id="read-11"></a>
+
 ## 11. Memray：Python/native 主机内存
 
 ### 11.1 安装与采集
@@ -409,6 +469,9 @@ python -m memray tree allocations.bin
 - CUDA 显存正常，但进程被主机 OOM killer 杀死。
 
 它不是 CUDA 显存工具。官方入门：[Memray Getting Started](https://bloomberg.github.io/memray/getting_started.html) 和 [Flame Graph Reporter](https://bloomberg.github.io/memray/flamegraph.html)。
+
+
+<a id="read-12"></a>
 
 ## 12. Prometheus + Grafana：持续观测，而不是单次 profile
 
@@ -458,6 +521,9 @@ prometheus --config.file=prometheus.yml
 
 官方教程：[Prometheus First Steps](https://prometheus.io/docs/introduction/first_steps/) 和 [Grafana + Prometheus](https://grafana.com/docs/grafana/latest/fundamentals/getting-started/first-dashboards/get-started-grafana-prometheus/)。生产部署还需要认证、TLS、持久化、保留周期和权限管理，本教程中的本地配置不等于生产配置。
 
+
+<a id="read-13"></a>
+
 ## 13. 软件学习顺序
 
 按以下顺序练习，不要颠倒：
@@ -473,6 +539,9 @@ prometheus --config.file=prometheus.yml
 | 第 7 次 | Prometheus/Grafana/DCGM | 建一个跨分钟的容量 dashboard |
 
 每学一个软件，只要求回答一个问题并保留一个证据文件。能够正确选择工具，比会点完所有菜单更重要。
+
+
+<a id="read-14"></a>
 
 ## 14. 常见安装与界面问题
 

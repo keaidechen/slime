@@ -1,10 +1,128 @@
 # 从 AI Infra 视角理解 2024–2026 大模型结构演化
+
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [DeepSeek / Kimi / Qwen / GLM：模型结构为什么这样变，它们具体如何实现，以及瓶颈如何迁移](#read-01)
+- [0. 核心结论：大模型结构演化，本质上是瓶颈不断迁移](#read-02)
+- [1. 版本路线：先把四家的时间线放在同一张图里](#read-03)
+- [1.1 DeepSeek](#read-04)
+- [1.2 Kimi](#read-05)
+- [1.3 Qwen](#read-06)
+- [1.4 GLM](#read-07)
+- [2. 第一场革命：从 Dense FFN 到 Sparse MoE](#read-08)
+- [2.1 Dense Transformer 真正的问题是什么？](#read-09)
+- [3. MoE 到底怎么工作？](#read-10)
+- [4. DeepSeekMoE：为什么不是简单 Top-K MoE？](#read-11)
+- [4.1 Fine-grained Expert Segmentation](#read-12)
+- [4.2 Shared Expert 为什么存在？](#read-13)
+- [5. MoE 为什么把模型问题变成 Infra 问题？](#read-14)
+- [6. 为什么 Ultra-Sparse MoE 会让 Grouped GEMM 越来越重要？](#read-15)
+- [7. DeepSeek-V3：为什么会出现 Auxiliary-Loss-Free Load Balancing？](#read-16)
+- [8. 为什么 DeepSeek-V3 的 DualPipe 与 MoE 是一套设计？](#read-17)
+- [9. 第二场革命：为什么 MLA 会出现？](#read-18)
+- [KV Cache](#read-19)
+- [9.1 标准 MHA 的 KV Cache](#read-20)
+- [10. GQA/MQA 先解决了一部分 KV 问题](#read-21)
+- [11. MLA：Multi-head Latent Attention 到底具体怎么实现？](#read-22)
+- [12. 为什么 MLA 是一个典型 Infra trade-off？](#read-23)
+- [13. MLA 解决了 KV bytes，但没有解决 sequence length](#read-24)
+- [Sparse Attention](#read-25)
+- [14. DeepSeek Sparse Attention：DSA 到底怎么流？](#read-26)
+- [15. DSA 的 Infra Pipeline](#read-27)
+- [16. Sparse Attention 优化完之后，为什么 Indexer 自己会成为瓶颈？](#read-28)
+- [17. DeepSeek-V4：CSA 是怎么实现的？](#read-29)
+- [Compressed Sparse Attention](#read-30)
+- [17.1 为什么 CSA 还保留 Sliding Window？](#read-31)
+- [18. DeepSeek-V4：HCA 又是什么？](#read-32)
+- [19. 从 DSA → CSA/HCA 的路线说明了什么？](#read-33)
+- [20. Linear Attention：为什么另一批模型干脆不保存全部历史？](#read-34)
+- [21. Linear Attention 的基本数学心智模型](#read-35)
+- [22. Gated DeltaNet / Delta Attention 解决什么？](#read-36)
+- [23. Kimi Delta Attention：KDA 具体做了什么？](#read-37)
+- [24. KDA 为什么训练时还能并行？](#read-38)
+- [25. 为什么 Kimi K3 不是纯 KDA，而是 3:1 KDA + Gated MLA？](#read-39)
+- [26. Gated MLA 中的 Gate 是什么意义？](#read-40)
+- [27. Qwen3-Next：为什么 Qwen 也走 GDN + Attention Hybrid？](#read-41)
+- [28. Qwen3.8-Flash-Next：QSA 具体比普通 Sparse Attention多做了什么？](#read-42)
+- [28.1 Compressed Lightweight Indexer](#read-43)
+- [28.2 Micro-block Granularity](#read-44)
+- [29. GLM-5.2 IndexShare：为什么“共享 Indexer”也很重要？](#read-45)
+- [30. GLM-5.3-Flash：为什么又走 Linear + Sparse？](#read-46)
+- [31. 现代 Attention 其实正在变成“多级 Cache”](#read-47)
+- [32. 第三场革命：Residual Stream 为什么突然开始被重新设计？](#read-48)
+- [33. Kimi AttnRes：把层深方向也变成 Attention](#read-49)
+- [34. Full AttnRes 为什么很贵？](#read-50)
+- [35. Block AttnRes 如何把它工程化？](#read-51)
+- [36. DeepSeek mHC：为什么与 AttnRes 路线不同但目标相同？](#read-52)
+- [37. mHC 的 Infra 代价是什么？](#read-53)
+- [38. Qwen Gated Residual：4 路 residual stream 是怎么工作的？](#read-54)
+- [39. AttnRes / mHC / Gated Residual 应该如何统一理解？](#read-55)
+- [40. Kimi K3：Stable LatentMoE 到底新在哪里？](#read-56)
+- [41. Kimi K3 的 Quantile Balancing 在解决什么？](#read-57)
+- [42. SiTU / activation 为什么在极端 MoE 下也重要？](#read-58)
+- [43. FP8 / FP4：为什么越来越重要？](#read-59)
+- [44. 为什么 Quantization-Aware Training 比部署后量化更重要？](#read-60)
+- [45. Qwen 的 N-gram Embedding：为什么是非常“系统型”的架构创新？](#read-61)
+- [46. 为什么 N-gram Embedding 可以放 CPU？](#read-62)
+- [47. 这为什么很像推荐系统？](#read-63)
+- [48. Muon：为什么 optimizer 也是 Infra 话题？](#read-64)
+- [49. 为什么更快收敛就是 Infra 优化？](#read-65)
+- [50. Kimi 的 MuonClip：为什么 optimizer 改了又会制造新的稳定性问题？](#read-66)
+- [51. MTP：为什么 Multi-Token Prediction 越来越常见？](#read-67)
+- [52. 为什么 Autoregressive Decode 天生是 Infra 的痛点？](#read-68)
+- [53. 为什么 GLM-5.2 还继续优化 MTP？](#read-69)
+- [54. 现在把 Kimi K3 的整个 block 流程串起来](#read-70)
+- [55. Qwen3.8-Next 也可以按三个维度拆](#read-71)
+- [56. DeepSeek-V4 同样可以这样拆](#read-72)
+- [57. 四家路线的“风格”差异](#read-73)
+- [57.1 DeepSeek：Hardware-aware Full-stack Co-design](#read-74)
+- [57.2 Kimi：把 Scaling 分解为 Sequence / Depth / Width](#read-75)
+- [57.3 Qwen：高度 Serving-Oriented 的异构架构](#read-76)
+- [57.4 GLM：快速吸收主线结构并优化实际瓶颈](#read-77)
+- [58. 为什么 Dense 不会彻底被 MoE 淘汰？](#read-78)
+- [59. 一条最重要的 Infra 规律：Arithmetic Intensity 在改变模型设计](#read-79)
+- [60. 把你最近学习的 Infra 知识全部串起来](#read-80)
+- [61. 现代模型的“六层调度系统”](#read-81)
+- [第 1 层：Token / Sequence Routing](#read-82)
+- [第 2 层：Parameter Routing](#read-83)
+- [第 3 层：Depth Routing](#read-84)
+- [第 4 层：GPU Kernel Scheduling](#read-85)
+- [第 5 层：GPU/Network Scheduling](#read-86)
+- [第 6 层：Memory Tier Scheduling](#read-87)
+- [62. 未来 LLM 越来越像一个“操作系统 + 数据库 + HPC 程序”](#read-88)
+- [63. 一张表总结“创新 → 解决瓶颈 → 新瓶颈”](#read-89)
+- [64. 我认为真正的“总纲”](#read-90)
+- [65. 最终 Insight：未来不是“哪种 Attention 胜出”，而是 Hierarchical Memory](#read-91)
+- [66. 对 AI Infra 学习最重要的方法论](#read-92)
+- [67. 参考资料](#read-93)
+- [DeepSeek](#read-94)
+- [Kimi / Moonshot](#read-95)
+- [Qwen](#read-96)
+- [GLM / Z.ai](#read-97)
+- [68. 后续适合继续展开的专题](#read-98)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 参考。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：用于查模型差异和资料来源；具体型号/能力单独核对版本。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+
+<a id="read-01"></a>
+
 ## DeepSeek / Kimi / Qwen / GLM：模型结构为什么这样变，它们具体如何实现，以及瓶颈如何迁移
 
-> 版本：2026-09  
+> 版本：2026-09\
 > 目标：不是简单罗列“谁用了什么结构”，而是从 **训练 FLOPs、HBM 容量与带宽、KV Cache、GPU 通信、小 GEMM、长上下文、流水线调度、推理串行性** 等 Infra 约束出发，解释这些结构为什么出现、具体如何工作，以及它们又制造了哪些新的系统瓶颈。
 
 ---
+
+
+<a id="read-02"></a>
 
 # 0. 核心结论：大模型结构演化，本质上是瓶颈不断迁移
 
@@ -96,9 +214,15 @@ MTP / Speculative Decoding
 
 ---
 
+
+<a id="read-03"></a>
+
 # 1. 版本路线：先把四家的时间线放在同一张图里
 
 下面只列 **Base Architecture 发生明显变化** 的版本；纯 post-training、RL 或能力更新不作为结构主线。
+
+
+<a id="read-04"></a>
 
 ## 1.1 DeepSeek
 
@@ -134,6 +258,9 @@ DeepSeek-V4
     └─ 更激进的 MoE fused kernel / KV hierarchy
 ```
 
+
+<a id="read-05"></a>
+
 ## 1.2 Kimi
 
 ```text
@@ -167,6 +294,9 @@ Kimi K3
     └─ MoonEP / FlashKDA 等配套 Infra
 ```
 
+
+<a id="read-06"></a>
+
 ## 1.3 Qwen
 
 ```text
@@ -198,6 +328,9 @@ Qwen3.8-Flash-Next
     └─ Muon
 ```
 
+
+<a id="read-07"></a>
+
 ## 1.4 GLM
 
 ```text
@@ -225,9 +358,15 @@ GLM-5.3-Flash
 
 ---
 
+
+<a id="read-08"></a>
+
 # 2. 第一场革命：从 Dense FFN 到 Sparse MoE
 
 ---
+
+
+<a id="read-09"></a>
 
 ## 2.1 Dense Transformer 真正的问题是什么？
 
@@ -292,6 +431,9 @@ P_{\text{active}}
 ```
 
 ---
+
+
+<a id="read-10"></a>
 
 # 3. MoE 到底怎么工作？
 
@@ -365,6 +507,9 @@ P_{\text{total}}\gg P_{\text{active}}
 
 ---
 
+
+<a id="read-11"></a>
+
 # 4. DeepSeekMoE：为什么不是简单 Top-K MoE？
 
 DeepSeek-V2 的另一个关键创新是 **DeepSeekMoE**。
@@ -381,6 +526,9 @@ N 个大 Expert → Top-K
 2. **Shared Expert Isolation**
 
 ---
+
+
+<a id="read-12"></a>
 
 ## 4.1 Fine-grained Expert Segmentation
 
@@ -424,6 +572,9 @@ Expert 3  + Expert 27 + Expert 81 + Expert 104
 
 ---
 
+
+<a id="read-13"></a>
+
 ## 4.2 Shared Expert 为什么存在？
 
 如果所有能力都 Routed：
@@ -463,6 +614,9 @@ E_{\text{shared}}(x)
 - routed expert 更容易专业化。
 
 ---
+
+
+<a id="read-14"></a>
 
 # 5. MoE 为什么把模型问题变成 Infra 问题？
 
@@ -545,6 +699,9 @@ output
 ```
 
 ---
+
+
+<a id="read-15"></a>
 
 # 6. 为什么 Ultra-Sparse MoE 会让 Grouped GEMM 越来越重要？
 
@@ -641,6 +798,9 @@ Grouped GEMM / fused MoE kernel 重要性 ↑
 这正是为什么 CUTLASS、DeepGEMM、TileLang、Triton grouped GEMM、Transformer Engine grouped_gemm 等 kernel 成为现代 MoE Infra 的核心。
 
 ---
+
+
+<a id="read-16"></a>
 
 # 7. DeepSeek-V3：为什么会出现 Auxiliary-Loss-Free Load Balancing？
 
@@ -743,6 +903,9 @@ T\approx 8ms
 所以负载均衡直接决定集群 MFU。
 
 ---
+
+
+<a id="read-17"></a>
 
 # 8. 为什么 DeepSeek-V3 的 DualPipe 与 MoE 是一套设计？
 
@@ -851,15 +1014,24 @@ Grouped GEMM / custom kernel
 
 ---
 
+
+<a id="read-18"></a>
+
 # 9. 第二场革命：为什么 MLA 会出现？
 
 MoE 主要解决 FFN compute。
 
 Inference 还有另一个独立瓶颈：
 
+
+<a id="read-19"></a>
+
 # KV Cache
 
 ---
+
+
+<a id="read-20"></a>
 
 ## 9.1 标准 MHA 的 KV Cache
 
@@ -929,6 +1101,9 @@ KV Cache 线性爆炸。
 
 ---
 
+
+<a id="read-21"></a>
+
 # 10. GQA/MQA 先解决了一部分 KV 问题
 
 MHA：
@@ -967,6 +1142,9 @@ KV Cache 直接下降。
 但 DeepSeek-V2 进一步做了 MLA。
 
 ---
+
+
+<a id="read-22"></a>
 
 # 11. MLA：Multi-head Latent Attention 到底具体怎么实现？
 
@@ -1035,6 +1213,9 @@ DeepSeek-V2 报告中，相比此前架构 KV cache 显著下降。
 
 ---
 
+
+<a id="read-23"></a>
+
 # 12. 为什么 MLA 是一个典型 Infra trade-off？
 
 MLA 并不是“免费压缩”。
@@ -1079,6 +1260,9 @@ MLA 并不是“免费压缩”。
 
 ---
 
+
+<a id="read-24"></a>
+
 # 13. MLA 解决了 KV bytes，但没有解决 sequence length
 
 这是一个非常关键的区别。
@@ -1116,9 +1300,15 @@ T_{\text{attention}}
 
 这推动了下一阶段：
 
+
+<a id="read-25"></a>
+
 # Sparse Attention
 
 ---
+
+
+<a id="read-26"></a>
 
 # 14. DeepSeek Sparse Attention：DSA 到底怎么流？
 
@@ -1188,6 +1378,9 @@ K=2048
 
 ---
 
+
+<a id="read-27"></a>
+
 # 15. DSA 的 Infra Pipeline
 
 真实系统不是简单一个 sparse_matmul：
@@ -1225,6 +1418,9 @@ Sparse MLA Attention Kernel
 它依赖的是一整套 kernel stack，而不是一个 Python 层面的 mask。
 
 ---
+
+
+<a id="read-28"></a>
 
 # 16. Sparse Attention 优化完之后，为什么 Indexer 自己会成为瓶颈？
 
@@ -1272,9 +1468,15 @@ Indexer   ████████
 
 ---
 
+
+<a id="read-29"></a>
+
 # 17. DeepSeek-V4：CSA 是怎么实现的？
 
 DeepSeek-V4 的关键变化之一是：
+
+
+<a id="read-30"></a>
 
 # Compressed Sparse Attention
 
@@ -1355,6 +1557,9 @@ T_{\text{index}}
 
 ---
 
+
+<a id="read-31"></a>
+
 ## 17.1 为什么 CSA 还保留 Sliding Window？
 
 Sequence compression 会损失局部细节。
@@ -1393,6 +1598,9 @@ KV_{\text{recent-raw}}
 - local fine-grained dependency。
 
 ---
+
+
+<a id="read-32"></a>
 
 # 18. DeepSeek-V4：HCA 又是什么？
 
@@ -1482,6 +1690,9 @@ Heavily Compressed KV     → global summary memory
 
 ---
 
+
+<a id="read-33"></a>
+
 # 19. 从 DSA → CSA/HCA 的路线说明了什么？
 
 DeepSeek 的长上下文路线：
@@ -1520,6 +1731,9 @@ Hybrid Memory Hierarchy
 
 ---
 
+
+<a id="read-34"></a>
+
 # 20. Linear Attention：为什么另一批模型干脆不保存全部历史？
 
 Sparse Attention 的前提仍然是：
@@ -1531,6 +1745,9 @@ Linear / Recurrent Attention 更激进：
 > 把历史不断压进固定大小 state。
 
 ---
+
+
+<a id="read-35"></a>
 
 # 21. Linear Attention 的基本数学心智模型
 
@@ -1606,6 +1823,9 @@ decode 也不需要每次扫全部历史。
 
 ---
 
+
+<a id="read-36"></a>
+
 # 22. Gated DeltaNet / Delta Attention 解决什么？
 
 简单 linear state：
@@ -1654,6 +1874,9 @@ S_t =
 
 ---
 
+
+<a id="read-37"></a>
+
 # 23. Kimi Delta Attention：KDA 具体做了什么？
 
 Kimi 的 KDA 可以理解为对 DeltaNet 进一步细粒度化。
@@ -1686,6 +1909,9 @@ state channel 2: 几乎覆盖
 这样 fixed-size state 的表达能力比单一 decay 更强。
 
 ---
+
+
+<a id="read-38"></a>
 
 # 24. KDA 为什么训练时还能并行？
 
@@ -1738,6 +1964,9 @@ Kimi 配套的 FlashKDA 本质上就是在解决：
 所以 Linear Attention 能否“理论 O(L) → 实际快”，仍然高度依赖 kernel。
 
 ---
+
+
+<a id="read-39"></a>
 
 # 25. 为什么 Kimi K3 不是纯 KDA，而是 3:1 KDA + Gated MLA？
 
@@ -1808,6 +2037,9 @@ full / exact token-level retrieval
 
 ---
 
+
+<a id="read-40"></a>
+
 # 26. Gated MLA 中的 Gate 是什么意义？
 
 普通 MLA：
@@ -1852,6 +2084,9 @@ x ───────────┤                          ├─ multiply
 > **架构设计时已经开始考虑 kernel launch / CUDA stream overlap 的可实现性。**
 
 ---
+
+
+<a id="read-41"></a>
 
 # 27. Qwen3-Next：为什么 Qwen 也走 GDN + Attention Hybrid？
 
@@ -1902,6 +2137,9 @@ Global Attention
 
 ---
 
+
+<a id="read-42"></a>
+
 # 28. Qwen3.8-Flash-Next：QSA 具体比普通 Sparse Attention多做了什么？
 
 QSA：Qwen Sparse Attention。
@@ -1915,6 +2153,9 @@ QSA：Qwen Sparse Attention。
 > “Indexer 自己能不能足够便宜？”
 
 QSA 采用两个重要思路：
+
+
+<a id="read-43"></a>
 
 ## 28.1 Compressed Lightweight Indexer
 
@@ -1941,6 +2182,9 @@ s_i=q_{index}k_{index,i}
 indexer GEMM 本身变小。
 
 ---
+
+
+<a id="read-44"></a>
 
 ## 28.2 Micro-block Granularity
 
@@ -1990,6 +2234,9 @@ Indexer O(L/B)
 
 ---
 
+
+<a id="read-45"></a>
+
 # 29. GLM-5.2 IndexShare：为什么“共享 Indexer”也很重要？
 
 如果一个 Sparse Attention layer 有自己的 indexer：
@@ -2035,6 +2282,9 @@ Indexer 本身压缩/共享/分块
 ```
 
 ---
+
+
+<a id="read-46"></a>
 
 # 30. GLM-5.3-Flash：为什么又走 Linear + Sparse？
 
@@ -2082,6 +2332,9 @@ Sparse Attention
 
 ---
 
+
+<a id="read-47"></a>
+
 # 31. 现代 Attention 其实正在变成“多级 Cache”
 
 如果用 CPU Memory Hierarchy 类比：
@@ -2112,6 +2365,9 @@ Query
 ```
 
 ---
+
+
+<a id="read-48"></a>
 
 # 32. 第三场革命：Residual Stream 为什么突然开始被重新设计？
 
@@ -2160,6 +2416,9 @@ Residual 开始暴露两个问题：
 因此“深度方向的信息流”开始成为独立建模对象。
 
 ---
+
+
+<a id="read-49"></a>
 
 # 33. Kimi AttnRes：把层深方向也变成 Attention
 
@@ -2218,6 +2477,9 @@ Layer 12
 
 ---
 
+
+<a id="read-50"></a>
+
 # 34. Full AttnRes 为什么很贵？
 
 如果第 $l$ 层都要存所有过去层：
@@ -2245,6 +2507,9 @@ AttnRes 可能需要访问更老的 depth states。
 这对 distributed training 很不友好。
 
 ---
+
+
+<a id="read-51"></a>
 
 # 35. Block AttnRes 如何把它工程化？
 
@@ -2290,6 +2555,9 @@ O(number of previous blocks)
 > **它在 Pipeline Parallel training 里怎么存、怎么传、怎么不让 activation 爆炸。**
 
 ---
+
+
+<a id="read-52"></a>
 
 # 36. DeepSeek mHC：为什么与 AttnRes 路线不同但目标相同？
 
@@ -2363,6 +2631,9 @@ non-negative
 
 ---
 
+
+<a id="read-53"></a>
+
 # 37. mHC 的 Infra 代价是什么？
 
 如果 residual width：
@@ -2398,6 +2669,9 @@ d
 > **架构创新本身会制造新的 Infra 成本，而真正可用的结构必须同时给出系统实现。**
 
 ---
+
+
+<a id="read-54"></a>
 
 # 38. Qwen Gated Residual：4 路 residual stream 是怎么工作的？
 
@@ -2464,6 +2738,9 @@ R3 ────┴───┴───────┘
 
 ---
 
+
+<a id="read-55"></a>
+
 # 39. AttnRes / mHC / Gated Residual 应该如何统一理解？
 
 虽然数学不同，它们都在解决：
@@ -2514,6 +2791,9 @@ x + F(x) 就够
 
 ---
 
+
+<a id="read-56"></a>
+
 # 40. Kimi K3：Stable LatentMoE 到底新在哪里？
 
 Kimi K3 继续把 MoE 稀疏度推到非常高：
@@ -2545,6 +2825,9 @@ token
 “LatentMoE”本质是在更低/更紧凑的 expert representation 中做超大规模 expert specialization，从而把 total capacity 推高，同时控制 active compute。
 
 ---
+
+
+<a id="read-57"></a>
 
 # 41. Kimi K3 的 Quantile Balancing 在解决什么？
 
@@ -2598,6 +2881,9 @@ Quantile Balancing 的思路是：
 
 ---
 
+
+<a id="read-58"></a>
+
 # 42. SiTU / activation 为什么在极端 MoE 下也重要？
 
 Expert MLP 内部 activation 会决定：
@@ -2642,6 +2928,9 @@ inference/training kernel efficiency
 这已经明显属于 Numeric–Architecture–Kernel Co-design。
 
 ---
+
+
+<a id="read-59"></a>
 
 # 43. FP8 / FP4：为什么越来越重要？
 
@@ -2692,6 +2981,9 @@ Arithmetic Intensity 下降。
 
 ---
 
+
+<a id="read-60"></a>
+
 # 44. 为什么 Quantization-Aware Training 比部署后量化更重要？
 
 Post-Training Quantization：
@@ -2728,6 +3020,9 @@ Kimi K3 从较早 post-training/SFT 阶段就开始 QAT，说明：
 
 ---
 
+
+<a id="read-61"></a>
+
 # 45. Qwen 的 N-gram Embedding：为什么是非常“系统型”的架构创新？
 
 标准 token embedding：
@@ -2758,6 +3053,9 @@ Qwen3.8-Next 增加基于 local n-gram 的 lookup：
 所以可以扩一个很大的 table，而每 token 只读少量 rows。
 
 ---
+
+
+<a id="read-62"></a>
 
 # 46. 为什么 N-gram Embedding 可以放 CPU？
 
@@ -2819,6 +3117,9 @@ P_{CPU-memory}
 
 ---
 
+
+<a id="read-63"></a>
+
 # 47. 这为什么很像推荐系统？
 
 推荐系统早就有：
@@ -2855,6 +3156,9 @@ cold prefix / long-term cache
 模型本身会变成多级内存系统。
 
 ---
+
+
+<a id="read-64"></a>
 
 # 48. Muon：为什么 optimizer 也是 Infra 话题？
 
@@ -2895,6 +3199,9 @@ update W
 
 ---
 
+
+<a id="read-65"></a>
+
 # 49. 为什么更快收敛就是 Infra 优化？
 
 假设两个 optimizer：
@@ -2925,6 +3232,9 @@ Muon:
 这就是为什么 Kimi K2/K3、DeepSeek-V4、Qwen3.8 都开始认真研究 Muon。
 
 ---
+
+
+<a id="read-66"></a>
 
 # 50. Kimi 的 MuonClip：为什么 optimizer 改了又会制造新的稳定性问题？
 
@@ -2988,6 +3298,9 @@ Muon
 
 ---
 
+
+<a id="read-67"></a>
+
 # 51. MTP：为什么 Multi-Token Prediction 越来越常见？
 
 传统 next-token prediction：
@@ -3025,6 +3338,9 @@ L_{t+1}
 它既可能增强 representation，也可以为 speculative decoding 提供 draft 信息。
 
 ---
+
+
+<a id="read-68"></a>
 
 # 52. 为什么 Autoregressive Decode 天生是 Infra 的痛点？
 
@@ -3081,6 +3397,9 @@ a>1
 
 ---
 
+
+<a id="read-69"></a>
+
 # 53. 为什么 GLM-5.2 还继续优化 MTP？
 
 MTP 不是：
@@ -3120,6 +3439,9 @@ reject b c d
 这说明 MTP 已从“训练 regularizer”演化成服务架构的一部分。
 
 ---
+
+
+<a id="read-70"></a>
 
 # 54. 现在把 Kimi K3 的整个 block 流程串起来
 
@@ -3194,6 +3516,9 @@ Channel / Parameter Dimension
 
 ---
 
+
+<a id="read-71"></a>
+
 # 55. Qwen3.8-Next 也可以按三个维度拆
 
 ```text
@@ -3240,6 +3565,9 @@ External Sparse Parameter Memory
 
 ---
 
+
+<a id="read-72"></a>
+
 # 56. DeepSeek-V4 同样可以这样拆
 
 ```text
@@ -3275,7 +3603,13 @@ DeepSeek 路线尤其体现：
 
 ---
 
+
+<a id="read-73"></a>
+
 # 57. 四家路线的“风格”差异
+
+
+<a id="read-74"></a>
 
 ## 57.1 DeepSeek：Hardware-aware Full-stack Co-design
 
@@ -3305,6 +3639,9 @@ Serving KV system
 
 ---
 
+
+<a id="read-75"></a>
+
 ## 57.2 Kimi：把 Scaling 分解为 Sequence / Depth / Width
 
 Kimi K3 的结构尤其“正交”：
@@ -3330,6 +3667,9 @@ MoonEP / FlashKDA / MXFP4
 
 ---
 
+
+<a id="read-76"></a>
+
 ## 57.3 Qwen：高度 Serving-Oriented 的异构架构
 
 Qwen 很明显同时考虑：
@@ -3344,6 +3684,9 @@ Qwen 很明显同时考虑：
 N-gram embedding offload 是非常典型的“模型结构直接为 memory tier 设计”。
 
 ---
+
+
+<a id="read-77"></a>
 
 ## 57.4 GLM：快速吸收主线结构并优化实际瓶颈
 
@@ -3366,6 +3709,9 @@ IndexShare 特别能体现系统思维：
 > 主 sparse attention 已经优化了，那就继续优化 indexer。
 
 ---
+
+
+<a id="read-78"></a>
 
 # 58. 为什么 Dense 不会彻底被 MoE 淘汰？
 
@@ -3414,6 +3760,9 @@ host/offload hierarchy
 不是一个架构统治全部硬件环境。
 
 ---
+
+
+<a id="read-79"></a>
 
 # 59. 一条最重要的 Infra 规律：Arithmetic Intensity 在改变模型设计
 
@@ -3477,6 +3826,9 @@ AI
 ```
 
 ---
+
+
+<a id="read-80"></a>
 
 # 60. 把你最近学习的 Infra 知识全部串起来
 
@@ -3552,9 +3904,15 @@ Ultra-Sparse MoE
 
 ---
 
+
+<a id="read-81"></a>
+
 # 61. 现代模型的“六层调度系统”
 
 可以把最新模型抽象成六层：
+
+
+<a id="read-82"></a>
 
 ## 第 1 层：Token / Sequence Routing
 
@@ -3569,6 +3927,9 @@ Ultra-Sparse MoE
 - CSA；
 - Linear state。
 
+
+<a id="read-83"></a>
+
 ## 第 2 层：Parameter Routing
 
 ```text
@@ -3579,6 +3940,9 @@ Ultra-Sparse MoE
 
 - MoE Router；
 - Shared/Routed Expert。
+
+
+<a id="read-84"></a>
 
 ## 第 3 层：Depth Routing
 
@@ -3591,6 +3955,9 @@ Ultra-Sparse MoE
 - AttnRes；
 - mHC；
 - Gated Residual。
+
+
+<a id="read-85"></a>
 
 ## 第 4 层：GPU Kernel Scheduling
 
@@ -3605,6 +3972,9 @@ Ultra-Sparse MoE
 - FlashKDA；
 - FlashMLA。
 
+
+<a id="read-86"></a>
+
 ## 第 5 层：GPU/Network Scheduling
 
 ```text
@@ -3618,6 +3988,9 @@ token 和 activation 去哪张 GPU？
 - MoonEP；
 - NVLink/IB；
 - DualPipe。
+
+
+<a id="read-87"></a>
 
 ## 第 6 层：Memory Tier Scheduling
 
@@ -3634,6 +4007,9 @@ token 和 activation 去哪张 GPU？
 - heterogeneous KV。
 
 ---
+
+
+<a id="read-88"></a>
 
 # 62. 未来 LLM 越来越像一个“操作系统 + 数据库 + HPC 程序”
 
@@ -3693,6 +4069,9 @@ FFN
 
 ---
 
+
+<a id="read-89"></a>
+
 # 63. 一张表总结“创新 → 解决瓶颈 → 新瓶颈”
 
 | 结构 | 解决的问题 | 核心实现 | 新暴露的问题 |
@@ -3719,6 +4098,9 @@ FFN
 | MTP | decode 串行 | predict multiple future tokens | acceptance rate |
 
 ---
+
+
+<a id="read-90"></a>
 
 # 64. 我认为真正的“总纲”
 
@@ -3783,6 +4165,9 @@ MTP / Speculative Decoding
 这正是 Amdahl's Law 在大模型架构上的连续体现。
 
 ---
+
+
+<a id="read-91"></a>
 
 # 65. 最终 Insight：未来不是“哪种 Attention 胜出”，而是 Hierarchical Memory
 
@@ -3859,6 +4244,9 @@ remote store
 
 ---
 
+
+<a id="read-92"></a>
+
 # 66. 对 AI Infra 学习最重要的方法论
 
 以后不要孤立地学习：
@@ -3906,73 +4294,91 @@ FP4 MoE Kernel
 
 ---
 
+
+<a id="read-93"></a>
+
 # 67. 参考资料
 
 以下尽量优先列官方技术报告、官方模型卡、官方仓库或作者团队材料。
 
+
+<a id="read-94"></a>
+
 ## DeepSeek
 
-1. **DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model**  
+1. **DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model**\
    https://arxiv.org/abs/2405.04434
 
-2. **DeepSeek-V3 Technical Report**  
+2. **DeepSeek-V3 Technical Report**\
    https://arxiv.org/abs/2412.19437
 
-3. **DeepSeek DualPipe**  
+3. **DeepSeek DualPipe**\
    https://github.com/deepseek-ai/DualPipe
 
-4. **DeepSeek-V3.2 / DeepSeek Sparse Attention**  
+4. **DeepSeek-V3.2 / DeepSeek Sparse Attention**\
    https://api-docs.deepseek.com/news/news251201/
 
-5. **DeepSeek Transparency Center / V4 official model card & report links**  
+5. **DeepSeek Transparency Center / V4 official model card & report links**\
    https://www.deepseek.com/en/transparency/
 
-6. **DeepSeek-V4 Model Card**  
+6. **DeepSeek-V4 Model Card**\
    Official model card linked by DeepSeek Transparency Center.
+
+
+<a id="read-95"></a>
 
 ## Kimi / Moonshot
 
-7. **Kimi K2 official repository and technical report**  
+7. **Kimi K2 official repository and technical report**\
    https://github.com/MoonshotAI/Kimi-K2
 
-8. **Kimi Linear / KDA Technical Report**  
+8. **Kimi Linear / KDA Technical Report**\
    https://github.com/MoonshotAI/Kimi-Linear
 
-9. **Attention Residuals**  
+9. **Attention Residuals**\
    https://arxiv.org/abs/2603.15031
 
-10. **Kimi K3 official release / technical report**  
+10. **Kimi K3 official release / technical report**\
     https://www.kimi.com/news/kimi-k3-open-source
 
-11. **Kimi K3 architecture / Infra release**  
+11. **Kimi K3 architecture / Infra release**\
     Includes MoonEP, FlashKDA and related serving work.
+
+
+<a id="read-96"></a>
 
 ## Qwen
 
-12. **Qwen3 Technical Report**  
+12. **Qwen3 Technical Report**\
     https://arxiv.org/abs/2505.09388
 
-13. **Qwen3.8-Flash-Next: A New Architecture, Towards Ultimate Cost-Efficiency**  
+13. **Qwen3.8-Flash-Next: A New Architecture, Towards Ultimate Cost-Efficiency**\
     https://qwen.ai/blog?id=qwen3.8-flash-next
 
-14. **On the Design of Qwen3.8-Next Architecture**  
+14. **On the Design of Qwen3.8-Next Architecture**\
     https://arxiv.org/abs/2608.30320
 
-15. **Qwen3.8-Flash-Next official repository**  
+15. **Qwen3.8-Flash-Next official repository**\
     https://github.com/QwenLM/Qwen3.8-Flash-Next
+
+
+<a id="read-97"></a>
 
 ## GLM / Z.ai
 
-16. **GLM-4.5 Technical Report / official model family**  
+16. **GLM-4.5 Technical Report / official model family**\
     https://arxiv.org/abs/2508.06471
 
-17. **GLM-5 series official repository / model documentation**  
+17. **GLM-5 series official repository / model documentation**\
     https://github.com/zai-org/GLM-5
 
-18. **GLM-5.3-Flash implementation documentation**  
+18. **GLM-5.3-Flash implementation documentation**\
     Hugging Face Transformers `glm5_next` model documentation.
 
 ---
+
+
+<a id="read-98"></a>
 
 # 68. 后续适合继续展开的专题
 

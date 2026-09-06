@@ -1,5 +1,12 @@
 # Infra 工程师的 Megatron 学习地图
 
+<!-- learning-position -->
+> **学习定位**：A3 · 导航。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：只承担 Megatron 源码地图，基础通识链接统一入口。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 先建立正确边界
 
 Megatron 不是一个“把模型包进 DDP”的脚本，而是四层系统：

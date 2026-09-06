@@ -1,5 +1,12 @@
 # 2.2 KV Cache、RadixAttention 与引用锁
 
+<!-- learning-position -->
+> **学习定位**：A4 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：pool、页映射、radix、lock_ref、evict/free；配 finish/abort 检查。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 为什么 KV cache 是 serving 的中心
 
 自回归 decode 若每步重算全部历史，计算量不可接受。每层保存历史 token 的 K/V，新 token 只计算自己的 Q/K/V，再读取历史 KV attention。

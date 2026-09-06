@@ -1,5 +1,12 @@
 # 06 Megatron 训练后端与 HF↔Megatron 格式转换
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：训练 actor/provider/格式转换入口；Megatron 内部链接专门系列。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.7「训练后端」。
 > slime 的训练侧只有 Megatron 一路后端，设计哲学是"**原生透传**"：不包一层自己的抽象，直接复用 Megatron 的 `get_model`、optimizer、checkpoint，并把 Megatron 参数原样传入。本篇解读这条链路。
 >
@@ -83,7 +90,7 @@ param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad 
 
 ### 2.2 Stateless Adam（省显存技巧）
 
-`--use-stateless-adam` 时（model.py:242-267），`_patch_megatron_adam` 临时把 `megatron.core.optimizer.Adam` 替换为 `StatelessAdam`（`stateless_adam.py`），并用 `_disable_distributed_optimizer_state_initialization` 置空 `DistributedOptimizer.init_state_fn`——**不分配 Adam 的一阶/二阶 moment**，每步临时计算。代价是每步多一点计算，换来优化器状态显存接近归零（colocate 显存紧张时的救命特性）。
+`--use-stateless-adam` 时（model.py:242-267），`_patch_megatron_adam` 临时把 `megatron.core.optimizer.Adam` 替换为 `StatelessAdam`（`stateless_adam.py`），并用 `_disable_distributed_optimizer_state_initialization` 置空 `DistributedOptimizer.init_state_fn`——**不分配 Adam 的一阶/二阶 moment**，每步临时计算。它改变了跨步矩估计和更新规则，不能视为与标准 Adam 等价的纯性能优化；数学语义见上文 §1.2。显存收益必须与训练质量一起验证。
 
 ### 2.3 critic 的 value head
 

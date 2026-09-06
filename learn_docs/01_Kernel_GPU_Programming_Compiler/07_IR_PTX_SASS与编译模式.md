@@ -1,5 +1,12 @@
 # IR、PTX、SASS 与编译模式
 
+<!-- learning-position -->
+> **学习定位**：A1→A8 · 分层必修。
+> **前置**：[基础课程](<../00_Foundations/README.md>)。
+> **首读/二读**：首读源码→PTX→SASS、JIT/AOT、架构兼容；IR/LLVM 深入参考。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 ## 1. 为什么需要多层 IR？
 
 IR = **Intermediate Representation（中间表示）**。高层 Graph 适合做算子融合和代数化简；Tile IR 适合做 Layout、Pipeline 和内存规划；低层 IR 适合指令选择与寄存器分配。没有单一 IR 能同时优雅表达所有优化。
@@ -129,3 +136,126 @@ CUDA Tile IR 让前端表达 Tile 语义，由 NVIDIA 编译器进一步映射 T
 - [Triton Repository](https://github.com/triton-lang/triton)
 - [Triton CUDA Tile IR Backend](https://github.com/triton-lang/Triton-to-tile-IR)
 
+
+
+<a id="notebook-04"></a>
+
+## 学习问答：原笔记 §04
+
+### 04｜从 nvcc 编译到 Kernel Launch：CUDA 代码是怎么真正“联通” GPU 的？
+
+问题：为什么 `vector_add<<<4096,256>>>` 普通 C++ 编译器不能直接处理？是不是 nvcc 编译后才“接上 CUDA 环境”？
+
+#### 核心结论
+
+- nvcc 是 CUDA Compiler Driver（CUDA 编译驱动器）。它识别 CUDA C++ 扩展语法，例如 `__global__`、`__device__`、`<<< >>>`，并组织 Host Code 与 Device Code 的编译流程。
+
+- Host 部分通常仍由系统 C++ 编译器（g++ / clang++ / MSVC）处理；Device 部分会生成 PTX 和/或机器代码 cubin，并被打包进最终程序。
+
+- 真正运行时与 GPU 打交道的是 CUDA Runtime / CUDA Driver / NVIDIA 驱动栈。不能把“nvcc”理解成运行时负责 GPU 调度的组件。
+
+- 普通 g++ 通常无法直接编译带 CUDA 扩展语法的 .cu 代码；但也不是世界上只有 nvcc 能编译 CUDA，例如 Clang 也具备 CUDA 编译支持。
+
+
+```text
+CUDA .cu 文件
+│
+┌───────────┴───────────┐
+│ │
+Host Code Device Code
+│ │
+g++ / clang++ / MSVC CUDA device compiler
+│ PTX / cubin / fatbin
+└───────────┬───────────┘
+↓
+可执行程序
+↓ 运行时
+CUDA Runtime API
+↓
+CUDA Driver
+↓
+GPU
+```
+
+
+#### PTX / cubin / SASS：编译产物与运行时不要混为一谈
+
+Device Code 不等于“交给 CUDA Runtime 后就直接执行”。更准确的编译/装载关系是：高级 CUDA/Kernel 描述经过编译与 lowering，得到 PTX 和/或面向具体 GPU 架构的 binary；最终 GPU 执行的是架构相关机器指令（SASS）。CUDA Runtime / Driver 负责 Host 侧 API、加载与 launch，而不是 GPU ISA 本身。
+
+```text
+CUDA C++ / Kernel DSL
+        ↓
+PTX（虚拟 GPU ISA，可选中间层）
+        ↓ ptxas / Driver JIT
+cubin / machine code
+        ↓
+SASS
+        ↓
+GPU
+```
+
+Triton、TileLang、CUTLASS 与 cuBLAS 的位置会在 07 章统一展开。
+
+#### Kernel Launch 并不是“CPU 创建一百万个 GPU Thread”
+
+CPU 执行 `vector_add<<<4096,256>>>`(...) 时，更接近向 CUDA Runtime/Driver 提交一个紧凑的 Launch 描述：Kernel 是哪个、GridDim 是多少、BlockDim 是多少、参数在哪里、动态 Shared Memory 多大、进入哪个 Stream。GPU 根据这些元数据自行展开和分派 Block。
+
+| **Launch 参数**          | **含义**                                       |
+|--------------------------|------------------------------------------------|
+| gridDim                  | Grid 中有多少个 Block；可为 1D/2D/3D           |
+| blockDim                 | 每个 Block 中有多少个 Thread；可为 1D/2D/3D    |
+| dynamicSharedMemoryBytes | 每个 Block 额外申请的动态 Shared Memory 字节数 |
+| stream                   | 这次工作进入哪条 CUDA Stream                   |
+
+```cpp
+vector_add<<<gridDim, blockDim, dynamicSharedMemoryBytes, stream>>>(...);
+```
+
+#### 为什么说 Kernel Launch 通常是异步的？
+
+Host 侧把工作 enqueue 到某个 CUDA Stream 后，CPU 通常可以继续往下执行；GPU 按 Stream 的依赖关系执行。cudaDeviceSynchronize() 才是显式要求 Host 等待此前 GPU 工作完成。注意“入队顺序、Stream 语义、是否同步”与“Block 如何被分配到 SM”是不同层次的问题。
+
+> **完整链路：**编译阶段决定代码形态；Kernel Launch 描述逻辑工作量；Runtime/Driver 把命令入队；GPU Front End/CTA 分配逻辑把 Block 放入有资源的 SM；SM 内 Warp Scheduler 再把 Eligible Warp 的下一条指令 Issue 到执行管线。
+
+
+<a id="notebook-07-02"></a>
+
+## 07.2｜PTX、cubin、SASS：Kernel 最终到底被编译成什么？
+
+
+一个容易出现的错误说法是：“Triton 编译成 CUDA Runtime 可以执行的代码。”
+
+更准确的是：**CUDA Runtime 负责 API 与运行时提交，不是 GPU ISA。GPU 最终执行的是架构相关机器指令。**
+
+```text
+高级 Kernel 描述
+│
+▼
+PTX
+│
+▼
+ptxas / JIT
+│
+▼
+cubin（包含 GPU machine code 的 binary container）
+│
+▼
+SASS（GPU 真正执行的机器指令）
+│
+▼
+GPU
+```
+
+- **PTX（Parallel Thread Execution）**：NVIDIA 的虚拟 GPU ISA / 中间表示，可再针对具体 GPU 架构生成机器代码。
+- **cubin**：保存已编译 GPU binary 的容器形式之一。
+- **SASS**：具体 NVIDIA GPU 架构真正执行的机器指令。
+
+因此 `CUDA Runtime`、`PTX`、`SASS` 不属于同一类概念：
+
+```text
+CUDA Runtime：运行时软件接口
+PTX：虚拟 ISA / 中间层
+SASS：真实 GPU ISA 机器指令
+```
+
+---

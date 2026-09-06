@@ -1,6 +1,32 @@
 # 00 性能分析的基本语言
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 性能分析不是找最大的数字](#read-01)
+- [2. 六个基础概念](#read-02)
+- [3. 从 Python 到 GPU 的层次](#read-03)
+- [4. GPU 为什么会慢：四个大类](#read-04)
+- [5. 训练、推理、RL 分别测什么](#read-05)
+- [6. 一次可信测量的七条规则](#read-06)
+- [7. 症状到工具的第一棵决策树](#read-07)
+- [8. 本章练习](#read-08)
+- [参考资料](#read-09)
+- [测量的深入边界与因果验证](#read-10)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A1 · 必修。
+> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：延迟/吞吐/关键路径/测量边界，先于专业 profiler。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章不使用 profiler。目标是先建立一套不会混淆的语言。你需要知道“测什么”“为什么慢”和“下一步该看哪里”。
+
+
+<a id="read-01"></a>
 
 ## 1. 性能分析不是找最大的数字
 
@@ -18,6 +44,9 @@
 1. 它在关键路径上吗？
 2. 它是否与别的工作重叠？
 3. 缩短它会让后续工作更早开始吗？
+
+
+<a id="read-02"></a>
 
 ## 2. 六个基础概念
 
@@ -66,6 +95,9 @@
 
 为管理真正计算而付出的成本，例如 Python 调度、kernel launch、图编译、日志、checkpoint、序列化、HTTP 和 Ray object store。
 
+
+<a id="read-03"></a>
+
 ## 3. 从 Python 到 GPU 的层次
 
 以后看到“算子”一词，需要先问它指哪一层：
@@ -90,6 +122,9 @@ PTX / SASS 指令与 GPU 硬件
 ```
 
 一个 Python 操作可能触发多个 ATen 算子；一个 ATen 算子也可能触发多个 CUDA kernel。`torch.compile` 还可能把多个 ATen 算子融合成一个 Triton kernel。因此不能只靠函数名猜测底层执行。
+
+
+<a id="read-04"></a>
 
 ## 4. GPU 为什么会慢：四个大类
 
@@ -131,6 +166,9 @@ PTX / SASS 指令与 GPU 硬件
 - 单卡快，多卡扩展差。
 
 NVIDIA 的 GPU 性能背景指南用算术强度和并行度来区分延迟、计算和内存限制；Nsight Compute 的 Roofline 是把这种判断数据化的工具。参见 [GPU Performance Background](https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html) 与 [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)。
+
+
+<a id="read-05"></a>
 
 ## 5. 训练、推理、RL 分别测什么
 
@@ -177,6 +215,9 @@ RL 是训练和在线推理组成的流水线，还要测：
 
 局部最快不等于端到端最快。给训练侧更多 GPU 可能让它更早结束，却更久地等待 rollout。
 
+
+<a id="read-06"></a>
+
 ## 6. 一次可信测量的七条规则
 
 1. **固定代码**：记录 commit，禁止边测边改。
@@ -186,6 +227,9 @@ RL 是训练和在线推理组成的流水线，还要测：
 5. **CUDA 要同步**：普通 Python 计时会漏掉异步 GPU 工作。
 6. **重复并看分布**：至少报告中位数和波动；长任务按 step 分布。
 7. **一次只改一个变量**：否则无法知道哪个改动产生效果。
+
+
+<a id="read-07"></a>
 
 ## 7. 症状到工具的第一棵决策树
 
@@ -208,6 +252,9 @@ RL 是训练和在线推理组成的流水线，还要测：
    └─ wait_time_ratio 低且 actor_train 慢：分析训练
 ```
 
+
+<a id="read-08"></a>
+
 ## 8. 本章练习
 
 找一个你正在运行的任务，用一句话填写：
@@ -222,6 +269,9 @@ RL 是训练和在线推理组成的流水线，还要测：
 
 如果第一行写不出来，先不要打开 profiler。没有目标指标，就无法判断优化是否成功。
 
+
+<a id="read-09"></a>
+
 ## 参考资料
 
 - [NVIDIA GPU Performance Background](https://docs.nvidia.com/deeplearning/performance/dl-performance-gpu-background/index.html)
@@ -230,3 +280,73 @@ RL 是训练和在线推理组成的流水线，还要测：
 - [PyTorch Benchmark Recipe](https://docs.pytorch.org/tutorials/recipes/recipes/benchmark.html)
 - [vLLM Benchmark CLI](https://docs.vllm.ai/en/latest/benchmarking/cli/)
 - [SGLang Bench Serving Guide](https://docs.sglang.ai/developer_guide/bench_serving)
+
+
+<a id="concept-01"></a>
+
+
+<a id="read-10"></a>
+
+## 测量的深入边界与因果验证
+
+### 3. 用“假设—证据—干预”闭环
+
+```mermaid
+flowchart LR
+    A["现象"] --> B["可证伪假设"]
+    B --> C["最小证据"]
+    C --> D["单变量干预"]
+    D --> E["重复测量"]
+    E -->|不支持| B
+    E -->|支持| F["固化与回归"]
+```
+
+例：GPU 每 80 ms 出现 12 ms 空洞。
+
+- 假设 A：DataLoader 供给不足。证据应是 CPU data range 延长、队列为空，且预生成 batch 后空洞消失。
+- 假设 B：每步同步日志。证据应是空洞前出现 `cudaDeviceSynchronize` 或 `.item()` 对应 CPU stack，关闭同步日志后消失。
+- 假设 C：gradient AllReduce 暴露。证据应是 NCCL kernel 占据该区间，而不是 GPU 完全空闲。
+
+只根据一个截图猜原因，不构成闭环。
+
+
+### 5. Warm-up 不是随便丢掉前几步
+
+首轮可能包含：CUDA context 初始化、lazy module 初始化、memory pool 扩张、JIT（Just-In-Time，即时）编译、`torch.compile` tracing/compilation、autotuning、CUDA Graph capture、通信器建立与文件缓存升温。
+
+正确做法是画出逐步时间，确认进入稳态后再选窗口。动态 shape 可能触发多次 recompilation；此时“第 10 步以后都是稳态”并不成立。
+
+
+### 6. Profiler 会改变被测对象
+
+- trace 事件越多，CPU 写缓冲和输出文件越大；Python stack、shape、memory 记录都有额外开销。
+- Nsight Compute 采集硬件 counter 时可能多次 replay 同一个 kernel。
+- Nsight Systems 和 DCGM 都可能竞争有限的 GPU performance counter；必要时暂停 DCGM profiling metrics，完成后恢复。
+- profiler 本身消耗 GPU memory；接近显存上限的任务可能只在 profiling 时 OOM。
+- 多 rank 同时写 trace 会放大共享文件系统抖动。
+
+因此采用三级策略：常驻低开销 metric → 少量 rank 的短窗口 trace → 只对少量 kernel 做 counter replay。
+
+
+### 7. 平均值会藏住最重要的问题
+
+报告至少包含：median（中位数）、p90/p95/p99、min/max、变异系数和样本数。分布式 step 由最慢 rank 决定；在线服务由 tail latency 决定。平均 20 ms 的 collective 若每 200 步出现一次 300 ms 长尾，平均数仍可能很好看。
+
+不要对不同输入长度直接聚合。Attention 复杂度、KV cache 占用和 batching 效率都随输入形状变化。应按 input sequence length（ISL，输入序列长度）、output sequence length（OSL，输出序列长度）、batch/concurrency 分桶。
+
+
+### 8. 相关性不等于因果
+
+GPU 功耗下降与网络通信变长同时发生，不代表降频导致通信慢：更可能是 GPU 在等网络，所以功耗下降。可用干预区分：固定时钟/功耗后是否仍慢；对通信做独立 microbenchmark；替换成 synthetic data；临时禁用某段 overlap。
+
+
+### 9. 性能改动的完成定义
+
+一个改动只有同时满足以下条件才算完成：
+
+1. 目标指标在多次独立运行中稳定改善；
+2. correctness/accuracy 不退化；
+3. p99、峰值显存、功耗或错误率没有不可接受恶化；
+4. 在至少两个代表性 shape 上成立；
+5. 证据能解释为什么快，而非偶然波动；
+6. 有自动化回归阈值和回退方案。

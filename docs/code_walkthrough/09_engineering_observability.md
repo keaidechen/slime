@@ -1,9 +1,32 @@
 # 09 工程化与可观测性：调试、容错、Profiling、CI 与可复现
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 分离调试：把 RL 拆成两个可独立运行的半系统](#read-01)
+- [2. 正确性校验设施](#read-02)
+- [3. 容错](#read-03)
+- [4. Trace 与 Profiling](#read-04)
+- [5. CI：把"正确性"变成回归测试](#read-05)
+- [6. 可复现性](#read-06)
+- [7. 系列收尾：学习路线建议](#read-07)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A5/A7 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：分离调试、对账、健康状态、CI；通用 profiler 操作引用性能教程。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.10「工程化」。
 > README 里有句纲领："RL bug 往往不会立刻报错"——权重没同步、logprob 对不上、数据错位，训练照跑，只是模型悄悄变差。slime 把正确性设施当一等公民。本篇盘点这些设施及对应代码，并把 profiling 部分写得足够细（这是训练慢时最需要动手排查的部分）。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 1. 分离调试：把 RL 拆成两个可独立运行的半系统
 
@@ -24,6 +47,9 @@
 **工作流建议**：新任务先 `--debug-rollout-only` 把数据和 reward 跑对并落盘 → 再 `--debug-train-only` 回放数据把训练跑对 → 最后全链路小规模 → 放量。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 2. 正确性校验设施
 
@@ -48,6 +74,9 @@
 `Sample` 的长度校验（03 篇）、`add_samples` 的组长度断言（data_source.py:206-209）、`start_rollout_id` 全组一致断言（placement_group.py:216）——把"数据错位"这类 bug 尽量变成启动即报的错误。
 
 ---
+
+
+<a id="read-03"></a>
 
 ## 3. 容错
 
@@ -94,6 +123,9 @@ while not self._stop_event.is_set():
 **`_check_engine_health` → `_kill_engine` 的连锁**：一旦某个引擎的 `health_generate` 请求超时或抛异常，直接 `ray.kill(engine)` 杀掉整组（`nodes_per_engine` 决定一个"引擎"横跨几个 Ray actor/节点，TP>1 的引擎需要连坐杀掉所有 TP rank，否则残留进程会占着 GPU 且状态不完整）；被杀掉的 slot 在 `all_engines` 数组里置 `None`，等下一次 `update_weights` 时由 `recover_updatable_engines`（§3 提到的 rollout.py:601）检测到空位并重建——**"杀死->留空->下次同步时重建"是一套完全解耦的三段式容错**，`RolloutHealthMonitor` 只负责第一步，完全不关心如何恢复。
 
 ---
+
+
+<a id="read-04"></a>
 
 ## 4. Trace 与 Profiling
 
@@ -170,7 +202,7 @@ Rollout（生成）侧的耗时在 `slime/ray/rollout.py:1292` 的 `_log_rollout
 | `--profile-target` | slime 自定义（`slime/utils/arguments.py:1296-1302`） | `["train_overall"]`，可多选 `train_overall / train_actor / train_log_probs` | 决定"在哪个粒度"抓 trace |
 | `--tensorboard-dir` | Megatron 原生 | 无默认，需要显式传 | trace 文件的输出目录（同时也是 tensorboard 日志目录） |
 
-`--profile-target` 三个可选值对应三种不同粒度（实现在 `slime/utils/profile_utils.py`）：
+`--profile-target` 三个可选值对应三种不同粒度（实现在 `slime/observability/profile_utils.py`）：
 
 - `train_overall`：以 **rollout step** 为最小单位推进 profiler 的 schedule。适合看"训练侧在多个 rollout 之间"的整体波动（比如某次权重同步特别慢、某次显存 GC 卡顿）。代码：`TrainProfiler.__init__`（`profile_utils.py:19-24`）创建 profiler，`TrainProfiler.on_init_end()`（26-28，在 `actor.py:199` 模型初始化完后调用）启动它，`TrainProfiler.step()`（30-39，在 `actor.py:518` 每次 `train_actor` 结束后调用）推进一步；
 - `train_actor`：以 **micro-batch** 为最小单位，只抓 `train_actor` 里真正跑 forward+backward 的那部分循环（`TrainProfiler.iterate_train_actor()`，41-42），更细，适合看单次训练反向内部各 micro-batch 之间的 kernel 情况；
@@ -239,7 +271,7 @@ PROFILE_ARGS=(
 
 只在 `--profile-target` 包含 `train_overall` 时才会启用（`TrainProfiler.__init__` 里 `if args.record_memory_history and ("train_overall" in args.profile_target)`，这是默认值，一般不用改）。
 
-**两种后端的区别**（`slime/utils/profile_utils.py:81-147`）：
+**两种后端的区别**（`slime/observability/profile_utils.py:81-147`）：
 
 - **`torch`（`_TorchMemoryProfiler`）**：调用 PyTorch 原生 `torch.cuda.memory._record_memory_history(...)`，同时用 `torch._C._cuda_attach_out_of_memory_observer` 挂一个 **OOM 自动 dump 回调**——一旦这张卡真的 OOM，会自动把当前的显存分配历史 dump 成 pickle 文件，并打印堆栈。这是**排查 OOM 最有效的手段**，几乎零心智负担：开着它训练，等它自己 OOM 的时候自动留证据。如果设置了 `--memory-snapshot-num-steps`，跑到第 `N-1` 个 rollout 时也会主动 dump 一次（即使没有 OOM）；
 - **`memray`（`_MemrayMemoryProfiler`）**：Python 级别的内存分析器（不止 GPU，也能看 CPU 端 Python 对象的内存），`native_traces=True` 表示同时记录 C/C++ 层调用栈。**必须**设置 `--memory-snapshot-num-steps`（代码里有 `assert`），因为 memray 没有 OOM 回调机制，只能按步数主动停止记录。
@@ -375,6 +407,9 @@ python tools/profile_rollout.py --router-url http://127.0.0.1:<router端口> \
 
 ---
 
+
+<a id="read-05"></a>
+
 ## 5. CI：把"正确性"变成回归测试
 
 README 概括了 CI 的三层：
@@ -387,6 +422,9 @@ CI 里的特色设施：`--ci-test` 参数触发严格断言（如 generate 里 
 
 ---
 
+
+<a id="read-06"></a>
+
 ## 6. 可复现性
 
 - **种子链路**：`--rollout-seed` 驱动数据集 shuffle（`Dataset.shuffle` 用 `seed + epoch_id`，保证同 epoch 同排列，03 篇）；`sglang_enable_deterministic_inference` 时组内每个采样用 `rollout_seed + i` 的固定采样种子（sglang_rollout.py:110-112、317-319）；
@@ -394,6 +432,9 @@ CI 里的特色设施：`--ci-test` 参数触发严格断言（如 generate 里 
 - **调试文档**：`docs/zh/developer_guide/debug.md`、`docs/zh/advanced/reproducibility.md`。
 
 ---
+
+
+<a id="read-07"></a>
 
 ## 7. 系列收尾：学习路线建议
 

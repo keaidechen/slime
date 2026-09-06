@@ -1,5 +1,12 @@
 # 05 RL 算法实现：从 logprob 到 loss 的完整链路
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：已有算法可快读；logprob、mask、全局归一化、重要性修正重点读。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.6「RL 算法」。
 > 涉及文件：`slime/backends/megatron_utils/loss.py`（流程编排）、`slime/utils/ppo_utils.py`（算法原语，移植自 OpenRLHF）、`slime/backends/megatron_utils/cp_utils.py`（Context Parallel 支持）。
 > 本篇按"训练一步时数据如何流动"的顺序讲，每个公式都配数值例子。
@@ -103,9 +110,9 @@ zigzag 分配: 0  1  1  0  0  1  1  0    (示意：rank0 拿 {0,3,4,7} 之类的
 
 | 类型 | 公式 | 性质 |
 |---|---|---|
-| k1 | \(r = \log\pi_\theta - \log\pi_{ref}\) | 无偏但可为负、方差大 |
-| k2 | \(r^2/2\) | 恒正但有偏 |
-| k3 | \(\exp(-r)-1+r\) | 恒正、无偏、低方差（推荐） |
+| k1 | $r = \log\pi_\theta - \log\pi_{ref}$ | 无偏但可为负、方差大 |
+| k2 | $r^2/2$ | 恒正但有偏 |
+| k3 | $\exp(-r)-1+r$ | 恒正、无偏、低方差（推荐） |
 
 `importance_ratio` 参数（loss.py:1057-1058 的 `--use-unbiased-kl`）对应 DeepSeek-V3.2 的无偏 KL 修正：KL 乘以 IS ratio。
 
@@ -123,9 +130,9 @@ def get_grpo_returns(rewards, kl):
 
 **数值例子**：prompt "1+1=?" 采 8 条，reward = [1,1,1,0,1,0,1,1]。GRPO 的"组内归一化"发生在 reward 计算侧（rollout 端对组内 reward 减均值除标准差，见 `--advantage-estimator` 相关 RM 后处理），这里拿到的 rewards 已是相对值；`kl_coef=0` 时 advantage 就是常数广播——好回答的每个 token 都被同等鼓励。**这就是 GRPO 省掉 critic 的本质：用组内统计量替代 value 网络。**
 
-**PPO（GAE）**：critic 给每个 token 估值，`vanilla_gae/chunked_gae`（ppo_utils.py:579/603）按 \( \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t) \)、\( A_t = \sum_l (\gamma\lambda)^l \delta_{t+l} \) 递推；reward 被加在最后一个 token 的 KL 惩罚项上（loss.py:727-738）。
+**PPO（GAE）**：critic 给每个 token 估值，`vanilla_gae/chunked_gae`（ppo_utils.py:579/603）按 $ \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t) $、$ A_t = \sum_l (\gamma\lambda)^l \delta_{t+l} $ 递推；reward 被加在最后一个 token 的 KL 惩罚项上（loss.py:727-738）。
 
-**REINFORCE++**：token 级 reward = `-kl_coef * kl`，序列 reward 加在最后一个有效 token（`last_idx`，ppo_utils.py:418-419），再按 \( G_t = r_t + \gamma G_{t+1} \) 倒推（421-426）；`reinforce_plus_plus_baseline` 则是 `(reward - 组基线)` 直接广播（441-468）。
+**REINFORCE++**：token 级 reward = `-kl_coef * kl`，序列 reward 加在最后一个有效 token（`last_idx`，ppo_utils.py:418-419），再按 $ G_t = r_t + \gamma G_{t+1} $ 倒推（421-426）；`reinforce_plus_plus_baseline` 则是 `(reward - 组基线)` 直接广播（441-468）。
 
 **GSPO / CISPO**：advantage 与 GRPO 相同（loss.py:720-724 归为同一分支），差异在 loss 的比率定义（§4.2）。
 

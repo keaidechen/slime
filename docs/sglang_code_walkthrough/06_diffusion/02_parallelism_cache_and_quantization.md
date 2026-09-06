@@ -1,5 +1,24 @@
 # 6.2 并行、Backend、缓存与量化
 
+<!-- learning-position -->
+> **学习定位**：A8 · 参考。
+> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：Diffusion 并行/cache/量化按相关任务查阅。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：把缓存与量化的收益写成可比较条件
+
+减少采样步数、复用中间结果和降低精度都会影响执行成本，但也可能改变输出质量。比较时固定 prompt、种子、尺寸、步数与评价方式，并明确哪些量是实验变量。
+
+并行可以切组件、batch 或内部计算，通信成本与显存收益不同；先画 latent/条件张量在哪里，再讨论多卡。缓存则要说明何时可复用、何时因条件变化必须失效。
+
+验收：给出速度、显存与质量三项结果及适用条件。LLM 的 token/s 与扩散的请求/图像或采样步耗时不能直接比较。
+
+## 机制与实现
+
 ## 1. 并行和解耦
 
 Sequence Parallel 切分 token/patch 序列，适合高分辨率图像和长视频；CFG parallel 可分离条件/无条件分支；TP 切分权重；组件解耦把 text encoder、DiT 和 VAE 放入不同资源池。
@@ -50,4 +69,3 @@ Cache-DiT、TeaCache 利用相邻 timestep 特征变化有限，近似跳过或�
 - `progressive_resolution.mdx`、`quantization.mdx`
 
 以上路径均位于 `sglang/docs_new/docs/sglang-diffusion/`。
-

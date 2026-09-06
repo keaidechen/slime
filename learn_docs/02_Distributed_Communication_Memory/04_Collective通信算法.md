@@ -1,5 +1,24 @@
 # Collective 通信算法
 
+<!-- learning-position -->
+> **学习定位**：A2→A8 · 分层必修。
+> **前置**：[两卡通信](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：先懂 ring/tree 的步骤与开销；PAT/协议内部后读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：先画两阶段，再记通信算法名称
+
+把每个 rank 的数组分成 P 个块。Ring AllReduce 可理解为先用 P−1 步边传边规约，让各 rank 持有不同的最终块；再用 P−1 步把这些块传给其他 rank。每一步搬的是约 N/P 字节，N 是每 rank 的完整输入字节数。
+
+在无拥塞、理想单链路模型下，时间近似 2(P−1)α + 2(P−1)N/(P·BW)。P 增大时，固定启动步数增加；这解释小消息为何未必喜欢长环。实际 NCCL 可采用多个 channel 和分层路径，模型用于提出假设，不是逐事件预测。
+
+练习：用 P=4、每卡 [a,b,c,d] 四块画出每轮块的 owner。先确保最终每块包含四个 rank 的规约贡献，再考虑哪个网络路径更快。AllReduce 的数学结果相同，不意味着其物理算法固定。
+
+## 机制与实现
+
 Collective 是语义，Ring、Tree、PAT、NVLS 是实现算法或路径。不能看到 `AllReduce` 就断言“一定走 Ring”。NCCL 会结合拓扑、消息大小、protocol、可用 plugin 与代价模型选择。
 
 ## Ring AllReduce
@@ -68,4 +87,3 @@ NCCL 中 Ring/Tree/NVLS/PAT 是算法维度，Simple/LL/LL128 等是 protocol �
 - [NCCL Environment Variables：NCCL_ALGO / NCCL_PROTO](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/env.html)
 - [NCCL Releases](https://github.com/NVIDIA/nccl/releases)
 - [NCCL 2.24：Topology、RAS 与 Buffer Registration](https://developer.nvidia.com/blog/networking-reliability-and-observability-at-scale-with-nccl-2-24/)
-

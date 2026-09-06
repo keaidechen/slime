@@ -1,5 +1,12 @@
 # Rank 网格、进程组、Tensor/Sequence Parallel
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：rank group、TP/SP、词表并行，结合两卡张量核对。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 先画 rank 网格
 
 `initialize_model_parallel()` 位于 `megatron/core/parallel_state.py:547`，`RankGenerator` 位于约 446 行。它把线性的 global rank 映射到多维并行坐标，再为不同维度组合创建 process group。

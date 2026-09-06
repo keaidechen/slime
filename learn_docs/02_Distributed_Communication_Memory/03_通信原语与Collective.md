@@ -1,5 +1,12 @@
 # 通信原语与 Collective
 
+<!-- learning-position -->
+> **学习定位**：A2 · 必修。
+> **前置**：[两卡通信](<../00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：逐个列输入输出与 rank，演示 AllReduce/AllGather/ReduceScatter/AllToAll。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 Collective Communication（集合通信）是 communicator 中一组 rank 共同参与的数据变换。理解它们最有效的方法不是背名字，而是画出**输入分布 → 输出分布**。
 
 ## 核心原语
@@ -65,3 +72,129 @@ PyTorch 2.14 的实验性 `nccl2` backend 引入 one-sided window 能力；这�
 - [PyTorch Distributed collectives](https://docs.pytorch.org/docs/stable/distributed.html)
 - [PyTorch 2.14 Release Blog](https://pytorch.org/blog/pytorch-2-14-release-blog/)
 
+
+
+<a id="notebook-09"></a>
+
+## 学习问答：原笔记 §09
+
+### 09｜从操作系统 IPC 到 GPU 通信原语：今天 NCCL / RDMA 的思想是怎么演化出来的？
+
+问题：GPU 通信看起来有 Send/Recv、AllReduce、共享显存、P2P、RDMA、GPUDirect 等很多概念。它们与传统操作系统进程间通信是什么关系？为什么会一步步演化成今天的大模型训练通信体系？
+
+#### 核心主线
+
+> OS 进程隔离\
+> ↓\
+> IPC：Pipe / Socket / Shared Memory\
+> ↓\
+> Message Passing + Shared Memory 两类范式\
+> ↓\
+> 跨机器网络通信\
+> ↓\
+> MPI：Send/Recv + Collective\
+> ↓\
+> DMA / RDMA：减少 CPU 和内存拷贝\
+> ↓\
+> GPU 独立显存出现\
+> ↓\
+> CUDA Copy / P2P / CUDA IPC\
+> ↓\
+> GPUDirect RDMA\
+> ↓\
+> NCCL：GPU Collective / P2P\
+> ↓\
+> DDP / TP / PP / EP / FSDP
+
+#### 第一阶段｜OS 为什么需要 IPC？
+
+进程的核心特征之一是虚拟地址空间隔离：Process A 中的地址 0x1000 和 Process B 中的 0x1000 不代表同一块物理数据。默认情况下，一个进程不能直接解引用另一个进程的普通指针。因此操作系统需要提供 IPC。
+
+#### 第二阶段｜CPU 世界形成两类基本通信范式
+
+| **范式**        | **典型机制**                            | **核心思想**                         | **后来映射到 GPU 世界**                   |
+|-----------------|-----------------------------------------|--------------------------------------|-------------------------------------------|
+| Message Passing | pipe / socket / send / recv             | 把数据作为“消息”从发送方交给接收方   | MPI_Send/Recv、ncclSend/Recv              |
+| Shared Memory   | shm / mmap + mutex / semaphore / atomic | 让多个进程看到同一块内存，再解决同步 | CUDA IPC、共享 GPU buffer、NVSHMEM 等思想 |
+
+这里出现了以后所有通信系统都绕不开的两个基本问题：
+
+**Communication = Data Movement + Synchronization**
+
+#### 第三阶段｜从单机 IPC 到跨机器 Message Passing
+
+进程跨服务器后不再共享物理内存，通信必须经过网络。socket 将单机 send/recv 的抽象自然推广到网络：用户缓冲区 → kernel/network stack → NIC → 网络 → 对端 NIC → 对端进程。
+
+#### 第四阶段｜HPC 把通信抽象成 MPI
+
+当进程规模达到几百、几千甚至更多时，手写成百上千个 Send/Recv 会非常复杂。MPI 因此把常见通信模式标准化为两类：
+
+- Point-to-Point：Send / Recv。
+
+- Collective：Broadcast、Reduce、AllReduce、Gather、AllGather、Scatter、ReduceScatter、AllToAll 等。
+
+非常重要：AllReduce 并不是 GPU 或深度学习发明的。它早已是 HPC/MPI 的经典 collective；分布式训练只是发现“梯度同步”天然就是一个 AllReduce 问题。
+
+#### 第五阶段｜DMA / RDMA：从“CPU 搬数据”到“设备自己搬”
+
+普通数据搬运如果处处依赖 CPU copy，会浪费 CPU 周期并增加内存带宽压力。DMA 让设备在 CPU 配置好 descriptor 后自行读写内存；RDMA 再把这种思想扩展到远端机器，使网络通信越来越像对远端内存执行 read/write。
+
+> 传统思路：CPU 参与多次 copy / protocol processing\
+>
+> DMA： Device ↔ Host Memory，CPU 主要负责下发与管理\
+>
+> RDMA： NIC A ═════ fabric ═════ NIC B → Remote Memory
+
+#### 第六阶段｜GPU 出现：系统里多了一块独立 device memory
+
+GPU 最初更像 CPU 的加速外设，数据需要通过 cudaMemcpy 在 Host RAM 与 GPU VRAM/HBM 之间搬运。多 GPU 出现后，又产生 GPU0→GPU1 的 device-to-device 通信需求。
+
+> 最早： GPU0 → Host RAM → GPU1\
+> 改进： GPU0 ── P2P / Peer Access ──→ GPU1
+
+CUDA P2P 解决“同机 GPU 之间怎样直接搬数据”，底层实际路径可以是 PCIe，也可以是 NVLink/NVSwitch。注意：NVLink 是物理互联，cudaMemcpyPeer / Send / AllReduce 才是更上层的通信操作。
+
+#### 第七阶段｜不同进程各自管理 GPU：CUDA IPC 再次出现
+
+如果 Process A 管 GPU0、Process B 管 GPU1，A 中的 GPU pointer 对 B 并不天然有效。这和 CPU 进程地址空间隔离是同一个问题。CUDA IPC 的做法是：A 导出 GPU memory/event 的可传递 handle，经标准 OS IPC 把 handle 交给 B，B 再把它映射成自己可用的 device-side 资源。
+
+> Process A / GPU0\
+> cudaIpcGetMemHandle()\
+> │\
+> ├── OS IPC 只传 handle / metadata ──→ Process B\
+> │ cudaIpcOpenMemHandle()\
+> └────────────────────────────────────→ 映射/访问 GPU memory
+
+因此 GPU IPC 并没有取代 OS IPC，而是在 OS IPC 上再加了一层 GPU memory/resource 语义。
+
+#### 第八阶段｜跨机器 GPU 通信：GPUDirect RDMA
+
+跨节点时，最笨的路径是 GPU HBM → CPU DRAM → NIC → 网络 → NIC → CPU DRAM → GPU HBM。GPUDirect RDMA 的关键目标是让支持的 HCA/NIC 直接 DMA GPU memory，避免不必要的 host-memory staging。
+
+> GPU HBM → PCIe → HCA ═════ InfiniBand/RoCE ═════ HCA → PCIe → GPU HBM\
+> ↑ 直接 DMA GPU memory，避免 CPU DRAM 中转 ↑
+
+#### 第九阶段｜NCCL：把“GPU 通信怎么做”封装成高性能原语
+
+当程序需要自己处理 P2P、PCIe/NVLink 拓扑、NIC/HCA、RDMA、ring/tree、chunk/channel 等细节时，工程复杂度会极高。NCCL 把这些细节封装起来，对上提供熟悉的 communication primitives。
+
+| **类型**           | **典型 NCCL/MPI 原语**    | **大模型训练中的典型用途**                      |
+|--------------------|---------------------------|-------------------------------------------------|
+| Point-to-Point     | Send / Recv               | Pipeline Parallel 的 activation / gradient 传递 |
+| Reduction          | Reduce / AllReduce        | DDP 梯度同步、部分 TP 聚合                      |
+| Partition + Gather | ReduceScatter / AllGather | FSDP/ZeRO、TP/SP                                |
+| Permutation        | AllToAll                  | MoE Expert Parallel token dispatch              |
+
+#### 把通信分成五层来理解
+
+| **层次**     | **例子**                                  | **回答的问题**           |
+|--------------|-------------------------------------------|--------------------------|
+| L5 并行策略  | DDP / TP / PP / EP / FSDP                 | 模型为什么需要通信？     |
+| L4 通信原语  | AllReduce / AllGather / RS / Send/Recv    | 要交换什么数据？         |
+| L3 通信库    | NCCL / MPI / NVSHMEM                      | 由谁实现这些原语？       |
+| L2 Transport | CUDA P2P / SHM / RDMA / IB Verbs          | 数据具体怎样被搬运？     |
+| L1 Hardware  | PCIe / NVLink / NVSwitch / InfiniBand HCA | 数据最终走哪条物理路径？ |
+
+#### 最重要的 Insight
+
+今天 GPU 通信并不是一套凭空出现的新理论，而是 OS IPC 的隔离/共享思想、MPI 的 message-passing 与 collective 抽象、DMA/RDMA 的设备搬运机制，再叠加 CUDA 的 device memory/stream 模型后形成的。理解这条演化线后，NCCL、NVLink、InfiniBand、GPUDirect RDMA 就会自然落在不同层次上。

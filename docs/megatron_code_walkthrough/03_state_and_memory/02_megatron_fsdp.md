@@ -1,5 +1,12 @@
 # Megatron-FSDP：状态分片与执行生命周期
 
+<!-- learning-position -->
+> **学习定位**：A3→A8 · 分层必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：先区分 DistributedOptimizer 与 FSDP；具体策略源码第二遍读。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章只描述仓库固定 commit 中的 Megatron-FSDP，不把 PyTorch FSDP2 或早期 `custom_fsdp` 的行为混进来。应用入口是 `--use-megatron-fsdp`；训练侧最终用 `megatron_FSDP` 包装每个 model chunk。
 
 ## 1. 它与 Distributed Optimizer 的边界

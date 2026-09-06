@@ -1,5 +1,24 @@
 # 5.1 Benchmark、Profiling 与可观测性
 
+<!-- learning-position -->
+> **学习定位**：A4/A6 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：通用计时/工具安装接性能教程，保留 runtime 指标与因果链。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：一条容量曲线比一个峰值更有用
+
+固定模型、输入/输出长度、采样与缓存设置，从低并发开始逐点提高。每点记录请求数、测量时间、完成/失败、吞吐、TTFT/ITL 分布和 KV/queue。达到饱和后，吞吐可能基本不变而尾延迟迅速变坏。
+
+连续前缀重复的压测与随机前缀压测是不同 workload；要标明缓存热度。客户端发送不足也可能让服务看起来很空闲，不能据此判断 GPU 算力有余。
+
+验收：同时给吞吐和延迟曲线，并标出负载与稳定测量区间。安装与采集步骤统一使用性能教程，本篇只维护 SGLang 观测点与因果关系。
+
+## 机制与实现
+
 ## 1. Benchmark 先描述 workload
 
 至少记录模型/精度、硬件/互联、SGLang commit、并行配置、输入/输出长度分布、并发或到达过程、cache 命中率、streaming 和 SLO。缺少这些条件的 tokens/s 无法复现。
@@ -60,4 +79,3 @@
 - `sglang/docs_new/docs/advanced_features/observability.mdx`
 - `sglang/docs_new/docs/references/production_metrics.mdx`
 - `sglang/docs_new/docs/references/production_request_trace.mdx`
-

@@ -1,5 +1,60 @@
 # 03｜SGLang / RadixAttention 论文详解：从 Paged KV 到“可自动复用的前缀树缓存”
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先纠正一个常见理解：SGLang 最初并不只是“一个比 vLLM 快的推理框架”](#read-01)
+- [2. 为什么 2023/2024 年“多次调用 LLM”成为新问题？](#read-02)
+- [3. 为什么相同 Prefix 可以直接复用 KV？](#read-03)
+- [4. 为什么简单 Prefix Cache 不够？](#read-04)
+- [5. Trie 是什么？](#read-05)
+- [6. Radix Tree 又是什么？](#read-06)
+- [7. RadixAttention 的核心数据结构](#read-07)
+- [8. 为什么叫 Radix“Attention”？它本身是新的 Attention kernel 吗？](#read-08)
+- [9. 一个 Chat Session 是怎样进入 Radix Tree 的？](#read-09)
+- [10. 第二个 Chat 为什么会导致“节点 Split”？](#read-10)
+- [11. Few-shot Prompt 为什么特别适合 RadixAttention？](#read-11)
+- [12. Self-Consistency / Parallel Generation 又为什么适合？](#read-12)
+- [13. “请求结束了，为什么 KV 不马上 free？”](#read-13)
+- [14. 但 GPU Memory 有限：缓存不能永远留着](#read-14)
+- [15. Reference Counter 是做什么的？](#read-15)
+- [16. Cache 和 Running Requests 为什么共用同一个 Memory Pool？](#read-16)
+- [17. Prefix Cache 只有数据结构还不够：Scheduler 顺序也会影响命中率](#read-17)
+- [18. Longest-Shared-Prefix-First 是什么意思？](#read-18)
+- [19. 为什么论文会证明 DFS 可以达到最优 Cache Hit Rate？](#read-19)
+- [20. 这里为什么会出现公平性问题？](#read-20)
+- [21. Frontend Hint 为什么是一个有趣的系统设计？](#read-21)
+- [22. Radix Tree 本身存在哪？KV 又存在哪？](#read-22)
+- [23. RadixAttention 与 PagedAttention 是竞争关系吗？](#read-23)
+- [PagedAttention](#read-24)
+- [RadixAttention](#read-25)
+- [24. RadixAttention 与传统 Prefix Cache 的真正区别](#read-26)
+- [25. SGLang 论文里还有哪些东西，但和 RadixAttention 不是一回事？](#read-27)
+- [26. RadixAttention 在没有 Cache Hit 时会不会很亏？](#read-28)
+- [27. RadixAttention 的局限](#read-29)
+- [1. 主要依赖 exact prefix sharing](#read-30)
+- [2. Cache hit 强依赖 workload](#read-31)
+- [3. Cache-aware scheduling 与 latency/fairness 冲突](#read-32)
+- [4. GPU memory 仍然有限](#read-33)
+- [5. Tree/cache policy 是更高层优化](#read-34)
+- [28. RadixAttention → FlashInfer：为什么技术又继续演化？](#read-35)
+- [29. 一个例子把 PagedAttention、RadixAttention、FlashInfer 三层串起来](#read-36)
+- [RadixAttention 层](#read-37)
+- [Paged KV 层](#read-38)
+- [FlashInfer / kernel 层](#read-39)
+- [30. 最值得记住的 9 个 Insight](#read-40)
+- [31. 到这里，你已经可以把三篇论文串成一条线](#read-41)
+- [主要参考资料](#read-42)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：prefix 复用、radix tree、锁/驱逐与调度；论文其他设计第二遍。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：SGLang 是项目名，可理解为“面向结构化生成与高性能 LLM serving 的框架”；LLM = **Large Language Model（大语言模型）**；LM = **Language Model（语言模型）**；KV Cache = **Key-Value Cache（键值缓存）**；RAG = **Retrieval-Augmented Generation（检索增强生成）**；JSON = **JavaScript Object Notation（常用结构化数据格式）**；LRU = **Least Recently Used（最近最少使用缓存淘汰策略）**；DFS = **Depth-First Search（深度优先搜索）**；FCFS = **First-Come, First-Served（先到先服务）**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**。本文中的 **runtime** 指运行时系统，**prefix cache** 指复用相同输入前缀已计算出的状态，**cache-aware scheduling（缓存感知调度）** 指调度决策会显式考虑缓存命中与复用价值。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；API = **Application Programming Interface（应用程序编程接口）**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；AI = **Artificial Intelligence（人工智能）**；OS = **Operating System（操作系统）**；JIT = **Just-In-Time（即时编译）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
 
 > 论文：**SGLang: Efficient Execution of Structured Language Model Programs**
@@ -11,6 +66,9 @@
 > **前置阅读**：建议先读 `00_共享基础_GPU与LLM推理硬件基础.md` 和 `02_PagedAttention-vLLM论文详解.md`。本文默认你已经理解 KV Cache、continuous batching 和 paged KV 的基本概念。
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 先纠正一个常见理解：SGLang 最初并不只是“一个比 vLLM 快的推理框架”
 
@@ -58,6 +116,9 @@ Runtime Backend
 
 ---
 
+
+<a id="read-02"></a>
+
 # 2. 为什么 2023/2024 年“多次调用 LLM”成为新问题？
 
 早期 serving 思维比较像：
@@ -93,19 +154,22 @@ Judge candidates
 
 而 prefill 的结果中，最重要的可复用状态就是：
 
-\[
+$$
 \boxed{KV\ Cache}
-\]
+$$
 
 ---
+
+
+<a id="read-03"></a>
 
 # 3. 为什么相同 Prefix 可以直接复用 KV？
 
 Transformer 是 causal 的。
 
-对于 token \(i\) 的 K/V：
+对于 token $i$ 的 K/V：
 
-> 它只依赖从 token 0 到 token \(i\) 的 prefix。
+> 它只依赖从 token 0 到 token $i$ 的 prefix。
 
 假设：
 
@@ -144,6 +208,9 @@ reuse KV(A B C D)
 这就是 prefix caching 的基本理论基础。
 
 ---
+
+
+<a id="read-04"></a>
 
 # 4. 为什么简单 Prefix Cache 不够？
 
@@ -190,6 +257,9 @@ key → value
 
 ---
 
+
+<a id="read-05"></a>
+
 # 5. Trie 是什么？
 
 Trie = Prefix Tree。
@@ -222,6 +292,9 @@ a
 
 ---
 
+
+<a id="read-06"></a>
+
 # 6. Radix Tree 又是什么？
 
 Radix Tree 可以看作 compressed trie。
@@ -247,6 +320,9 @@ Radix Tree 可以压缩成：
 这非常适合 LLM prefix，因为很多连续 token 没有必要各建一个独立高层树节点。
 
 ---
+
+
+<a id="read-07"></a>
 
 # 7. RadixAttention 的核心数据结构
 
@@ -301,6 +377,9 @@ request tokens
 
 ---
 
+
+<a id="read-08"></a>
+
 # 8. 为什么叫 Radix“Attention”？它本身是新的 Attention kernel 吗？
 
 不是。
@@ -309,9 +388,9 @@ request tokens
 
 RadixAttention 核心并不是改：
 
-\[
+$$
 softmax(QK^T)V
-\]
+$$
 
 而是：
 
@@ -332,6 +411,9 @@ SGLang 论文中 RadixAttention 与 continuous batching、paged attention、tens
 所以它处在比 CUDA kernel 更高的一层。
 
 ---
+
+
+<a id="read-09"></a>
 
 # 9. 一个 Chat Session 是怎样进入 Radix Tree 的？
 
@@ -379,6 +461,9 @@ runtime 做 prefix match：
 
 ---
 
+
+<a id="read-10"></a>
+
 # 10. 第二个 Chat 为什么会导致“节点 Split”？
 
 假设 tree 当前只有：
@@ -412,6 +497,9 @@ root
 这个 split 操作非常关键，因为它会把隐藏在长 edge 内部的公共 prefix 显式暴露出来，从而让多个 request 共享 KV。
 
 ---
+
+
+<a id="read-11"></a>
 
 # 11. Few-shot Prompt 为什么特别适合 RadixAttention？
 
@@ -460,6 +548,9 @@ few-shot 越长、查询越多，prefix reuse 的价值越大。
 
 ---
 
+
+<a id="read-12"></a>
+
 # 12. Self-Consistency / Parallel Generation 又为什么适合？
 
 Self-consistency 常见形式：
@@ -487,6 +578,9 @@ Problem prefix
 > 这些 branch 可以来自 LM program 中任意动态 fork，而不是只有预先定义好的 sampling case。
 
 ---
+
+
+<a id="read-13"></a>
 
 # 13. “请求结束了，为什么 KV 不马上 free？”
 
@@ -523,6 +617,9 @@ KV 先留在 radix tree
 
 ---
 
+
+<a id="read-14"></a>
+
 # 14. 但 GPU Memory 有限：缓存不能永远留着
 
 假设 GPU KV pool 满了。
@@ -533,9 +630,9 @@ KV 先留在 radix tree
 
 SGLang 使用：
 
-\[
+$$
 \boxed{LRU}
-\]
+$$
 
 Least Recently Used。
 
@@ -567,6 +664,9 @@ A
 
 ---
 
+
+<a id="read-15"></a>
+
 # 15. Reference Counter 是做什么的？
 
 continuous batching 下，有些 radix tree nodes 正在被当前 running requests 使用。
@@ -585,15 +685,18 @@ ref_count
 
 只有：
 
-\[
+$$
 ref\_count=0
-\]
+$$
 
 才可以被 eviction。
 
 这和很多系统中的资源生命周期管理非常类似。
 
 ---
+
+
+<a id="read-16"></a>
 
 # 16. Cache 和 Running Requests 为什么共用同一个 Memory Pool？
 
@@ -636,15 +739,18 @@ GPU KV Memory Pool
 
 所以系统会动态 trade-off：
 
-\[
+$$
 cache\ hit\ rate
 \quad vs \quad
 batch\ size
-\]
+$$
 
 这是非常漂亮的 runtime policy。
 
 ---
+
+
+<a id="read-17"></a>
 
 # 17. Prefix Cache 只有数据结构还不够：Scheduler 顺序也会影响命中率
 
@@ -685,6 +791,9 @@ A 被 eviction
 > **Cache-aware Scheduling。**
 
 ---
+
+
+<a id="read-18"></a>
 
 # 18. Longest-Shared-Prefix-First 是什么意思？
 
@@ -728,6 +837,9 @@ A → C → B
 
 ---
 
+
+<a id="read-19"></a>
+
 # 19. 为什么论文会证明 DFS 可以达到最优 Cache Hit Rate？
 
 在论文给定的 offline 条件下，如果 cache capacity 至少能容纳最大 request length：
@@ -762,6 +874,9 @@ A → B → A → B
 
 ---
 
+
+<a id="read-20"></a>
+
 # 20. 这里为什么会出现公平性问题？
 
 如果永远优先 cache hit 最大的 request：
@@ -790,6 +905,9 @@ latency / fairness
 这是生产 serving 系统里非常真实的问题。
 
 ---
+
+
+<a id="read-21"></a>
 
 # 21. Frontend Hint 为什么是一个有趣的系统设计？
 
@@ -820,6 +938,9 @@ runtime 就可以更容易：
 即所谓 frontend-runtime co-design。
 
 ---
+
+
+<a id="read-22"></a>
 
 # 22. Radix Tree 本身存在哪？KV 又存在哪？
 
@@ -855,11 +976,17 @@ GPU 再使用这些 KV 进行 attention/prefill/decode。
 
 ---
 
+
+<a id="read-23"></a>
+
 # 23. RadixAttention 与 PagedAttention 是竞争关系吗？
 
 不是。
 
 这是读这两篇论文最重要的层次区分。
+
+
+<a id="read-24"></a>
 
 ## PagedAttention
 
@@ -870,6 +997,9 @@ logical blocks
     ↓
 physical blocks
 ```
+
+
+<a id="read-25"></a>
 
 ## RadixAttention
 
@@ -896,6 +1026,9 @@ Paged KV storage
 SGLang 原论文明确说明 RadixAttention 与 paged attention 是兼容的。
 
 ---
+
+
+<a id="read-26"></a>
 
 # 24. RadixAttention 与传统 Prefix Cache 的真正区别
 
@@ -928,13 +1061,16 @@ frontend hints
 
 真正创新是把：
 
-\[
+$$
 \boxed{data\ structure + cache\ policy + scheduling + LM\ program\ semantics}
-\]
+$$
 
 组合成完整 runtime optimization。
 
 ---
+
+
+<a id="read-27"></a>
 
 # 25. SGLang 论文里还有哪些东西，但和 RadixAttention 不是一回事？
 
@@ -956,6 +1092,9 @@ frontend hints
 
 ---
 
+
+<a id="read-28"></a>
+
 # 26. RadixAttention 在没有 Cache Hit 时会不会很亏？
 
 这是一个关键问题。
@@ -976,7 +1115,13 @@ SGLang 论文专门测试了没有 KV reuse opportunity 的情况，并报告 tr
 
 ---
 
+
+<a id="read-29"></a>
+
 # 27. RadixAttention 的局限
+
+
+<a id="read-30"></a>
 
 ## 1. 主要依赖 exact prefix sharing
 
@@ -989,17 +1134,29 @@ Explain artificial intelligence.
 
 Radix Tree 不会因为“语义相似”就复用。
 
+
+<a id="read-31"></a>
+
 ## 2. Cache hit 强依赖 workload
 
 如果所有请求完全随机且没有公共 prefix，收益有限。
+
+
+<a id="read-32"></a>
 
 ## 3. Cache-aware scheduling 与 latency/fairness 冲突
 
 为了命中率 reorder 请求，可能增加某些请求等待时间。
 
+
+<a id="read-33"></a>
+
 ## 4. GPU memory 仍然有限
 
 RadixAttention 优化“哪些 KV 留下来”，但并不会让 KV Cache 本身消失。
+
+
+<a id="read-34"></a>
 
 ## 5. Tree/cache policy 是更高层优化
 
@@ -1008,6 +1165,9 @@ RadixAttention 优化“哪些 KV 留下来”，但并不会让 KV Cache 本身
 这正是后来 FlashInfer 等 kernel/runtime 工作继续优化的空间。
 
 ---
+
+
+<a id="read-35"></a>
 
 # 28. RadixAttention → FlashInfer：为什么技术又继续演化？
 
@@ -1065,6 +1225,9 @@ FlashInfer
 
 ---
 
+
+<a id="read-36"></a>
+
 # 29. 一个例子把 PagedAttention、RadixAttention、FlashInfer 三层串起来
 
 假设服务器收到：
@@ -1076,6 +1239,9 @@ System Prompt + Conversation A + Question A
 Request B:
 System Prompt + Conversation A + Question B
 ```
+
+
+<a id="read-37"></a>
 
 ## RadixAttention 层
 
@@ -1091,6 +1257,9 @@ System Prompt + Conversation A
 
 > 这部分 KV 复用。
 
+
+<a id="read-38"></a>
+
 ## Paged KV 层
 
 公共 KV 可能实际存：
@@ -1102,6 +1271,9 @@ Physical Block 6
 ```
 
 A/B 的 logical prefix 都指向这些 blocks。
+
+
+<a id="read-39"></a>
 
 ## FlashInfer / kernel 层
 
@@ -1121,6 +1293,9 @@ FlashInfer：怎样把这些 KV 高效算掉？
 
 ---
 
+
+<a id="read-40"></a>
+
 # 30. 最值得记住的 9 个 Insight
 
 1. **KV Cache 可以从 request-local 临时状态升级为 server-level reusable cache。**
@@ -1134,6 +1309,9 @@ FlashInfer：怎样把这些 KV 高效算掉？
 9. **FlashInfer 又进一步把这些复杂 KV access patterns 下沉为统一的 kernel/runtime abstraction。**
 
 ---
+
+
+<a id="read-41"></a>
 
 # 31. 到这里，你已经可以把三篇论文串成一条线
 
@@ -1176,6 +1354,9 @@ FlashInfer
 > **LLM Infra 是如何随着 workload 变化，一层一层把瓶颈从计算、搬运、显存管理、缓存复用，最终推进到统一 runtime abstraction 的。**
 
 ---
+
+
+<a id="read-42"></a>
 
 ## 主要参考资料
 

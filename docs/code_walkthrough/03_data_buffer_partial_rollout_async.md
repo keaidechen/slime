@@ -1,5 +1,12 @@
 # 03 数据流：Sample、Data Buffer、Partial Rollout 与异步
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：先 Sample/buffer 不变量，再 partial/async/backpressure，串到算法语义。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.4「长尾治理」与 §2.5「异步与 off-policy」。
 > RL 系统的数据不是静态数据集，而是"由模型实时产生、带状态、可续写"的样本流。本篇解读 slime 的数据抽象与异步设计。
 

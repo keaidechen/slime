@@ -1,5 +1,46 @@
 # 04｜FlashAttention-2 论文详解：当“减少 HBM IO”之后，为什么还要重新设计并行方式？
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 一句话先记住 FlashAttention-2](#read-01)
+- [2. 为什么 FA1 之后还有很大优化空间？](#read-02)
+- [3. 先重新看 Attention 的计算组成](#read-03)
+- [3.1 Matmul FLOPs](#read-04)
+- [3.2 Non-matmul FLOPs](#read-05)
+- [4. 改进一：减少 non-matmul FLOPs](#read-06)
+- [5. 改进二：Sequence Length 维度上的并行](#read-07)
+- [6. FA2 怎么增加并行度？](#read-08)
+- [7. 为什么 Forward 和 Backward 的切法还不一样？](#read-09)
+- [8. 改进三：Thread Block 内 Warp 怎么分工？](#read-10)
+- [9. FA2 的思路：不要 Split-K，更多采用 Split-Q](#read-11)
+- [10. 为什么 Shared Memory 读写也是成本？](#read-12)
+- [11. 为什么“更多并行”不是永远越多越好？](#read-13)
+- [12. 为什么长序列尤其受益？](#read-14)
+- [13. FA2 的性能结果该怎么读？](#read-15)
+- [14. FA1 → FA2 到底变化了什么？](#read-16)
+- [15. 一个工厂比喻](#read-17)
+- [16. 从 FA2 到 FA3：下一层瓶颈是什么？](#read-18)
+- [17. AI Infra 视角最值得记住的 7 个 Insight](#read-19)
+- [Insight 1：IO-aware 不等于 hardware-saturating](#read-20)
+- [Insight 2：不同 FLOP 的硬件成本不同](#read-21)
+- [Insight 3：并行维度是算法设计的一部分](#read-22)
+- [Insight 4：Thread block 内的 warp 分工会直接影响性能](#read-23)
+- [Insight 5：Shared Memory 很快，但不是免费](#read-24)
+- [Insight 6：性能优化是逐层暴露瓶颈](#read-25)
+- [Insight 7：FlashAttention 系列本质是算法与 GPU 架构共同演化](#read-26)
+- [18. 读完后你应该能回答](#read-27)
+- [主要参考资料](#read-28)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：FA1 基础后读非 matmul 开销、warp 分工与并行粒度。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：FA1/FA2 分别指 **FlashAttention-1 / FlashAttention-2**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出，这里主要指显存数据搬运）**；GPU = **Graphics Processing Unit（图形处理器）**；SM = **Streaming Multiprocessor（流式多处理器）**；CTA = **Cooperative Thread Array（协作线程阵列，通常对应 CUDA thread block）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；FLOP = **Floating-Point Operation（浮点运算）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级矩阵乘加）**；FP8 = **8-bit Floating Point（8 位浮点格式）**。本文中的 **warp** 是 GPU 线程束，**work partitioning（工作划分：决定任务如何分给 thread/warp/CTA）** 指把一项计算工作拆给不同线程/warp/CTA 的方式。 另外：Q/K/V = **Query/Key/Value（查询/键/值向量）**，QKᵀ 表示 Query 与 Key 的矩阵乘，PV 表示注意力概率矩阵与 Value 的矩阵乘；AI = **Artificial Intelligence（人工智能）**。 另外：LLM = **Large Language Model（大语言模型）**。会议缩写：ICLR = **International Conference on Learning Representations（国际学习表征会议）**；NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
 
 > 论文：Tri Dao, **FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning**，2023，后发表于 ICLR 2024。
@@ -11,6 +52,9 @@
 > 本文重点不是重复 FlashAttention-1，而是回答：**FA1 已经把 Attention 从 IO 角度优化得很漂亮了，为什么仍只能利用 GPU 峰值算力的一部分？FA2 到底把剩下的性能浪费在哪里找了回来？**
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 一句话先记住 FlashAttention-2
 
@@ -41,6 +85,9 @@ FlashAttention-2
 3. 改进一个 thread block 内 warp 之间的工作分配。
 
 ---
+
+
+<a id="read-02"></a>
 
 # 2. 为什么 FA1 之后还有很大优化空间？
 
@@ -78,13 +125,16 @@ FA2 的作者观察到，FA1 在 A100 上虽然已经远快于普通 Attention�
 
 ---
 
+
+<a id="read-03"></a>
+
 # 3. 先重新看 Attention 的计算组成
 
 Attention：
 
-\[
+$$
 O = \operatorname{softmax}(QK^T)V
-\]
+$$
 
 可以粗略拆成：
 
@@ -98,6 +148,9 @@ O = \operatorname{softmax}(QK^T)V
 
 GPU 对这些工作的处理能力不是一样的。
 
+
+<a id="read-04"></a>
+
 ## 3.1 Matmul FLOPs
 
 例如：
@@ -108,6 +161,9 @@ PV
 ```
 
 可以高度利用 Tensor Core。
+
+
+<a id="read-05"></a>
 
 ## 3.2 Non-matmul FLOPs
 
@@ -132,6 +188,9 @@ rescale
 这就是 FA2 第一个优化方向的来源。
 
 ---
+
+
+<a id="read-06"></a>
 
 # 4. 改进一：减少 non-matmul FLOPs
 
@@ -186,6 +245,9 @@ rescale
 
 ---
 
+
+<a id="read-07"></a>
+
 # 5. 改进二：Sequence Length 维度上的并行
 
 这是 FA2 非常重要的一步。
@@ -229,6 +291,9 @@ SM33 idle
 
 ---
 
+
+<a id="read-08"></a>
+
 # 6. FA2 怎么增加并行度？
 
 Attention Matrix 可以想成：
@@ -265,21 +330,24 @@ batch = 1
 
 于是并行度从：
 
-\[
+$$
 O(B\times H)
-\]
+$$
 
 扩展为大致还包含：
 
-\[
+$$
 \text{sequence tiles}
-\]
+$$
 
 这一维。
 
 这对长序列训练尤其重要。
 
 ---
+
+
+<a id="read-09"></a>
 
 # 7. 为什么 Forward 和 Backward 的切法还不一样？
 
@@ -314,6 +382,9 @@ FA2 重新设计 backward 的 block parallelization，使工作可以更好地�
 这也是系统 kernel 优化里非常常见的思维。
 
 ---
+
+
+<a id="read-10"></a>
 
 # 8. 改进三：Thread Block 内 Warp 怎么分工？
 
@@ -357,6 +428,9 @@ warp 3 partial O ┘
 - 更多 warp 间 reduction / synchronization。
 
 ---
+
+
+<a id="read-11"></a>
 
 # 9. FA2 的思路：不要 Split-K，更多采用 Split-Q
 
@@ -403,6 +477,9 @@ Q same
 
 ---
 
+
+<a id="read-12"></a>
+
 # 10. 为什么 Shared Memory 读写也是成本？
 
 初学时很容易产生：
@@ -443,6 +520,9 @@ FA3：Tensor Core 再变快后，异步流水和 softmax overlap 继续成为重
 
 ---
 
+
+<a id="read-13"></a>
+
 # 11. 为什么“更多并行”不是永远越多越好？
 
 如果把工作切得过碎：
@@ -469,6 +549,9 @@ FA3：Tensor Core 再变快后，异步流水和 softmax overlap 继续成为重
 > **在 tile reuse、occupancy、并行度和 reduction overhead 之间找到更好的平衡。**
 
 ---
+
+
+<a id="read-14"></a>
 
 # 12. 为什么长序列尤其受益？
 
@@ -502,6 +585,9 @@ batch size 小
 
 ---
 
+
+<a id="read-15"></a>
+
 # 13. FA2 的性能结果该怎么读？
 
 论文报告在 A100 上，FlashAttention-2 相比 FlashAttention 有大约 2× 左右的速度提升，在不同设置下可达到约 50%–73% 的理论峰值 FLOPs，并显著提升端到端 Transformer 训练吞吐。
@@ -513,6 +599,9 @@ batch size 小
 > **仅仅减少 HBM IO 还不足以吃满 GPU；把 sequence-level parallelism 和 warp-level work partition 一起重新设计，可以继续释放大量性能。**
 
 ---
+
+
+<a id="read-16"></a>
 
 # 14. FA1 → FA2 到底变化了什么？
 
@@ -535,6 +624,9 @@ FA2 = FA1 的 IO-aware 基础
 ```
 
 ---
+
+
+<a id="read-17"></a>
 
 # 15. 一个工厂比喻
 
@@ -586,6 +678,9 @@ FlashAttention-2 进来以后发现：
 
 ---
 
+
+<a id="read-18"></a>
+
 # 16. 从 FA2 到 FA3：下一层瓶颈是什么？
 
 到了 H100/Hopper：
@@ -613,7 +708,13 @@ FP8 吞吐大幅提高
 
 ---
 
+
+<a id="read-19"></a>
+
 # 17. AI Infra 视角最值得记住的 7 个 Insight
+
+
+<a id="read-20"></a>
 
 ## Insight 1：IO-aware 不等于 hardware-saturating
 
@@ -628,21 +729,36 @@ warp communication
 instruction mix
 ```
 
+
+<a id="read-21"></a>
+
 ## Insight 2：不同 FLOP 的硬件成本不同
 
 Tensor Core matmul FLOPs 和 exp/div/reduction 等 FLOPs 不应简单等价看待。
+
+
+<a id="read-22"></a>
 
 ## Insight 3：并行维度是算法设计的一部分
 
 当 batch/head 不够产生足够 CTA 时，可以从 sequence tile 中挖并行。
 
+
+<a id="read-23"></a>
+
 ## Insight 4：Thread block 内的 warp 分工会直接影响性能
 
 不是“数学公式一样，CUDA 随便实现都行”。
 
+
+<a id="read-24"></a>
+
 ## Insight 5：Shared Memory 很快，但不是免费
 
 当主计算越来越快时，shared-memory traffic 和 synchronization 会浮现成瓶颈。
+
+
+<a id="read-25"></a>
 
 ## Insight 6：性能优化是逐层暴露瓶颈
 
@@ -656,11 +772,17 @@ async pipeline / softmax overlap
 ...
 ```
 
+
+<a id="read-26"></a>
+
 ## Insight 7：FlashAttention 系列本质是算法与 GPU 架构共同演化
 
 它不是静态的“一个 attention trick”，而是一系列针对不同硬件代际重新设计执行方式的工作。
 
 ---
+
+
+<a id="read-27"></a>
 
 # 18. 读完后你应该能回答
 
@@ -674,6 +796,9 @@ async pipeline / softmax overlap
 如果这些问题可以用自己的话回答，就已经真正抓住 FA2。
 
 ---
+
+
+<a id="read-28"></a>
 
 ## 主要参考资料
 

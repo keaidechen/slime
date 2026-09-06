@@ -1,5 +1,12 @@
 # 术语表
 
+<!-- learning-position -->
+> **学习定位**：A3 · 参考。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：基础公共术语指向总词典，Megatron 专属术语保留。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 | 缩写/术语 | 中文解释 | 不要混淆 |
 |---|---|---|
 | MCore | Megatron Core 可组合训练库 | 不等于端到端 Megatron-LM 应用 |

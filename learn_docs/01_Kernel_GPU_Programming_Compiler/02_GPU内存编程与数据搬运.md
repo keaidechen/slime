@@ -1,5 +1,12 @@
 # GPU 内存编程与数据搬运
 
+<!-- learning-position -->
+> **学习定位**：A1→A8 · 分层必修。
+> **前置**：[基础课程](<../00_Foundations/README.md>)。
+> **首读/二读**：首读内存层级、带宽、合并访存、tiling；bank conflict 与高级搬运二读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 ## 1. 为什么 AI Kernel 经常不是“算得慢”，而是“搬得慢”？
 
 GPU 的 Tensor Core 可以在极短时间完成大量矩阵乘，但数据必须先到达计算单元附近。一个实用的简化层级是：
@@ -155,4 +162,3 @@ CUDA 13.3 的 Tile 编程模型让程序员表达 Block-local Tile，编译器�
 - [CUDA Best Practices: Memory Optimizations](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/)
 - [CUTLASS 4.x Overview](https://docs.nvidia.com/cutlass/latest/overview.html)
 - [Triton Warp Specialization](https://pytorch.org/blog/warp-specialization-in-triton-design-and-roadmap/)
-

@@ -1,5 +1,29 @@
 # GPU 内存组成与显存核算
 
+<!-- learning-position -->
+> **学习定位**：A1/A2 · 必修。
+> **前置**：[基础课程](<../00_Foundations/README.md>)。
+> **首读/二读**：参数/梯度/优化器/activation/KV，区分 allocated/reserved/device used。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：用 1B 模型建立一张显存账本
+
+先假设模型有 10 亿参数，BF16 参数 2 GB、FP32 梯度 4 GB、FP32 主权重 4 GB、Adam 两个矩 8 GB，共 18 GB。这里 GB=10^9 字节，换成 GiB 要除以 2^30。实际实现可能没有某些副本或使用不同梯度 dtype，必须对着代码改账本。
+
+| 时刻 | 除常驻状态外增加什么 | 为何峰值会变化 |
+|---|---|---|
+| forward | 输入、中间 activation、算子 workspace | backward 尚未发生，保存状态逐层增加 |
+| backward | 梯度与临时反向结果 | activation 按生命周期释放，梯度逐渐就绪 |
+| optimizer | 更新 workspace、可能的参数聚合 | 取决于分片、精度和 overlap |
+| rollout | KV、graph pool、推理 workspace | 与训练阶段不同，共置也不意味着自动共享全部内存 |
+
+练习：只改变序列长度，再只改变 microbatch，分别测每阶段峰值。若常驻状态没变但峰值增长，不能把新增显存都归到参数。验收是能解释预测与实测差额，而不是恰好凑出一个数字。
+
+## 机制与实现
+
 ## `nvidia-smi` 的 used memory 不是 tensor 总和
 
 GPU High Bandwidth Memory（HBM，高带宽内存）中通常同时存在：
@@ -78,4 +102,3 @@ PagedAttention 主要通过固定大小 block 和逻辑—物理映射避免为�
 - [PyTorch CUDA semantics：Memory management](https://docs.pytorch.org/docs/stable/notes/cuda.html#cuda-memory-management)
 - [PyTorch Understanding CUDA Memory Usage](https://docs.pytorch.org/docs/stable/torch_cuda_memory.html)
 - [PagedAttention 论文](https://arxiv.org/abs/2309.06180)
-

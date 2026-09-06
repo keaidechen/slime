@@ -1,5 +1,7 @@
 # 从 0 系统学习 RL Infra：slime 代码走读系列
 
+> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。旧引擎摘要已归入对应源码章节，兼容页无需重复阅读。
+
 本系列面向零基础读者，以本仓库（THUDM/slime）为教材系统学习 RL 基础设施。**00-09 是 slime 主线，10-12 是数据平面/第三方引擎专题，13 回到 slime 自己的 HF↔Megatron 转换实现**。每篇尽量遵循“问题 → 调用链 → 源码符号 → 例子 → 边界条件”的结构。
 
 > **版本说明（重要）**：本文档已按 slime v0.3.1 代码重新核对。v0.3.1 已移除 Megatron-Bridge 与 `bridge` mode，HF checkpoint 的加载、导出和 rollout 热更新均由 `slime/backends/megatron_utils/{hf_to_megatron,megatron_to_hf}/` 内建实现。旧文件名 `06_megatron_backend_and_mbridge.md`、`13_megatron_bridge_internals.md` 为避免外部链接失效而保留，内容讲的是当前实现。

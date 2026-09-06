@@ -1,5 +1,24 @@
 # 3.3 硬件平台与安装选择
 
+<!-- learning-position -->
+> **学习定位**：A1/A4 · 分层必修。
+> **前置**：[基础课程](<../../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：先核实实际环境/backend；其他硬件平台比较参考。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：记录实际选中的 backend
+
+安装包成功不等于目标模型的所有 kernel 可用。先记录 GPU、驱动、框架、attention backend、dtype 和模型特性，再查看启动日志确认实际选择；fallback 能运行也不代表性能相同。
+
+对 H20 不直接套用 H100 教程中的特定性能数字。实际可执行特性由硬件、编译目标、库和框架路径共同决定。遇到不支持先缩小到标准文本、基础 dtype 和普通 attention，再逐项加回。
+
+验收：保存一次启动日志中模型类与 backend 的证据，用固定输入检查数值与性能；其他平台资料作为比较参考，不混入本机实验基线。
+
+## 机制与实现
+
 ## 1. 安装方式是可复现性选择
 
 | 方式 | 适合 | 必须固定 |
@@ -61,4 +80,3 @@ CPU、Jetson 和 Apple Silicon 等平台通常更受内存容量、带宽、统�
 - `sglang/docs_new/docs/hardware-platforms/overview.mdx`
 - `sglang/docs_new/docs/hardware-platforms/`
 - `sglang/docs_new/docs/advanced_features/attention_backend.mdx`
-

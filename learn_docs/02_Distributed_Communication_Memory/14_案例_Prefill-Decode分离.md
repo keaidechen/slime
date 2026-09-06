@@ -1,5 +1,24 @@
 # 案例：Prefill–Decode 分离与 KV Cache 传输
 
+<!-- learning-position -->
+> **学习定位**：A4→A8 · 分层必修。
+> **前置**：[Transformer 与 KV](<../00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：先懂 KV 为什么跨节点搬、何时得不偿失；PD 实测后做。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：一次 PD 交接要转移什么
+
+Prefill 节点算出请求前缀的 KV 后，decode 节点不仅要拿到字节，还要知道请求身份、序列长度、KV 布局、采样配置和交接状态。源端发送结束、目标端可安全读取、路由层可以继续转发，是不同的完成条件。
+
+若 KV 为 512 MiB，有效传输带宽假设为 32 GiB/s，单纯搬运下界约 15.6 ms；实际还包括排队、注册、打包和调度。若同机执行只需节省 5 ms，分离可能得不偿失。这个数字是算例，不是 H20 基准。
+
+练习：列出交接前、传输中、确认后两个节点的 owner。目标端失败时由谁释放源端 KV？重试是否重复分配？先回答这些问题，再做 PD 吞吐对比。
+
+## 机制与实现
+
 ## 为什么要分离
 
 Prefill（预填充）一次处理整段 prompt，通常是大矩阵、compute-bound；Decode（解码）逐 token 执行，通常更受 HBM bandwidth、KV Cache 和调度影响。把两者 colocate 在同一 GPU pool 会互相干扰，也让资源比例和并行策略绑死。
@@ -74,4 +93,3 @@ Topology-aware KV transfer 会优先让 P/D worker 落在同一 zone/rack 等 do
 - [DistServe Paper](https://arxiv.org/abs/2401.09670)
 - [NVIDIA Dynamo Disaggregated Serving](https://docs.nvidia.com/dynamo/dev/kubernetes/disaggregated-serving/overview)
 - [Dynamo：Topology-Aware KV Transfer](https://docs.nvidia.com/dynamo/knowledge-base/kubernetes/multinode/topology-aware-kv-transfer)
-

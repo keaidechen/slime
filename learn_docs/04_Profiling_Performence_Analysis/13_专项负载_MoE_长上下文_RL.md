@@ -1,107 +1,53 @@
 # 专项负载：Mixture of Experts、长上下文与 Reinforcement Learning
 
-Mixture of Experts（MoE，混合专家）、长上下文与 Reinforcement Learning（RL，强化学习）三类 workload 的共同点是“工作量动态”：同一个 step/request 的 token 数、通信量、角色状态或 kernel shape 可能不同。只看平均 operator 时间会丢掉根因。
+> 本页为兼容入口，正文已整合到下面的主章节；学习时直接进入主章节即可。
 
-## 1. MoE：以 token routing 为主键
 
-MoE 应为每层记录：
 
-```text
-tokens before routing
-top-k and capacity factor
-tokens per expert: mean / max / p99 / zero-count
-dropped / padded / duplicated tokens
-dispatch and combine bytes
-AllToAllV duration and arrival skew
-grouped GEMM M/N/K distribution
-```
+- [MoE、长上下文与 RL 动态负载](<../../docs/performance_analysis_guide/09_dynamic_workloads.md>)
 
-关键派生量：
 
-$$load\ imbalance=\frac{\max_e n_e}{\operatorname{mean}_e n_e}$$
+<details>
+<summary>旧章节定位（供历史链接使用）</summary>
 
-$$padding\ waste=\frac{\sum_e (n'_e-n_e)}{\sum_e n'_e}$$
+<a id="专项负载mixture-of-experts长上下文与-reinforcement-learning"></a>
 
-其中 $n_e$ 是真实 expert token，$n'_e$ 是为固定 shape/padding 后的 token 数。
+专项负载：Mixture of Experts、长上下文与 Reinforcement Learning → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#专项负载mixture-of-experts长上下文与-reinforcement-learning>)
 
-### 一个例子
+<a id="1-moe以-token-routing-为主键"></a>
 
-8 个 expert 平均各 256 token，但一个 expert 收到 600，其他约 207。网络总 bytes 没有明显增加，AllToAll 后该 rank 的 expert GEMM 却延长，所有 rank 在 combine 前等待。此时“优化 NCCL”收益有限；应看 router balance、expert placement、capacity、token drop/pad 与 grouped GEMM 对小/不规则 shape 的效率。
+1. MoE：以 token routing 为主键 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#1-moe以-token-routing-为主键>)
 
-## 2. 长上下文：用有效 attention work 分桶
+<a id="一个例子"></a>
 
-标准 attention 的计算与序列长度近似二次相关，但 FlashAttention 等实现改变 memory traffic；Context Parallelism（CP，上下文并行）又增加 KV exchange。记录：
+一个例子 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#一个例子>)
 
-- actual/padded/packed token；
-- 每段 causal 可见 pair 数，而非只看 sequence length；
-- prefill chunk size；
-- CP degree 与通信类型；
-- KV cache residency/offload/hit；
-- attention kernel shape、tile 与 recompile；
-- 每个 rank 的 query/KV work。
+<a id="2-长上下文用有效-attention-work-分桶"></a>
 
-两个 batch 都是 32K token：一个是单条 32K，另一个是 32 条 1K packed，它们的 causal attention work、metadata 与 kernel shape 完全不同。
+2. 长上下文：用有效 attention work 分桶 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#2-长上下文用有效-attention-work-分桶>)
 
-## 3. 动态 shape 的 profiler 陷阱
+<a id="3-动态-shape-的-profiler-陷阱"></a>
 
-若把所有 `attention_fwd` 聚合，平均值可能没有意义。应按 `(batch, q_len, kv_len, heads, dtype, causal, layout)` group；对 `torch.compile` 还要记录 graph ID、guard failure 与 compilation time。
+3. 动态 shape 的 profiler 陷阱 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#3-动态-shape-的-profiler-陷阱>)
 
-长上下文 p99 有时不是 kernel 慢，而是某个新 shape 第一次编译/autotune。将 cold 与 warm 分开报告。
+<a id="4-rl角色级时间线"></a>
 
-## 4. RL：角色级时间线
+4. RL：角色级时间线 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#4-rl角色级时间线>)
 
-RL 后训练通常包含 actor/rollout、reference、reward、critic 与 trainer。端到端 throughput 由多条流水线和 policy version dependency 共同决定。
+<a id="5-rl-指标"></a>
 
-```mermaid
-flowchart TD
-    A["Rollout generation"] --> B["Reward / verification"]
-    B --> C["Advantage / batch build"]
-    C --> D["Policy update"]
-    D --> E["Weight sync"]
-    E --> A
-```
+5. RL 指标 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#5-rl-指标>)
 
-同步系统要看最慢角色与 barrier；异步系统还要看 staleness（陈旧度）：trajectory 由哪个 policy version 生成，更新时当前 version 是多少。
+<a id="6-colocation-的资源争用"></a>
 
-## 5. RL 指标
+6. Colocation 的资源争用 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#6-colocation-的资源争用>)
 
-| 层级 | 指标 |
-|---|---|
-| 用户目标 | accepted/rewarded samples per hour、time-to-quality |
-| Rollout | generated tokens/s、TTFT/TPOT、KV usage、early termination |
-| Trainer | train tokens/s、MFU、update time、optimizer step |
-| Pipeline | queue depth、role idle fraction、sample-to-update latency |
-| Policy | version lag、off-policy ratio、weight sync bytes/time |
-| Correctness | reward distribution、KL、clip fraction、loss/entropy |
+<a id="7-统一-trace-schema"></a>
 
-KL = Kullback–Leibler divergence（库尔贝克–莱布勒散度）。只提高 rollout tokens/s 可能产生更多无效/截断样本，甚至降低最终 time-to-quality。
+7. 统一 trace schema → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#7-统一-trace-schema>)
 
-## 6. Colocation 的资源争用
+<a id="资料"></a>
 
-rollout 与 trainer colocate（同卡复用）时，切换可能包含：释放/恢复 KV、权重 reshard、CUDA Graph pool、NCCL communicator 与 allocator cache。观察：
+资料 → [进入主章节](<../../docs/performance_analysis_guide/09_dynamic_workloads.md#资料>)
 
-- 角色切换时间与显存峰值；
-- sleep/wake 或 offload duration；
-- weight synchronization critical path；
-- CPU/RDMA/NVLink 是否同时争用；
-- profiler 启用是否使本已接近上限的 phase OOM。
-
-## 7. 统一 trace schema
-
-建议所有事件至少带：
-
-```text
-job_id, rank, node, role, policy_version,
-global_step, micro_batch, request_id_hash,
-layer, expert, q_len, kv_len, tokens,
-parallel_group, bytes, start, duration
-```
-
-`request_id_hash` 应不可逆或仅在短期本地可关联，避免把用户 prompt、reward detail 等敏感数据写入 trace。
-
-## 资料
-
-- [Megatron Core MoE Guide](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/features/moe.html)
-- [verl Performance Tuning](https://verl.readthedocs.io/en/latest/perf/perf_tuning.html)
-- [并行专题：RL 角色级并行](../03_Parallelism/13_RL角色级并行.md)
-- [通信专题：MoE All-to-All 案例](../02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md)
+</details>

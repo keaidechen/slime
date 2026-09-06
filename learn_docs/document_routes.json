@@ -1,0 +1,996 @@
+{
+  "version": 1,
+  "routes": {
+    "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md": [
+      {
+        "path": "docs/performance_analysis_guide/00_concepts.md",
+        "label": "测量的深入边界与因果验证",
+        "anchor": "concept-01"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/02_GPU指标与遥测.md": [
+      {
+        "path": "docs/performance_analysis_guide/01_baseline.md",
+        "label": "理解 GPU 遥测而不误读利用率",
+        "anchor": "concept-02"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/03_NsightSystems时间线.md": [
+      {
+        "path": "docs/performance_analysis_guide/03_cuda_kernels.md",
+        "label": "系统时间线的图形与跨 rank 策略",
+        "anchor": "concept-03"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/04_NsightCompute_Kernel分析.md": [
+      {
+        "path": "docs/performance_analysis_guide/03_cuda_kernels.md",
+        "label": "从热点读懂 Kernel 报告",
+        "anchor": "concept-04"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/05_PyTorchProfiler.md": [
+      {
+        "path": "docs/performance_analysis_guide/02_pytorch.md",
+        "label": "Profiler 的语义标注与编译边界",
+        "anchor": "concept-05"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/06_Roofline与瓶颈分类.md": [
+      {
+        "path": "docs/performance_analysis_guide/03_cuda_kernels.md",
+        "label": "Roofline 的公式、口径与适用边界",
+        "anchor": "concept-06"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md": [
+      {
+        "path": "docs/performance_analysis_guide/02_pytorch.md",
+        "label": "CPU 数据供应与 GPU 等待",
+        "anchor": "concept-07"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/08_显存与OOM.md": [
+      {
+        "path": "docs/performance_analysis_guide/02_pytorch.md",
+        "label": "显存峰值与资源生命周期",
+        "anchor": "concept-08"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md": [
+      {
+        "path": "docs/performance_analysis_guide/04_megatron.md",
+        "label": "区分通信、等待与 rank 偏斜",
+        "anchor": "concept-09"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/10_并行策略与Bubble.md": [
+      {
+        "path": "docs/performance_analysis_guide/04_megatron.md",
+        "label": "并行调度在时间线上的证据",
+        "anchor": "concept-10"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/11_训练性能指标.md": [
+      {
+        "path": "docs/performance_analysis_guide/04_megatron.md",
+        "label": "训练指标的计算口径与扩展效率",
+        "anchor": "concept-11"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/12_推理性能分析.md": [
+      {
+        "path": "docs/performance_analysis_guide/05_inference.md",
+        "label": "负载、容量与推理指标边界",
+        "anchor": "concept-12"
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/13_专项负载_MoE_长上下文_RL.md": [
+      {
+        "path": "docs/performance_analysis_guide/09_dynamic_workloads.md",
+        "label": "MoE、长上下文与 RL 动态负载",
+        "anchor": ""
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md": [
+      {
+        "path": "docs/performance_analysis_guide/10_observability.md",
+        "label": "线上可观测性",
+        "anchor": ""
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md": [
+      {
+        "path": "docs/performance_analysis_guide/11_case_gpu_idle.md",
+        "label": "GPU 空闲案例",
+        "anchor": ""
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/16_实验与排查工作表.md": [
+      {
+        "path": "docs/performance_analysis_guide/experiment_worksheet.md",
+        "label": "实验现场工作表",
+        "anchor": ""
+      }
+    ],
+    "learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md": [
+      {
+        "path": "docs/performance_analysis_guide/README.md",
+        "label": "统一性能教材",
+        "anchor": ""
+      }
+    ],
+    "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md": [
+      {
+        "path": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+        "label": "GPU 执行与内存基础",
+        "anchor": ""
+      },
+      {
+        "path": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+        "label": "Transformer 与 KV 基础",
+        "anchor": ""
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md",
+        "label": "Hopper 异步硬件（专项）",
+        "anchor": ""
+      }
+    ],
+    "learn_docs/AI_Infra_学习笔记_2026-08-27.md": [
+      {
+        "path": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+        "label": "原笔记 §01",
+        "anchor": "notebook-01"
+      },
+      {
+        "path": "learn_docs/reference/GPU架构演进与历史资料.md",
+        "label": "原笔记 §02",
+        "anchor": "notebook-02"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+        "label": "原笔记 §03：CUDA 执行层级",
+        "anchor": ""
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+        "label": "原笔记 §04",
+        "anchor": "notebook-04"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+        "label": "原笔记 §05",
+        "anchor": "notebook-05"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
+        "label": "原笔记 §06",
+        "anchor": "notebook-06"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "label": "原笔记 §07.1",
+        "anchor": "notebook-07-01"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+        "label": "原笔记 §07.2",
+        "anchor": "notebook-07-02"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "label": "原笔记 §07.3",
+        "anchor": "notebook-07-03"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "label": "原笔记 §07.4",
+        "anchor": "notebook-07-04"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+        "label": "原笔记 §07.5",
+        "anchor": "notebook-07-05"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+        "label": "原笔记 §07.6",
+        "anchor": "notebook-07-06"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.7",
+        "anchor": "notebook-07-07"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.8",
+        "anchor": "notebook-07-08"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.9",
+        "anchor": "notebook-07-09"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.10",
+        "anchor": "notebook-07-10"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.11",
+        "anchor": "notebook-07-11"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "label": "原笔记 §07.12",
+        "anchor": "notebook-07-12"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "label": "原笔记 §07.13",
+        "anchor": "notebook-07-13"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "label": "原笔记 §07.14",
+        "anchor": "notebook-07-14"
+      },
+      {
+        "path": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "label": "原笔记 §07.15",
+        "anchor": "notebook-07-15"
+      },
+      {
+        "path": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+        "label": "原笔记 §08",
+        "anchor": "notebook-08"
+      },
+      {
+        "path": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+        "label": "原笔记 §09",
+        "anchor": "notebook-09"
+      },
+      {
+        "path": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+        "label": "原笔记 §10",
+        "anchor": "notebook-10"
+      },
+      {
+        "path": "learn_docs/03_Parallelism/04_TensorParallelism.md",
+        "label": "原笔记 §11",
+        "anchor": "notebook-11"
+      },
+      {
+        "path": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+        "label": "原笔记 §12",
+        "anchor": "notebook-12"
+      },
+      {
+        "path": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+        "label": "原笔记 §13",
+        "anchor": "notebook-13"
+      },
+      {
+        "path": "docs/performance_analysis_guide/04_megatron.md",
+        "label": "原笔记 §14",
+        "anchor": "notebook-14"
+      },
+      {
+        "path": "learn_docs/00_Foundations/00_课程与系统地图.md",
+        "label": "原笔记总复盘",
+        "anchor": "notebook-recap"
+      }
+    ],
+    "docs/paper_read/10_SGLang_Runtime架构详解.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/01_foundations/00_runtime_concepts.md",
+        "label": "SGLang Runtime 概念入门",
+        "anchor": ""
+      }
+    ],
+    "docs/code_walkthrough/11_engine_internals_sglang.md": [
+      {
+        "path": "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md",
+        "label": "换权、通信组、IPC、缓存与失败边界",
+        "anchor": ""
+      },
+      {
+        "path": "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md",
+        "label": "采样、logprob 与返回数据",
+        "anchor": ""
+      },
+      {
+        "path": "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md",
+        "label": "Router 与会话亲和",
+        "anchor": ""
+      },
+      {
+        "path": "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md",
+        "label": "abort 后的 Sample 与 partial rollout",
+        "anchor": ""
+      }
+    ],
+    "docs/code_walkthrough/12_megatron_lm_internals.md": [
+      {
+        "path": "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md",
+        "label": "一次 step 与模型构建",
+        "anchor": ""
+      },
+      {
+        "path": "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md",
+        "label": "rank 网格与 TP/SP",
+        "anchor": ""
+      },
+      {
+        "path": "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md",
+        "label": "DistributedOptimizer、更新与参数聚合",
+        "anchor": ""
+      },
+      {
+        "path": "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md",
+        "label": "microbatch 与 1F1B",
+        "anchor": ""
+      },
+      {
+        "path": "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
+        "label": "slime 接入与 StatelessAdam 的算法变化",
+        "anchor": ""
+      },
+      {
+        "path": "docs/megatron_code_walkthrough/06_reference/03_source_questions.md",
+        "label": "EP/DP 与 batch 归一化辨析",
+        "anchor": ""
+      }
+    ],
+    "docs/paper_read/08_TensorRT-LLM_Runtime架构详解.md": [
+      {
+        "path": "docs/runtime_comparisons/TensorRT-LLM.md",
+        "label": "TensorRT-LLM 架构对比",
+        "anchor": ""
+      }
+    ],
+    "docs/paper_read/09_vLLM-V1_Runtime架构详解.md": [
+      {
+        "path": "docs/runtime_comparisons/vLLM-V1.md",
+        "label": "vLLM V1 架构对比",
+        "anchor": ""
+      }
+    ]
+  },
+  "merges": [
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md",
+      "destination": "docs/performance_analysis_guide/00_concepts.md",
+      "anchor": "concept-01",
+      "scope": "测量的深入边界与因果验证",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 先定义“快”",
+        "## 2. 建立可复现实验",
+        "## 4. 测量异步 GPU 的正确方式",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/02_GPU指标与遥测.md",
+      "destination": "docs/performance_analysis_guide/01_baseline.md",
+      "anchor": "concept-02",
+      "scope": "理解 GPU 遥测而不误读利用率",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 2. `nvidia-smi` 适合快速体检",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/03_NsightSystems时间线.md",
+      "destination": "docs/performance_analysis_guide/03_cuda_kernels.md",
+      "anchor": "concept-03",
+      "scope": "系统时间线的图形与跨 rank 策略",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 最小采集",
+        "## 6. 命令行快速摘要",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/04_NsightCompute_Kernel分析.md",
+      "destination": "docs/performance_analysis_guide/03_cuda_kernels.md",
+      "anchor": "concept-04",
+      "scope": "从热点读懂 Kernel 报告",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 先缩小目标",
+        "## 3. Roofline",
+        "## 7. 2026 工具边界",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/05_PyTorchProfiler.md",
+      "destination": "docs/performance_analysis_guide/02_pytorch.md",
+      "anchor": "concept-05",
+      "scope": "Profiler 的语义标注与编译边界",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 推荐的定时采样模板",
+        "## 4. Trace 中优先看什么",
+        "## 5. Memory profiling",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/06_Roofline与瓶颈分类.md",
+      "destination": "docs/performance_analysis_guide/03_cuda_kernels.md",
+      "anchor": "concept-06",
+      "scope": "Roofline 的公式、口径与适用边界",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 3. 更完整的瓶颈树",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md",
+      "destination": "docs/performance_analysis_guide/02_pytorch.md",
+      "anchor": "concept-07",
+      "scope": "CPU 数据供应与 GPU 等待",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/08_显存与OOM.md",
+      "destination": "docs/performance_analysis_guide/02_pytorch.md",
+      "anchor": "concept-08",
+      "scope": "显存峰值与资源生命周期",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 三个数字",
+        "## 4. Snapshot 工作流",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md",
+      "destination": "docs/performance_analysis_guide/04_megatron.md",
+      "anchor": "concept-09",
+      "scope": "区分通信、等待与 rank 偏斜",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 4. NCCL RAS 与 profiler 方向",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/10_并行策略与Bubble.md",
+      "destination": "docs/performance_analysis_guide/04_megatron.md",
+      "anchor": "concept-10",
+      "scope": "并行调度在时间线上的证据",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/11_训练性能指标.md",
+      "destination": "docs/performance_analysis_guide/04_megatron.md",
+      "anchor": "concept-11",
+      "scope": "训练指标的计算口径与扩展效率",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. Throughput",
+        "## 6. Step time 必须拆分",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/12_推理性能分析.md",
+      "destination": "docs/performance_analysis_guide/05_inference.md",
+      "anchor": "concept-12",
+      "scope": "负载、容量与推理指标边界",
+      "action": "合并独特解释/例子",
+      "deduplicated": [
+        "## 1. 指标定义",
+        "## 3. 固定 workload shape",
+        "## 资料"
+      ]
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/13_专项负载_MoE_长上下文_RL.md",
+      "destination": "docs/performance_analysis_guide/09_dynamic_workloads.md",
+      "anchor": "",
+      "scope": "MoE、长上下文与 RL 动态负载",
+      "action": "迁入统一性能教材，保留正文"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md",
+      "destination": "docs/performance_analysis_guide/10_observability.md",
+      "anchor": "",
+      "scope": "线上可观测性",
+      "action": "迁入统一性能教材，保留正文"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md",
+      "destination": "docs/performance_analysis_guide/11_case_gpu_idle.md",
+      "anchor": "",
+      "scope": "GPU 空闲案例",
+      "action": "迁入统一性能教材，保留正文"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/16_实验与排查工作表.md",
+      "destination": "docs/performance_analysis_guide/experiment_worksheet.md",
+      "anchor": "",
+      "scope": "实验现场工作表",
+      "action": "迁入统一性能教材，保留正文"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-01",
+      "scope": "1. 先建立一张总地图：LLM 最终是在一台什么机器上跑？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-02",
+      "scope": "2. CPU 和 GPU 为什么不一样？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-03",
+      "scope": "3. 什么是 HBM？为什么论文天天讨论 HBM？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-04",
+      "scope": "4. GPU Memory Hierarchy：显存并不是只有一层",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-05",
+      "scope": "5. “带宽”和“延迟”到底是什么？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-06",
+      "scope": "6. Thread、Warp、Block/CTA、SM：CUDA 的执行层次",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-07",
+      "scope": "7. Tensor Core 是什么？为什么矩阵乘法特别快？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-08",
+      "scope": "8. Kernel 是什么？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-09",
+      "scope": "9. Kernel Fusion 为什么有效？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-10",
+      "scope": "10. 什么是 Tiling？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-11",
+      "scope": "11. Arithmetic Intensity / Operational Intensity",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-12",
+      "scope": "12. Compute-bound 与 Memory-bound",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-13",
+      "scope": "13. Roofline Model 的直觉",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-14",
+      "scope": "14. Occupancy 是什么？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-15",
+      "scope": "15. 为什么 LLM 推理必须理解 Prefill 与 Decode？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-16",
+      "scope": "16. KV Cache：为什么一个“缓存”能成为系统核心？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-17",
+      "scope": "17. 为什么 KV Cache 会产生“内存碎片”？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-18",
+      "scope": "18. Virtual Memory 与 Paging：为什么 vLLM 会借鉴操作系统？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-19",
+      "scope": "19. Internal Fragmentation 与 External Fragmentation",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-20",
+      "scope": "20. Copy-on-Write 为什么会出现在 LLM Serving？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "anchor": "shared-21",
+      "scope": "21. Prefix Cache 与 Radix Tree 的直觉",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-22",
+      "scope": "22. 四篇论文分别在硬件/系统哪一层？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-23",
+      "scope": "23. 读论文时遇到这些词，可以直接这样翻译",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-24",
+      "scope": "24. 推荐阅读顺序",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "shared-25",
+      "scope": "25. 最值得先记住的 8 个硬件 Insight",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md",
+      "anchor": "shared-26",
+      "scope": "26. Hopper/H100 时代的新硬件概念：为 FlashAttention-3 做准备",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "anchor": "notebook-01",
+      "scope": "学习问答：原笔记 §01",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/reference/GPU架构演进与历史资料.md",
+      "anchor": "notebook-02",
+      "scope": "学习问答：原笔记 §02",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+      "anchor": "",
+      "scope": "原 §03 CUDA 层级，已有更完整示例，去除重复讲解",
+      "action": "去重并指向现有主章"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+      "anchor": "notebook-04",
+      "scope": "学习问答：原笔记 §04",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+      "anchor": "notebook-05",
+      "scope": "学习问答：原笔记 §05",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
+      "anchor": "notebook-06",
+      "scope": "学习问答：原笔记 §06",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+      "anchor": "notebook-07-01",
+      "scope": "07.1｜先建立软件栈：CUDA、cuBLAS、CUTLASS、Triton 分别是什么？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+      "anchor": "notebook-07-02",
+      "scope": "07.2｜PTX、cubin、SASS：Kernel 最终到底被编译成什么？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+      "anchor": "notebook-07-03",
+      "scope": "07.3｜Triton 会不会先编译成 CUTLASS？不会，它通常是一条独立 Kernel 编译路线",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+      "anchor": "notebook-07-04",
+      "scope": "07.4｜TileLang 又是什么？默认 CUDA backend 与 CuTeDSL backend 要区分",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+      "anchor": "notebook-07-05",
+      "scope": "07.5｜GEMM 是什么？Transformer 为什么到处都是它？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+      "anchor": "notebook-07-06",
+      "scope": "07.6｜普通 GEMM → Batched GEMM → Grouped GEMM",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-07",
+      "scope": "07.7｜MoE 为什么天然需要 Grouped GEMM？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-08",
+      "scope": "07.8｜不用 Grouped GEMM：最朴素是 Sequential GEMM",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-09",
+      "scope": "07.9｜第二条路线：Multi-stream GEMM",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-10",
+      "scope": "07.10｜第三条路线：真正的单个 Grouped GEMM Kernel",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-11",
+      "scope": "07.11｜为什么“一个 Grouped GEMM Kernel”反而可能输给 Multi-stream cuBLAS？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "anchor": "notebook-07-12",
+      "scope": "07.12｜PyTorch `grouped_mm` vs Transformer Engine `grouped_gemm`：旧结论为什么不能机械延续到 2026？",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+      "anchor": "notebook-07-13",
+      "scope": "07.13｜把 Triton / TileLang 与 Grouped GEMM 再串起来",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+      "anchor": "notebook-07-14",
+      "scope": "07.14｜本章最容易混淆的术语",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+      "anchor": "notebook-07-15",
+      "scope": "07.15｜官方资料与版本证据（截至 2026-08）",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+      "anchor": "notebook-08",
+      "scope": "学习问答：原笔记 §08",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+      "anchor": "notebook-09",
+      "scope": "学习问答：原笔记 §09",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+      "anchor": "notebook-10",
+      "scope": "学习问答：原笔记 §10",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/03_Parallelism/04_TensorParallelism.md",
+      "anchor": "notebook-11",
+      "scope": "学习问答：原笔记 §11",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+      "anchor": "notebook-12",
+      "scope": "学习问答：原笔记 §12",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+      "anchor": "notebook-13",
+      "scope": "学习问答：原笔记 §13",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "docs/performance_analysis_guide/04_megatron.md",
+      "anchor": "notebook-14",
+      "scope": "学习问答：原笔记 §14",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/paper_read/10_SGLang_Runtime架构详解.md",
+      "destination": "docs/sglang_code_walkthrough/01_foundations/00_runtime_concepts.md",
+      "anchor": "",
+      "scope": "Runtime 概念课",
+      "action": "移出论文序列，进入源码前导"
+    },
+    {
+      "source": "docs/code_walkthrough/11_engine_internals_sglang.md",
+      "destination": "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md",
+      "anchor": "slime-byte-bucket",
+      "scope": "训练端与服务端共同维护的字节桶协议",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md",
+      "anchor": "",
+      "scope": "一次 step 与模型构建",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md",
+      "anchor": "",
+      "scope": "rank 网格与 TP/SP",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md",
+      "anchor": "",
+      "scope": "DistributedOptimizer、更新与参数聚合",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md",
+      "anchor": "",
+      "scope": "microbatch 与 1F1B",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
+      "anchor": "",
+      "scope": "slime 接入与 StatelessAdam 的算法变化",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "destination": "docs/megatron_code_walkthrough/06_reference/03_source_questions.md",
+      "anchor": "",
+      "scope": "EP/DP 与 batch 归一化辨析",
+      "action": "重复机制归入已有详细源码章，纠正旧表述"
+    },
+    {
+      "source": "docs/paper_read/08_TensorRT-LLM_Runtime架构详解.md",
+      "destination": "docs/runtime_comparisons/TensorRT-LLM.md",
+      "anchor": "",
+      "scope": "TensorRT-LLM 架构对比",
+      "action": "移出单篇论文序列，保留对比全文"
+    },
+    {
+      "source": "docs/paper_read/09_vLLM-V1_Runtime架构详解.md",
+      "destination": "docs/runtime_comparisons/vLLM-V1.md",
+      "anchor": "",
+      "scope": "vLLM V1 架构对比",
+      "action": "移出单篇论文序列，保留对比全文"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/01_foundations/01_learning_map.md",
+      "destination": "docs/sglang_code_walkthrough/01_foundations/00_runtime_concepts.md",
+      "anchor": "learning-models",
+      "scope": "计算模型与读码方法",
+      "action": "合并独特解释/例子"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "destination": "learn_docs/00_Foundations/00_课程与系统地图.md",
+      "anchor": "notebook-recap",
+      "scope": "学习复盘：八个系统问题",
+      "action": "合并独特解释/例子"
+    }
+  ],
+  "deduplicated_exact_paragraphs": []
+}

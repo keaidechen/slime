@@ -1,5 +1,52 @@
 # Sparse Attention：从“扫描全部历史”到“检索少量有效记忆”
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [0. 先给结论：Sparse Attention 优化的不是 Cache 宽度，而是访问集合](#read-01)
+- [1. Dense Attention 的真实成本：Prefill 和 Decode 不是同一个问题](#read-02)
+- [2. “Sparse Attention”不是一种结构，而是一组设计轴](#read-03)
+- [3. 稀疏模式的“工具箱”](#read-04)
+- [4. 从图算法理解 Sparse Attention](#read-05)
+- [5. 动态 Sparse Attention 的通用数学](#read-06)
+- [6. DeepSeek Sparse Attention（DSA）：结构与张量流](#read-07)
+- [7. DSA 如何训练：不能把离散 Top-K 直接扔给模型自己摸索](#read-08)
+- [8. Indexer 为什么会成为新瓶颈](#read-09)
+- [9. Top-K 不是一个小算子：为什么 logits 物化会爆](#read-10)
+- [10. 从逻辑 token 到物理 KV page](#read-11)
+- [11. Prefill Sparse Attention：二维 ragged 问题](#read-12)
+- [12. Decode Sparse Attention：低算术强度与大量小任务](#read-13)
+- [13. Continuous Batching：每个 Query 都有自己的稀疏世界](#read-14)
+- [14. FP8 Indexer 与 FP8 KV：省带宽，但 scale 也属于 layout](#read-15)
+- [15. Sparse MLA kernel：不只是把 Dense MLA 的 L 改成 K](#read-16)
+- [16. NSA：为什么 block sparse 对硬件更自然](#read-17)
+- [17. MInference：不重训模型时，怎样稀疏化长 Prefill](#read-18)
+- [18. 稀疏选择的质量问题：不是平均分高就够了](#read-19)
+- [19. Head、Layer 与 Query 之间能否共享选择结果](#read-20)
+- [20. 并行与分布式：Sparse Attention 并不会自动消除通信](#read-21)
+- [21. 性能模型：什么时候 Sparse 反而更慢](#read-22)
+- [22. 一个可实现的 Reference Pipeline](#read-23)
+- [23. Kernel 设计检查表](#read-24)
+- [24. Profiling：把端到端耗时拆对](#read-25)
+- [25. Troubleshooting：按症状找根因](#read-26)
+- [26. 常见误区](#read-27)
+- [27. Sparse Attention 与 Linear Attention：最终为什么常走向 Hybrid](#read-28)
+- [28. 一个数值算例：从 Dense MLA 到 Sparse MLA](#read-29)
+- [29. 如何选择方案：一个工程决策表](#read-30)
+- [30. 学习与实现路线](#read-31)
+- [31. 最终心智模型](#read-32)
+- [32. 参考资料与阅读顺序](#read-33)
+- [33. 与下一专题的接口](#read-34)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：先学标准 attention 与 KV；再看稀疏结构对访问和负载的影响。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 > 本文面向 AI Infra、推理系统与模型架构学习者。它承接 `MLA.md`：MLA 已经把每个历史 token 的 KV record 变窄，Sparse Attention 继续减少每个 Query 真正需要读取和计算的历史位置数。
 >
 > 文中的复杂度与字节估算用于建立数量级直觉；具体模型的 head 数、维度、page size、精度与 kernel 能力会随版本变化。涉及 DeepSeek-V3.2/DSA 的公开配置和训练数字，以论文与官方仓库当前公开内容为准。
@@ -23,6 +70,9 @@
 本文的 “Sparse” 指 **Attention 访问图稀疏**，不是参数稀疏、MoE Expert 稀疏，也不是把数值为零的矩阵交给通用 sparse GEMM。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 0. 先给结论：Sparse Attention 优化的不是 Cache 宽度，而是访问集合
 
@@ -110,6 +160,9 @@ Sparse Attention 把主 Attention 优化后，新的瓶颈往往会变成：
 ```
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 1. Dense Attention 的真实成本：Prefill 和 Decode 不是同一个问题
 
@@ -206,6 +259,9 @@ S_{\text{e2e}}
 
 ---
 
+
+<a id="read-03"></a>
+
 ## 2. “Sparse Attention”不是一种结构，而是一组设计轴
 
 讨论 Sparse Attention 时，至少要同时说明下面六个维度。否则“用了稀疏注意力”几乎没有可操作的信息。
@@ -294,6 +350,9 @@ K=nb.
 三者解决的工程场景不同，不能只比较 kernel microbenchmark。
 
 ---
+
+
+<a id="read-04"></a>
 
 ## 3. 稀疏模式的“工具箱”
 
@@ -389,6 +448,9 @@ g_t^c\operatorname{Attn}
 
 ---
 
+
+<a id="read-05"></a>
+
 ## 4. 从图算法理解 Sparse Attention
 
 把每个 token 当作节点，允许的 Attention pair 当作有向边。Dense causal Attention 有约 $L(L+1)/2$ 条边；Sparse Attention 只保留一部分边。
@@ -413,6 +475,9 @@ g_t^c\operatorname{Attn}
 这张表解释了为什么没有单一 pattern 在质量和硬件上同时支配所有方案。
 
 ---
+
+
+<a id="read-06"></a>
 
 ## 5. 动态 Sparse Attention 的通用数学
 
@@ -494,6 +559,9 @@ QK^\top\in\mathbb R^{L\times L},
 
 ---
 
+
+<a id="read-07"></a>
+
 ## 6. DeepSeek Sparse Attention（DSA）：结构与张量流
 
 DSA 指 DeepSeek Sparse Attention。DeepSeek-V3.2 论文把它描述为在 MLA 上加入 lightning indexer 与 fine-grained token selection，并通过 continued training 从 dense 模型过渡到稀疏模型。
@@ -567,6 +635,9 @@ flowchart TD
 “Sparse Attention 省 Cache”不是无条件成立。DSA 新增了 Indexer cache，但它希望通过一个明显更小、更便宜的索引表示，换取少读大量主 KV。
 
 ---
+
+
+<a id="read-08"></a>
 
 ## 7. DSA 如何训练：不能把离散 Top-K 直接扔给模型自己摸索
 
@@ -643,6 +714,9 @@ Indexer 的分布为：
 
 ---
 
+
+<a id="read-09"></a>
+
 ## 8. Indexer 为什么会成为新瓶颈
 
 ### 8.1 复杂度只是把昂贵算子换成便宜算子
@@ -705,6 +779,9 @@ Indexer 的常数可以很小、可以 FP8、可共享 KV、可避免 Value 路�
 ```
 
 ---
+
+
+<a id="read-10"></a>
 
 ## 9. Top-K 不是一个小算子：为什么 logits 物化会爆
 
@@ -786,6 +863,9 @@ O(QK+QN_{tile}).
 
 ---
 
+
+<a id="read-11"></a>
+
 ## 10. 从逻辑 token 到物理 KV page
 
 Serving 中 KV Cache 通常是 paged 的。Indexer 输出的是逻辑位置 $s$，Sparse Attention 需要定位物理 page 与 page offset。
@@ -866,6 +946,9 @@ out = dense_attention(q, selected_kv)
 
 ---
 
+
+<a id="read-12"></a>
+
 ## 11. Prefill Sparse Attention：二维 ragged 问题
 
 Decode 常可简化为“每个请求一个 Query”。Prefill 中却有 $Q$ 个 Query，每个 Query 的 causal 可见范围和 Top-K 都不同：
@@ -915,6 +998,9 @@ Decode 常可简化为“每个请求一个 Query”。Prefill 中却有 $Q$ 个
 
 ---
 
+
+<a id="read-13"></a>
+
 ## 12. Decode Sparse Attention：低算术强度与大量小任务
 
 Decode 的 Query 维通常很小。Sparse kernel 的基本循环近似：
@@ -954,6 +1040,9 @@ Dense decode 的不同请求虽读不同 KV，但每个请求内部连续。Spar
 需要通过真实 continuous batching trace 测量，而不是只测固定 batch 的随机 indices。
 
 ---
+
+
+<a id="read-14"></a>
 
 ## 13. Continuous Batching：每个 Query 都有自己的稀疏世界
 
@@ -1001,6 +1090,9 @@ C_i
 其中 $U_i$ 是预计 unique pages。这样调度器才能避免少数超长请求拖慢整个 decode step。
 
 ---
+
+
+<a id="read-15"></a>
 
 ## 14. FP8 Indexer 与 FP8 KV：省带宽，但 scale 也属于 layout
 
@@ -1062,6 +1154,9 @@ DeepSeek 官方仓库曾修复 Indexer RoPE 实现中的布局差异：Indexer �
 
 ---
 
+
+<a id="read-16"></a>
+
 ## 15. Sparse MLA kernel：不只是把 Dense MLA 的 L 改成 K
 
 Dense MLA decode 常假设 KV 沿 sequence 连续或按 page 顺序遍历。Sparse MLA 接收：
@@ -1106,6 +1201,9 @@ FlashMLA 的公开仓库提供了 token-level sparse prefill/decode kernel 接�
 是否值得取决于 $B$、$K$、head dims 与 GPU SM 数。
 
 ---
+
+
+<a id="read-17"></a>
 
 ## 16. NSA：为什么 block sparse 对硬件更自然
 
@@ -1179,6 +1277,9 @@ NSA 论文描述的 kernel 调度是：
 
 ---
 
+
+<a id="read-18"></a>
+
 ## 17. MInference：不重训模型时，怎样稀疏化长 Prefill
 
 MInference 面向已有 dense 模型的 long-context prefill acceleration。它观察不同 heads 常呈现少数稳定的结构模式，使用离线识别的 head pattern 与在线索引构建，执行多种稀疏 kernel，例如：
@@ -1205,6 +1306,9 @@ MInference 面向已有 dense 模型的 long-context prefill acceleration。它�
 因此不能用 MInference 的 prefill microbenchmark 直接推断在线 decode 的收益，也不能用原生 sparse 的训练成本否定 retrofit 对现有 checkpoint 的实用价值。
 
 ---
+
+
+<a id="read-19"></a>
 
 ## 18. 稀疏选择的质量问题：不是平均分高就够了
 
@@ -1263,6 +1367,9 @@ K_t=f(H(\widehat p_t),\ \Delta_t,\ L_t).
 
 ---
 
+
+<a id="read-20"></a>
+
 ## 19. Head、Layer 与 Query 之间能否共享选择结果
 
 ### 19.1 Head sharing
@@ -1297,6 +1404,9 @@ T_{group}
 
 ---
 
+
+<a id="read-21"></a>
+
 ## 20. 并行与分布式：Sparse Attention 并不会自动消除通信
 
 ### 20.1 Context Parallelism（CP）
@@ -1327,6 +1437,9 @@ P/D 分离中，Prefill 节点要把至少两类状态交给 Decode 节点：
 若 Indexer heads 分布在 TP ranks，跨 head 加权汇总 score 可能需要 reduction。可通过让完整 Indexer group 局部化、复制小 Query 权重或选择合适 sharding 避免对 $[Q,L]$ score 做昂贵 all-reduce。
 
 ---
+
+
+<a id="read-22"></a>
 
 ## 21. 性能模型：什么时候 Sparse 反而更慢
 
@@ -1407,6 +1520,9 @@ L^*(B,Q,K,dtype,GPU,page\_size).
 
 ---
 
+
+<a id="read-23"></a>
+
 ## 22. 一个可实现的 Reference Pipeline
 
 下面的伪代码强调接口与正确性，不代表高性能生产实现。
@@ -1463,6 +1579,9 @@ def sparse_decode_step(
 
 ---
 
+
+<a id="read-24"></a>
+
 ## 23. Kernel 设计检查表
 
 ### 23.1 Indexer logits kernel
@@ -1505,6 +1624,9 @@ def sparse_decode_step(
 - backend fallback 是否保证 numerical/semantic parity？
 
 ---
+
+
+<a id="read-25"></a>
 
 ## 24. Profiling：把端到端耗时拆对
 
@@ -1553,6 +1675,9 @@ T_{proj}
 否则很容易把“核心 kernel 快”误认为“服务快”。
 
 ---
+
+
+<a id="read-26"></a>
 
 ## 25. Troubleshooting：按症状找根因
 
@@ -1616,6 +1741,9 @@ T_{proj}
 
 ---
 
+
+<a id="read-27"></a>
+
 ## 26. 常见误区
 
 ### 误区 1：Sparse Attention 把 KV Cache 容量降到 $O(K)$
@@ -1651,6 +1779,9 @@ Softmax 后许多权重很小，不代表在计算 logits 前就知道哪些位�
 还需要训练适配、position encoding、cache capacity、prefill、scheduler、P/D transfer、正确性与任务评测共同成立。
 
 ---
+
+
+<a id="read-28"></a>
 
 ## 27. Sparse Attention 与 Linear Attention：最终为什么常走向 Hybrid
 
@@ -1688,6 +1819,9 @@ flowchart TD
 从系统角度，它越来越像 memory hierarchy：不是所有信息都在每一步走最昂贵的路径。
 
 ---
+
+
+<a id="read-29"></a>
 
 ## 28. 一个数值算例：从 Dense MLA 到 Sparse MLA
 
@@ -1746,6 +1880,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-30"></a>
+
 ## 29. 如何选择方案：一个工程决策表
 
 | 目标场景 | 优先考虑 | 原因 |
@@ -1768,6 +1905,9 @@ flowchart TD
 6. Indexer 的成本是否进入端到端测量？
 
 ---
+
+
+<a id="read-31"></a>
 
 ## 30. 学习与实现路线
 
@@ -1815,6 +1955,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-32"></a>
+
 ## 31. 最终心智模型
 
 Sparse Attention 不是“把 Attention matrix 里的零跳过去”。真正可部署的系统必须提前、低成本地知道哪些 pair 值得计算，并让这些 pair 映射到 GPU 友好的数据布局。
@@ -1847,56 +1990,62 @@ Sparse Attention 不是“把 Attention matrix 里的零跳过去”。真正可
 
 ---
 
+
+<a id="read-33"></a>
+
 ## 32. 参考资料与阅读顺序
 
 以下优先列论文、官方仓库和官方工程文章。版本相关实现细节应以实际部署版本为准。
 
-1. **DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models**  
-   https://arxiv.org/abs/2512.02556  
+1. **DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models**\
+   https://arxiv.org/abs/2512.02556\
    重点：DSA Indexer 公式、dense warm-up、sparse continued training、Top-K=2048 与 MLA MQA-mode 稀疏执行。
 
-2. **DeepSeek-V3.2-Exp official repository**  
-   https://github.com/deepseek-ai/DeepSeek-V3.2-Exp  
+2. **DeepSeek-V3.2-Exp official repository**\
+   https://github.com/deepseek-ai/DeepSeek-V3.2-Exp\
    重点：公开模型/算子入口，以及 Indexer RoPE layout 修复说明。
 
-3. **DeepGEMM**  
-   https://github.com/deepseek-ai/DeepGEMM  
+3. **DeepGEMM**\
+   https://github.com/deepseek-ai/DeepGEMM\
    重点：V3.2 MQA Indexer logits kernel，包括 paged 与 non-paged 形态、FP8 输入和 head-weighted ReLU score。
 
-4. **FlashMLA**  
-   https://github.com/deepseek-ai/FlashMLA  
+4. **FlashMLA**\
+   https://github.com/deepseek-ai/FlashMLA\
    重点：token-level sparse prefill/decode、indices contract、FP8 KV cache decode。
 
-5. **vLLM: DeepSeek-V3.2-Exp / DSA engineering blog**  
-   https://vllm.ai/blog/2025-09-29-deepseek-v3-2  
+5. **vLLM: DeepSeek-V3.2-Exp / DSA engineering blog**\
+   https://vllm.ai/blog/2025-09-29-deepseek-v3-2\
    重点：continuous batching、separate index K cache、Top-K、FP8 MLA cache layout 与 paged integration。
 
-6. **SGLang: Running DeepSeek-V3.2-Exp**  
-   https://www.lmsys.org/blog/2025-09-29-deepseek-V32/  
+6. **SGLang: Running DeepSeek-V3.2-Exp**\
+   https://www.lmsys.org/blog/2025-09-29-deepseek-V32/\
    重点：Native Sparse Attention backend、Indexer cache、FlashMLA/FA3 集成与当时版本的混合 page-size 约束。
 
-7. **Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention**  
-   https://arxiv.org/abs/2502.11089  
+7. **Native Sparse Attention: Hardware-Aligned and Natively Trainable Sparse Attention**\
+   https://arxiv.org/abs/2502.11089\
    重点：compression + block selection + sliding window 三分支、GQA group-shared block selection 与训练期稀疏 kernel。
 
-8. **MInference 1.0: Accelerating Pre-filling for Long-Context LLMs via Dynamic Sparse Attention**  
-   https://arxiv.org/abs/2407.02490  
-   官方实现：https://github.com/microsoft/minference  
+8. **MInference 1.0: Accelerating Pre-filling for Long-Context LLMs via Dynamic Sparse Attention**\
+   https://arxiv.org/abs/2407.02490\
+   官方实现：https://github.com/microsoft/minference\
    重点：无需重训的 prefill retrofit，以及 A-shape、vertical-slash、block-sparse pattern。
 
-9. **Big Bird: Transformers for Longer Sequences**  
-   https://arxiv.org/abs/2007.14062  
+9. **Big Bird: Transformers for Longer Sequences**\
+   https://arxiv.org/abs/2007.14062\
    重点：local + random + global 稀疏图结构及理论性质。
 
-10. **StreamingLLM: Efficient Streaming Language Models with Attention Sinks**  
-    https://arxiv.org/abs/2309.17453  
+10. **StreamingLLM: Efficient Streaming Language Models with Attention Sinks**\
+    https://arxiv.org/abs/2309.17453\
     重点：为什么单纯 recent window 会崩，以及 attention sink 对固定内存流式推理的作用。
 
-11. **FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness**  
-    https://arxiv.org/abs/2205.14135  
+11. **FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness**\
+    https://arxiv.org/abs/2205.14135\
     重点：区分“精确 dense Attention 的 IO 优化”和“减少有效 pair 的 sparsity”。
 
 ---
+
+
+<a id="read-34"></a>
 
 ## 33. 与下一专题的接口
 

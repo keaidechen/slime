@@ -1,5 +1,182 @@
 # Residual Evolution：从恒等捷径到多流状态、深度检索与硬件协同
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [缩写与术语](#read-01)
+- [0. 先给结论：Residual 正在从“加法”演化为“深度方向的 Memory System”](#read-02)
+- [1. Residual 到底解决了什么？](#read-03)
+- [1.1 Plain network 学的是完整映射](#read-04)
+- [1.2 Residual block 只学“变化量”](#read-05)
+- [1.3 展开以后，identity path 非常清楚](#read-06)
+- [2. Residual Stream 是一种什么数据结构？](#read-07)
+- [3. Transformer 一层实际上有两次 Residual Update](#read-08)
+- [4. Post-Norm 与 Pre-Norm：区别不只是 Norm 放在哪儿](#read-09)
+- [4.1 Post-Norm](#read-10)
+- [4.2 Pre-Norm](#read-11)
+- [4.3 二者的核心 trade-off](#read-12)
+- [5. LayerNorm、RMSNorm 与 Residual 是三个不同层级](#read-13)
+- [6. Pre-Norm 为什么会出现 Hidden-State Growth？](#read-14)
+- [7. Dilution、Representation Collapse 与 Over-Smoothing 不完全相同](#read-15)
+- [7.1 Residual dilution](#read-16)
+- [7.2 Representation collapse](#read-17)
+- [7.3 Over-smoothing](#read-18)
+- [8. 为什么模型越来越异构后，Residual 问题突然变重要？](#read-19)
+- [9. 历史演化：先稳定深度，再扩展深度内存](#read-20)
+- [10. Highway Networks：最早的“读写门控”视角](#read-21)
+- [11. ResNet 与 Identity Mapping：真正的里程碑是什么？](#read-22)
+- [12. Fixup、SkipInit、ReZero 与 LayerScale：先把 Update 变小](#read-23)
+- [12.1 Fixup](#read-24)
+- [12.2 ReZero](#read-25)
+- [12.3 LayerScale](#read-26)
+- [12.4 它们的能力边界](#read-27)
+- [13. Admin 与 DeepNorm：为深层 Transformer 专门控制 Residual Dependency](#read-28)
+- [13.1 Admin](#read-29)
+- [13.2 DeepNorm](#read-30)
+- [13.3 Infra 视角](#read-31)
+- [14. ResiDual、Peri-LN 与 DenseFormer：连接和归一化开始一起变化](#read-32)
+- [14.1 ResiDual](#read-33)
+- [14.2 Peri-LN / Sandwich-style Norm](#read-34)
+- [14.3 DenseFormer](#read-35)
+- [15. 从标量到矩阵：Residual 设计空间如何统一表示？](#read-36)
+- [16. Hyper-Connections：把一条 Residual Stream 扩成 $n$ 条](#read-37)
+- [17. Dynamic Hyper-Connections：每个 Token 可以拥有不同拓扑](#read-38)
+- [18. HC 的 Sequential–Parallel Duality](#read-39)
+- [19. 为什么原始 HC 在大规模训练中不够稳定？](#read-40)
+- [20. mHC：为什么使用双随机矩阵？](#read-41)
+- [20.1 行和为 1](#read-42)
+- [20.2 列和为 1](#read-43)
+- [20.3 乘法闭包](#read-44)
+- [20.4 $n=1$ 的退化](#read-45)
+- [21. Sinkhorn–Knopp 如何把任意 Logits 变成近似双随机矩阵？](#read-46)
+- [22. mHC 的完整前向张量流](#read-47)
+- [22.1 生成动态 mapping](#read-48)
+- [22.2 约束 mapping](#read-49)
+- [22.3 Read](#read-50)
+- [22.4 Main operator](#read-51)
+- [22.5 Residual mix 与 write](#read-52)
+- [23. mHC 为什么是 Memory-Bound，而不是 Compute-Bound？](#read-53)
+- [24. mHC 的 Kernel Fusion 为什么不是可选优化？](#read-54)
+- [25. mHC Backward：为什么需要分块 Recompute？](#read-55)
+- [26. mHC 与 Pipeline Parallelism：Residual State 直接变成通信 Payload](#read-56)
+- [27. Attention Residuals：把 Depth 当成另一条 Attention 轴](#read-57)
+- [28. Full AttnRes 的公式与数据流](#read-58)
+- [29. Pseudo-Query 是静态参数，为什么 Attention Weight 仍是输入相关的？](#read-59)
+- [30. AttnRes 是 Replacement Routing，不是“在原 Residual 上再加 Attention”](#read-60)
+- [31. Full AttnRes 的真正问题：$O(Ld)$ Depth Memory](#read-61)
+- [32. Block AttnRes：把深度历史压缩成 Block Summaries](#read-62)
+- [33. Block Size 的 Trade-off](#read-63)
+- [小 $S$](#read-64)
+- [大 $S$](#read-65)
+- [34. Block AttnRes 的两阶段计算为什么重要？](#read-66)
+- [Phase 1：批量计算历史完整 blocks](#read-67)
+- [Phase 2：顺序处理当前 partial block](#read-68)
+- [35. AttnRes 与 Pipeline Parallelism](#read-69)
+- [36. 标准 Residual、mHC 与 AttnRes 的 I/O 对比](#read-70)
+- [37. Kimi K3 如何使用 AttnRes？](#read-71)
+- [38. Qwen Gated Residual：先把 Stream 变宽，再把 Read 做细](#read-72)
+- [39. Gated Residual 的完整公式](#read-73)
+- [39.1 Branch-wise RMSNorm](#read-74)
+- [39.2 Elementwise read gate](#read-75)
+- [39.3 Main operator](#read-76)
+- [39.4 Per-branch scalar write gate](#read-77)
+- [40. GR 与 HC/mHC 到底差在哪儿？](#read-78)
+- [41. GR 为什么可以替代 Pre-Norm，而不是叠加在它前面？](#read-79)
+- [42. GR 的 FP8 Residual State 与 Fused Read/Write](#read-80)
+- [43. Qwen 的 Branch Analysis 给了什么启发？](#read-81)
+- [44. DeepSeek V4、Kimi K3、Qwen3.8 的三种答案](#read-82)
+- [45. 为什么 GLM 不应被强行塞进同一条 Residual 路线？](#read-83)
+- [46. 其他有里程碑意义的 Depth-Mixing 工作](#read-84)
+- [46.1 Transparent Attention / DLCL / ELC-BERT](#read-85)
+- [46.2 DenseFormer](#read-86)
+- [46.3 Alternating Updates](#read-87)
+- [46.4 Residual Matrix Transformer](#read-88)
+- [46.5 MUDDFormer](#read-89)
+- [46.6 Mixture-of-Depths](#read-90)
+- [47. 2026 年快速扩展的后续路线](#read-91)
+- [47.1 mHC-lite / KromHC](#read-92)
+- [47.2 xHC](#read-93)
+- [47.3 Delta Attention Residuals](#read-94)
+- [47.4 Multi-Head Attention Residuals](#read-95)
+- [47.5 Role-Decoupled AttnRes](#read-96)
+- [47.6 Dual Attention Residuals](#read-97)
+- [48. 三条路线能否组合？](#read-98)
+- [49. Training Activation Memory 成本模型](#read-99)
+- [50. PP、TP、CP 与 Residual Topology 的交互](#read-100)
+- [50.1 Tensor Parallel](#read-101)
+- [50.2 Context Parallel](#read-102)
+- [50.3 Pipeline Parallel](#read-103)
+- [50.4 Sequence Parallel](#read-104)
+- [51. Prefill 与 Decode：Residual 成本有什么不同？](#read-105)
+- [Prefill](#read-106)
+- [Decode](#read-107)
+- [52. Residual Kernel 应该融合到哪里？](#read-108)
+- [52.1 Norm + Input Projection](#read-109)
+- [52.2 Bias/Scale + Residual Add](#read-110)
+- [52.3 Multi-stream Read](#read-111)
+- [52.4 Multi-stream Write](#read-112)
+- [52.5 Depth Attention](#read-113)
+- [53. 为什么不能盲目使用 Persistent Kernel？](#read-114)
+- [54. 怎样正确 Benchmark Residual Architecture？](#read-115)
+- [54.1 算法层](#read-116)
+- [54.2 数值稳定层](#read-117)
+- [54.3 Kernel 层](#read-118)
+- [54.4 End-to-end 层](#read-119)
+- [55. 关键诊断指标](#read-120)
+- [55.1 单流 Pre-Norm](#read-121)
+- [55.2 HC/mHC](#read-122)
+- [55.3 AttnRes](#read-123)
+- [55.4 Gated Residual](#read-124)
+- [56. 常见故障排查](#read-125)
+- [56.1 Loss 正常，但加深模型几乎无收益](#read-126)
+- [56.2 mHC 训练到中后期出现 loss spike](#read-127)
+- [56.3 启用多流后 MFU 显著下降，但 FLOPs 变化很小](#read-128)
+- [56.4 PP bubble 突然变大](#read-129)
+- [56.5 AttnRes quality 下降](#read-130)
+- [56.6 FP8 GR 推理出现逐层漂移](#read-131)
+- [57. 一个最小正确性验证流程](#read-132)
+- [58. 常见误区](#read-133)
+- [误区一：Residual 没有参数，所以没有性能成本](#read-134)
+- [误区二：Pre-Norm 完全解决了深层训练](#read-135)
+- [误区三：HC 的额外 FLOPs 很小，所以运行开销也小](#read-136)
+- [误区四：mHC 就是给 HC 加 Sinkhorn](#read-137)
+- [误区五：AttnRes 是在 token 维再做一次大 Attention](#read-138)
+- [误区六：Block AttnRes block 越大越省，越值得](#read-139)
+- [误区七：多 residual branches 等于 ensemble](#read-140)
+- [误区八：低精度 residual state 与普通 activation quantization 一样](#read-141)
+- [误区九：训练 loss 更低就说明 residual 结构更好](#read-142)
+- [59. 如何选择 Residual 方案？](#read-143)
+- [60. 训练系统检查清单](#read-144)
+- [Architecture](#read-145)
+- [Precision](#read-146)
+- [Memory](#read-147)
+- [Parallelism](#read-148)
+- [Validation](#read-149)
+- [61. Serving 系统检查清单](#read-150)
+- [62. 我对下一阶段的判断](#read-151)
+- [62.1 Hierarchical Depth Memory](#read-152)
+- [62.2 Sparse Multi-Stream Update](#read-153)
+- [62.3 Role-Decoupled Depth Routing](#read-154)
+- [62.4 Train–Serve Co-designed Residual](#read-155)
+- [63. 最终心智模型：Transformer 内部也有一张“深度网络”](#read-156)
+- [64. 推荐阅读顺序与资料索引](#read-157)
+- [A. Residual 与稳定性基础](#read-158)
+- [B. Initialization、Scaling 与 Norm 位置](#read-159)
+- [C. Depth Aggregation 与 Conditional Depth](#read-160)
+- [D. Hyper-Connections 路线](#read-161)
+- [E. Attention Residuals 路线](#read-162)
+- [F. 现代模型采用](#read-163)
+- [65. 与整套 AI Infra 笔记的接口](#read-164)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A8 · 参考。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：训练稳定性、结构与执行依赖的专题参考，不作为并行入门前置。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 > 本文承接 `Linear-Attention.md` 与 `MoE-Infra.md`。前者讨论沿 sequence 维度保存和检索历史，后者讨论沿 width 维度选择性激活参数；本文转向第三条轴：**信息如何沿 model depth 传播、保存、选择和更新**。
 >
 > 本文面向模型架构、训练系统与推理 Infra 学习者，按“结构是什么 → 张量如何流动 → 为什么改善训练 → 新的显存、带宽与通信代价 → Kernel/Runtime 如何实现 → 怎样 Benchmark 和排障”组织。论文中的 loss、加速或 token-equivalent 数字均属于作者给定配置，不能直接外推。
@@ -7,6 +184,9 @@
 > **资料版本：截至 2026-09-02。** 2026 年的 AttnRes、mHC、Gated Residual、xHC、Delta AttnRes 等仍在快速演进；本文将公开论文结论、官方模型采用情况与本文推导明确分开。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 缩写与术语
 
@@ -31,6 +211,9 @@
 | SK | Sinkhorn–Knopp | 将正矩阵迭代归一化为近似双随机矩阵的算法 |
 
 ---
+
+
+<a id="read-02"></a>
 
 # 0. 先给结论：Residual 正在从“加法”演化为“深度方向的 Memory System”
 
@@ -99,7 +282,13 @@
 
 ---
 
+
+<a id="read-03"></a>
+
 # 1. Residual 到底解决了什么？
+
+
+<a id="read-04"></a>
 
 ## 1.1 Plain network 学的是完整映射
 
@@ -126,6 +315,9 @@
 
 容易造成梯度消失、爆炸或极差的 condition number。
 
+
+<a id="read-05"></a>
+
 ## 1.2 Residual block 只学“变化量”
 
 ResNet 将它改写为：
@@ -141,6 +333,9 @@ ResNet 将它改写为：
 ```
 
 这比重新构造 identity 容易得多。
+
+
+<a id="read-06"></a>
 
 ## 1.3 展开以后，identity path 非常清楚
 
@@ -173,6 +368,9 @@ ResNet 将它改写为：
 这也是为什么“加一个 skip connection”不是普通 feature fusion，而是在改变优化问题的几何结构。
 
 ---
+
+
+<a id="read-07"></a>
 
 # 2. Residual Stream 是一种什么数据结构？
 
@@ -220,6 +418,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-08"></a>
+
 # 3. Transformer 一层实际上有两次 Residual Update
 
 典型 Pre-RMSNorm decoder block：
@@ -252,7 +453,13 @@ flowchart TD
 
 ---
 
+
+<a id="read-09"></a>
+
 # 4. Post-Norm 与 Pre-Norm：区别不只是 Norm 放在哪儿
+
+
+<a id="read-10"></a>
 
 ## 4.1 Post-Norm
 
@@ -269,6 +476,9 @@ flowchart TD
 
 identity path 必须穿过 Norm。优点是每层输出尺度受控，深层 representation 往往更有区分度；缺点是梯度直通路径不再是真正 identity，深层模型初始化和 warmup 更敏感。
 
+
+<a id="read-11"></a>
+
 ## 4.2 Pre-Norm
 
 现代 LLM 常用：
@@ -283,6 +493,9 @@ identity path 必须穿过 Norm。优点是每层输出尺度受控，深层 rep
 
 identity path 完全绕过 Norm 与子层，因此显著改善深层训练稳定性。
 
+
+<a id="read-12"></a>
+
 ## 4.3 二者的核心 trade-off
 
 | 维度 | Post-Norm | Pre-Norm |
@@ -296,6 +509,9 @@ identity path 完全绕过 Norm 与子层，因此显著改善深层训练稳定
 不能简单说谁绝对更好。Pre-Norm 用更强的优化稳定性换来了 residual accumulation 问题；后续 HC、mHC、AttnRes、GR 很大程度上是在偿还这笔债。
 
 ---
+
+
+<a id="read-13"></a>
 
 # 5. LayerNorm、RMSNorm 与 Residual 是三个不同层级
 
@@ -325,6 +541,9 @@ Initialization / residual scaling 解决的是训练早期每个 update 应该�
 这是阅读 residual 论文时最重要的分类边界。
 
 ---
+
+
+<a id="read-14"></a>
 
 # 6. Pre-Norm 为什么会出现 Hidden-State Growth？
 
@@ -373,17 +592,29 @@ O\left(\frac{1}{\sqrt{L}}\right).
 
 ---
 
+
+<a id="read-15"></a>
+
 # 7. Dilution、Representation Collapse 与 Over-Smoothing 不完全相同
 
 这三个术语经常被混用。
+
+
+<a id="read-16"></a>
 
 ## 7.1 Residual dilution
 
 某个 layer update 在累计 state 中的相对权重越来越小。关注的是 **contribution magnitude**。
 
+
+<a id="read-17"></a>
+
 ## 7.2 Representation collapse
 
 相邻深度的 hidden states 余弦相似度越来越高，新层对 representation 的方向改变很小。关注的是 **cross-depth similarity**。
+
+
+<a id="read-18"></a>
 
 ## 7.3 Over-smoothing
 
@@ -403,6 +634,9 @@ Pre-Norm 深层网络可能同时出现前两者，但它们不是同一个数�
 以及不同 token representation 的 pairwise similarity。
 
 ---
+
+
+<a id="read-19"></a>
 
 # 8. 为什么模型越来越异构后，Residual 问题突然变重要？
 
@@ -443,6 +677,9 @@ Residual Evolution 的本质，就是让模型拥有更聪明的内部互联：
 
 ---
 
+
+<a id="read-20"></a>
+
 # 9. 历史演化：先稳定深度，再扩展深度内存
 
 | 时间 | 工作 | 关键变化 | 后续暴露的问题 |
@@ -465,6 +702,9 @@ Residual Evolution 的本质，就是让模型拥有更聪明的内部互联：
 这条线不是旧方法不断被淘汰。很多现代 LLM 仍使用最简单的 Pre-RMSNorm，因为它的软件成熟度、带宽成本和部署兼容性非常好。
 
 ---
+
+
+<a id="read-21"></a>
 
 # 10. Highway Networks：最早的“读写门控”视角
 
@@ -500,6 +740,9 @@ ResNet 的胜利提醒了一个工程规律：
 
 ---
 
+
+<a id="read-22"></a>
+
 # 11. ResNet 与 Identity Mapping：真正的里程碑是什么？
 
 Residual Learning 常被概括成“加法”，但更重要的是 **unobstructed identity path**。
@@ -534,9 +777,15 @@ Residual Learning 常被概括成“加法”，但更重要的是 **unobstructe
 
 ---
 
+
+<a id="read-23"></a>
+
 # 12. Fixup、SkipInit、ReZero 与 LayerScale：先把 Update 变小
 
 这些方法共享一个直觉：网络初始化时应该接近 identity。
+
+
+<a id="read-24"></a>
 
 ## 12.1 Fixup
 
@@ -545,6 +794,9 @@ Fixup 通过深度相关的权重缩放、部分 zero initialization 和额外 s
 它说明：
 
 > Normalization 的部分稳定作用可以由精心设计的参数化和初始化替代。
+
+
+<a id="read-25"></a>
 
 ## 12.2 ReZero
 
@@ -562,6 +814,9 @@ ReZero 使用：
 
 训练开始时整个网络严格等于 identity；随后 $alpha_l$ 学习打开各层。
 
+
+<a id="read-26"></a>
+
 ## 12.3 LayerScale
 
 LayerScale 把 scalar 扩成 channel-wise diagonal：
@@ -575,6 +830,9 @@ LayerScale 把 scalar 扩成 channel-wise diagonal：
 ```
 
 其中 $\boldsymbol{\gamma}_{l}\in\mathbb{R}^{d}$ 常以很小值初始化。
+
+
+<a id="read-27"></a>
 
 ## 12.4 它们的能力边界
 
@@ -590,7 +848,13 @@ LayerScale 把 scalar 扩成 channel-wise diagonal：
 
 ---
 
+
+<a id="read-28"></a>
+
 # 13. Admin 与 DeepNorm：为深层 Transformer 专门控制 Residual Dependency
+
+
+<a id="read-29"></a>
 
 ## 13.1 Admin
 
@@ -611,6 +875,9 @@ Admin 将 Post-LN 不稳定归因于 residual branch 对参数扰动的放大。
 
 其中 $\omega_l$ 的初始化由模型深度与统计量决定。
 
+
+<a id="read-30"></a>
+
 ## 13.2 DeepNorm
 
 DeepNorm 对 residual path 和参数初始化同时做深度相关缩放：
@@ -628,6 +895,9 @@ DeepNorm 对 residual path 和参数初始化同时做深度相关缩放：
 
 $\alpha$ 和 $\beta$ 随层数配置，使模型 update 被理论上界约束。DeepNet 展示了训练超过 1000 层 Transformer 的可能性。
 
+
+<a id="read-31"></a>
+
 ## 13.3 Infra 视角
 
 这类方法非常便宜：
@@ -641,7 +911,13 @@ $\alpha$ 和 $\beta$ 随层数配置，使模型 update 被理论上界约束。
 
 ---
 
+
+<a id="read-32"></a>
+
 # 14. ResiDual、Peri-LN 与 DenseFormer：连接和归一化开始一起变化
+
+
+<a id="read-33"></a>
 
 ## 14.1 ResiDual
 
@@ -652,11 +928,17 @@ ResiDual 同时维护 Pre-LN 和 Post-LN 风格路径，希望获得：
 
 它代表一种重要思路：不是在 Pre/Post 之间二选一，而是让两条路径并存。
 
+
+<a id="read-34"></a>
+
 ## 14.2 Peri-LN / Sandwich-style Norm
 
 在子层输入和输出附近同时使用 normalization，控制 Pre-LN 的 hidden-state magnitude growth。
 
 代价是额外 Norm kernel 与 HBM traversal；是否值得取决于训练稳定收益能否覆盖 runtime 成本。
+
+
+<a id="read-35"></a>
 
 ## 14.3 DenseFormer
 
@@ -673,6 +955,9 @@ DenseFormer 在部分层后对历史 hidden states 做 Depth-Weighted Average：
 DenseFormer 是 AttnRes 的重要前驱：它已经把“深度”视为一个可聚合维度，只是权重通常不依赖当前 token 内容。
 
 ---
+
+
+<a id="read-36"></a>
 
 # 15. 从标量到矩阵：Residual 设计空间如何统一表示？
 
@@ -704,6 +989,9 @@ $\mathcal{M}_{l}$ 是深度 memory。不同结构只是对它采用不同数据�
 这个统一视角能直接导出系统问题：memory 的大小、每层读写次数、是否跨 PP stage、能否低精度存储、是否可块化。
 
 ---
+
+
+<a id="read-37"></a>
 
 # 16. Hyper-Connections：把一条 Residual Stream 扩成 $n$ 条
 
@@ -764,6 +1052,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-38"></a>
+
 # 17. Dynamic Hyper-Connections：每个 Token 可以拥有不同拓扑
 
 DHC 的 mapping 由静态项和输入相关项组成：
@@ -797,6 +1088,9 @@ DHC 的 mapping 由静态项和输入相关项组成：
 
 ---
 
+
+<a id="read-39"></a>
+
 # 18. HC 的 Sequential–Parallel Duality
 
 HC 的 connection matrix 可以学成接近串行：
@@ -823,6 +1117,9 @@ HC 的 connection matrix 可以学成接近串行：
 - 它改善的是表示与优化，而非天然减少计算。
 
 ---
+
+
+<a id="read-40"></a>
 
 # 19. 为什么原始 HC 在大规模训练中不够稳定？
 
@@ -857,6 +1154,9 @@ mHC 的核心不是“多做一次归一化”，而是恢复这种可组合的�
 
 ---
 
+
+<a id="read-41"></a>
+
 # 20. mHC：为什么使用双随机矩阵？
 
 mHC 将 residual mapping 约束为：
@@ -875,13 +1175,22 @@ mHC 将 residual mapping 约束为：
 
 这样的矩阵位于 Birkhoff polytope（双随机矩阵集合）中。
 
+
+<a id="read-42"></a>
+
 ## 20.1 行和为 1
 
 每条输出 stream 是输入 streams 的 convex combination，不会无界放大均值。
 
+
+<a id="read-43"></a>
+
 ## 20.2 列和为 1
 
 所有输入 stream 的总质量被守恒，避免某条输入被系统性复制或丢弃。
+
+
+<a id="read-44"></a>
 
 ## 20.3 乘法闭包
 
@@ -892,6 +1201,9 @@ mHC 将 residual mapping 约束为：
 ```
 
 仍保持同类约束。
+
+
+<a id="read-45"></a>
 
 ## 20.4 $n=1$ 的退化
 
@@ -904,6 +1216,9 @@ n=1\Rightarrow\mathbf{H}^{res}=1,
 恢复标准 identity mapping。
 
 ---
+
+
+<a id="read-46"></a>
 
 # 21. Sinkhorn–Knopp 如何把任意 Logits 变成近似双随机矩阵？
 
@@ -948,6 +1263,9 @@ mHC 论文实验采用 $t_{max}=20$。
 
 ---
 
+
+<a id="read-47"></a>
+
 # 22. mHC 的完整前向张量流
 
 对 batch 中所有 token，可将 state 写成：
@@ -955,6 +1273,9 @@ mHC 论文实验采用 $t_{max}=20$。
 ```math
 \mathbf{X}_{l}\in\mathbb{R}^{N_{tok}\times n\times d}.
 ```
+
+
+<a id="read-48"></a>
 
 ## 22.1 生成动态 mapping
 
@@ -973,6 +1294,9 @@ n+n+n^{2}
 
 个系数，分别对应 pre、post、res mapping。
 
+
+<a id="read-49"></a>
+
 ## 22.2 约束 mapping
 
 ```math
@@ -987,6 +1311,9 @@ n+n+n^{2}
 \mathbf{H}^{res}=\operatorname{SK}(\widetilde{\mathbf{H}}^{res}).
 ```
 
+
+<a id="read-50"></a>
+
 ## 22.3 Read
 
 ```math
@@ -996,12 +1323,18 @@ n+n+n^{2}
 \in\mathbb{R}^{d}.
 ```
 
+
+<a id="read-51"></a>
+
 ## 22.4 Main operator
 
 ```math
 \mathbf{v}_{l}=\mathcal{F}_{l}(\mathbf{h}^{pre})
 \in\mathbb{R}^{d}.
 ```
+
+
+<a id="read-52"></a>
 
 ## 22.5 Residual mix 与 write
 
@@ -1016,6 +1349,9 @@ n+n+n^{2}
 main operator 不变，但 residual wrapper 已经从一次 add 变成一个小型动态 network。
 
 ---
+
+
+<a id="read-53"></a>
 
 # 23. mHC 为什么是 Memory-Bound，而不是 Compute-Bound？
 
@@ -1062,6 +1398,9 @@ T_{mHC}
 
 ---
 
+
+<a id="read-54"></a>
+
 # 24. mHC 的 Kernel Fusion 为什么不是可选优化？
 
 若按 eager operators 实现：
@@ -1089,6 +1428,9 @@ mHC 的关键系统优化包括：
 作者报告在 $n=4$ 的大模型训练中，通过这些设计将额外训练开销控制到约 6.7%。这是作者特定平台结果，不是朴素 PyTorch 实现的预期值。
 
 ---
+
+
+<a id="read-55"></a>
 
 # 25. mHC Backward：为什么需要分块 Recompute？
 
@@ -1135,6 +1477,9 @@ L_r^{*}
 
 ---
 
+
+<a id="read-56"></a>
+
 # 26. mHC 与 Pipeline Parallelism：Residual State 直接变成通信 Payload
 
 标准 PP stage boundary 传：
@@ -1169,6 +1514,9 @@ mHC 的实现将 recompute block boundary 与 PP stage boundary 对齐，并扩�
 这说明模型 topology 已经直接决定 distributed schedule。
 
 ---
+
+
+<a id="read-57"></a>
 
 # 27. Attention Residuals：把 Depth 当成另一条 Attention 轴
 
@@ -1211,6 +1559,9 @@ AttnRes 改成：
 | Depth | 历史 layer representation | AttnRes、DenseFormer、HC-family |
 
 ---
+
+
+<a id="read-58"></a>
 
 # 28. Full AttnRes 的公式与数据流
 
@@ -1278,6 +1629,9 @@ flowchart TD
 
 ---
 
+
+<a id="read-59"></a>
+
 # 29. Pseudo-Query 是静态参数，为什么 Attention Weight 仍是输入相关的？
 
 $\mathbf{w}_l$ 对所有样本固定，但 key：
@@ -1306,6 +1660,9 @@ $\mathbf{w}_l$ 对所有样本固定，但 key：
 RMSNorm 的作用也很关键：如果不归一化，深层 source 可能仅因 magnitude 更大就获得更高 score，而非因为内容更匹配。
 
 ---
+
+
+<a id="read-60"></a>
 
 # 30. AttnRes 是 Replacement Routing，不是“在原 Residual 上再加 Attention”
 
@@ -1340,6 +1697,9 @@ Full AttnRes 更接近：
 这些选择会改变算法语义，不能只看类名 `ResidualAttention`。
 
 ---
+
+
+<a id="read-61"></a>
 
 # 31. Full AttnRes 的真正问题：$O(Ld)$ Depth Memory
 
@@ -1384,6 +1744,9 @@ N_{tok}\times(2L+1)\times d\times b.
 因此 Full AttnRes 很适合研究上界，但直接扩到大模型并不现实。
 
 ---
+
+
+<a id="read-62"></a>
 
 # 32. Block AttnRes：把深度历史压缩成 Block Summaries
 
@@ -1432,6 +1795,9 @@ Kimi 报告中约 8–10 个 sources 即可保留 Full AttnRes 的大部分收�
 
 ---
 
+
+<a id="read-63"></a>
+
 # 33. Block Size 的 Trade-off
 
 设每个 depth block 含 $S$ 个 sublayers，则：
@@ -1440,12 +1806,18 @@ Kimi 报告中约 8–10 个 sources 即可保留 Full AttnRes 的大部分收�
 N_b\approx\frac{2L}{S}.
 ```
 
+
+<a id="read-64"></a>
+
 ## 小 $S$
 
 - source 多；
 - 深度检索粒度细；
 - 更接近 Full AttnRes；
 - memory、score 和 PP communication 更大。
+
+
+<a id="read-65"></a>
 
 ## 大 $S$
 
@@ -1467,6 +1839,9 @@ N_b\approx\frac{2L}{S}.
 
 ---
 
+
+<a id="read-66"></a>
+
 # 34. Block AttnRes 的两阶段计算为什么重要？
 
 朴素实现中，每个 sublayer 都重新读取所有历史 block summaries：
@@ -1479,6 +1854,9 @@ N_b\approx\frac{2L}{S}.
 
 更高效的实现将计算拆为两部分：
 
+
+<a id="read-67"></a>
+
 ## Phase 1：批量计算历史完整 blocks
 
 同一 depth block 中多个 sublayers 的 pseudo-queries 一次性与历史 summaries 做 batched score / weighted read。
@@ -1489,6 +1867,9 @@ N_b\approx\frac{2L}{S}.
 - 把多个小 GEMV/GEMM 合并；
 - 提高 L2 cache reuse；
 - 减少 kernel launches。
+
+
+<a id="read-68"></a>
 
 ## Phase 2：顺序处理当前 partial block
 
@@ -1504,6 +1885,9 @@ N_b\approx\frac{2L}{S}.
 这是 FlashAttention 思想在 depth 维的一个小型版本：让 mathematically global 的 softmax 通过分块、在线归并减少 memory traffic。
 
 ---
+
+
+<a id="read-69"></a>
 
 # 35. AttnRes 与 Pipeline Parallelism
 
@@ -1538,6 +1922,9 @@ B_{depth\ summaries}.
 
 ---
 
+
+<a id="read-70"></a>
+
 # 36. 标准 Residual、mHC 与 AttnRes 的 I/O 对比
 
 以每 token、每 residual sublayer、hidden width $d$ 为单位，论文给出的一组代表性 forward memory I/O：
@@ -1564,6 +1951,9 @@ B_{depth\ summaries}.
 > residual module 的 FLOPs 可能很小，memory I/O 却足以成为新瓶颈。
 
 ---
+
+
+<a id="read-71"></a>
 
 # 37. Kimi K3 如何使用 AttnRes？
 
@@ -1595,6 +1985,9 @@ Kimi K3 技术报告采用 Block AttnRes，而不是无法扩展的 Full AttnRes
 
 ---
 
+
+<a id="read-72"></a>
+
 # 38. Qwen Gated Residual：先把 Stream 变宽，再把 Read 做细
 
 Qwen3.8-Flash-Next 的出发点是：
@@ -1616,6 +2009,9 @@ Qwen3.8-Flash-Next 的出发点是：
 
 ---
 
+
+<a id="read-73"></a>
+
 # 39. Gated Residual 的完整公式
 
 残差状态：
@@ -1626,6 +2022,9 @@ Qwen3.8-Flash-Next 的出发点是：
 \mathbb{R}^{n_r\times d}.
 ```
 
+
+<a id="read-74"></a>
+
 ## 39.1 Branch-wise RMSNorm
 
 ```math
@@ -1634,6 +2033,9 @@ Qwen3.8-Flash-Next 的出发点是：
 \operatorname{RMSNorm}
 (\mathbf{R}_{i};\boldsymbol{\gamma}_{i}).
 ```
+
+
+<a id="read-75"></a>
 
 ## 39.2 Elementwise read gate
 
@@ -1670,11 +2072,17 @@ Qwen3.8-Flash-Next 的出发点是：
 
 每个 channel 可以从不同 branch 读取不同强度。
 
+
+<a id="read-76"></a>
+
 ## 39.3 Main operator
 
 ```math
 \mathbf{y}=\mathcal{F}_{l}(\mathbf{x}).
 ```
+
+
+<a id="read-77"></a>
 
 ## 39.4 Per-branch scalar write gate
 
@@ -1698,6 +2106,9 @@ $s_i\in(0,2)$，是 bounded write strength。
 
 ---
 
+
+<a id="read-78"></a>
+
 # 40. GR 与 HC/mHC 到底差在哪儿？
 
 | 设计点 | HC/mHC | Gated Residual |
@@ -1717,6 +2128,9 @@ GR 的逻辑非常 Infra-oriented：
 Qwen 的 ablation 显示，删除 $\mathbf{H}^{res}$ 在其设置中没有带来质量损失，同时减少一次完整 residual-state read。这个结论不能自动推广到所有模型，但它给出了清晰的设计方法：以 **accuracy per byte moved** 而非 accuracy per FLOP 评估 residual topology。
 
 ---
+
+
+<a id="read-79"></a>
 
 # 41. GR 为什么可以替代 Pre-Norm，而不是叠加在它前面？
 
@@ -1748,6 +2162,9 @@ GR read 已经包含：
 这是典型的 architecture–kernel co-design：不是把新模块机械地插进旧 block，而是重新划分 operator boundary。
 
 ---
+
+
+<a id="read-80"></a>
 
 # 42. GR 的 FP8 Residual State 与 Fused Read/Write
 
@@ -1786,6 +2203,9 @@ Qwen 的设计让多处 gate 限制写入 magnitude，使 state dynamic range �
 
 ---
 
+
+<a id="read-81"></a>
+
 # 43. Qwen 的 Branch Analysis 给了什么启发？
 
 由于 GR 删除了 branch mixing，每条 branch 都是可解释的 accumulator：
@@ -1813,6 +2233,9 @@ Qwen 报告观察到：
 
 ---
 
+
+<a id="read-82"></a>
+
 # 44. DeepSeek V4、Kimi K3、Qwen3.8 的三种答案
 
 | 模型 | Residual 结构 | Memory 形式 | 主要优点 | 主要 Infra 成本 |
@@ -1839,6 +2262,9 @@ Qwen 报告观察到：
 
 ---
 
+
+<a id="read-83"></a>
+
 # 45. 为什么 GLM 不应被强行塞进同一条 Residual 路线？
 
 截至本文资料边界，GLM-5 的公开技术报告重点是 DSA、MoE 与异步 Agent RL，并没有像 DeepSeek V4、Kimi K3、Qwen3.8-Next 那样把新的 residual topology 作为核心公开贡献。
@@ -1858,27 +2284,48 @@ Residual 结构对 checkpoint tensor layout 和 runtime 支持影响很大，错
 
 ---
 
+
+<a id="read-84"></a>
+
 # 46. 其他有里程碑意义的 Depth-Mixing 工作
+
+
+<a id="read-85"></a>
 
 ## 46.1 Transparent Attention / DLCL / ELC-BERT
 
 让上层直接组合多个较低层 representation，是 depth aggregation 的早期路线。
 
+
+<a id="read-86"></a>
+
 ## 46.2 DenseFormer
 
 使用静态 learnable depth weights，是从固定 residual sum 到 depth-selective mixing 的关键过渡。
+
+
+<a id="read-87"></a>
 
 ## 46.3 Alternating Updates
 
 维护多个 residual branches，但每层只更新其中一部分，说明 widening 本身就是新的 capacity axis。
 
+
+<a id="read-88"></a>
+
 ## 46.4 Residual Matrix Transformer
 
 将 residual memory 扩展成矩阵状态，进一步探索 residual capacity 与 model width 解耦。
 
+
+<a id="read-89"></a>
+
 ## 46.5 MUDDFormer
 
 对不同 projection 和 residual 使用 dynamic dense cross-layer connectivity，代表更激进的多路深度读写。
+
+
+<a id="read-90"></a>
 
 ## 46.6 Mixture-of-Depths
 
@@ -1898,17 +2345,29 @@ MoD 让 router 选择哪些 token 执行当前 layer，其余 token 只走 resid
 
 ---
 
+
+<a id="read-91"></a>
+
 # 47. 2026 年快速扩展的后续路线
 
 以下多为新论文，成熟度和大规模复现程度显著低于 ResNet、Pre-Norm 或已进入主模型的 mHC/AttnRes/GR。
+
+
+<a id="read-92"></a>
 
 ## 47.1 mHC-lite / KromHC
 
 尝试用 permutation matrices 的 convex combination 或 Kronecker parameterization，减少 Sinkhorn 迭代、保证精确双随机或降低参数成本。
 
+
+<a id="read-93"></a>
+
 ## 47.2 xHC
 
 指出 $n>4$ 时 mHC 收益递减且成本上升，使用 sparse stream update 与更丰富 write-back 扩展到更多 streams，并以 xHC-Flash 控制 I/O。
+
+
+<a id="read-94"></a>
 
 ## 47.3 Delta Attention Residuals
 
@@ -1920,13 +2379,22 @@ MoD 让 router 选择哪些 token 执行当前 layer，其余 token 只走 resid
 
 做 depth attention。动机是 cumulative states 高度相似，容易让 depth softmax 接近均匀；delta 更具方向差异。
 
+
+<a id="read-95"></a>
+
 ## 47.4 Multi-Head Attention Residuals
 
 将 hidden channels 分为多个 heads，每个 head 使用不同 depth distribution，避免整个 width 共用一个深度选择。
 
+
+<a id="read-96"></a>
+
 ## 47.5 Role-Decoupled AttnRes
 
 让 Q/K 的 depth read 与 V 的 depth read 分离：匹配几何和内容检索未必应读取相同历史深度。
+
+
+<a id="read-97"></a>
 
 ## 47.6 Dual Attention Residuals
 
@@ -1935,6 +2403,9 @@ MoD 让 router 选择哪些 token 执行当前 layer，其余 token 只走 resid
 这些工作共同说明：Residual 已经从一个固定公式变成独立 architecture field。
 
 ---
+
+
+<a id="read-98"></a>
 
 # 48. 三条路线能否组合？
 
@@ -1977,6 +2448,9 @@ B_{recompute}
 而不是先把算法模块全叠上，再期待 compiler 自动解决。
 
 ---
+
+
+<a id="read-99"></a>
 
 # 49. Training Activation Memory 成本模型
 
@@ -2031,7 +2505,13 @@ M_{comm\ buffers}.
 
 ---
 
+
+<a id="read-100"></a>
+
 # 50. PP、TP、CP 与 Residual Topology 的交互
+
+
+<a id="read-101"></a>
 
 ## 50.1 Tensor Parallel
 
@@ -2039,9 +2519,15 @@ Residual state 通常在 TP ranks 上保持 replicated 或按 sequence/context �
 
 多 stream 不一定增加 TP collective 次数，但会增加本地 residual I/O。如果 gate projection 做 TP sharding，还需保证 gate 与 state layout 一致。
 
+
+<a id="read-102"></a>
+
 ## 50.2 Context Parallel
 
 若 tokens 已按 CP 分片，residual state 也随 token 分片，多 stream 的 HBM 与 PP payload 可按 CP size 降低。但 depth routing 只在本地 token 上发生，通常不新增跨 CP 的 depth collective。
+
+
+<a id="read-103"></a>
 
 ## 50.3 Pipeline Parallel
 
@@ -2054,11 +2540,17 @@ Residual state 通常在 TP ranks 上保持 replicated 或按 sequence/context �
 - forward/backward schedule；
 - 与 EP traffic 的 overlap。
 
+
+<a id="read-104"></a>
+
 ## 50.4 Sequence Parallel
 
 Norm 与 elementwise gate 可在 sequence-sharded tensor 上本地执行，有利于降低每 rank residual bytes；但 stage boundary 是否保持 sequence shard 取决于整个并行布局。
 
 ---
+
+
+<a id="read-105"></a>
 
 # 51. Prefill 与 Decode：Residual 成本有什么不同？
 
@@ -2070,12 +2562,18 @@ Residual operator 不保存跨 decode step 的 KV-like history。每生成一个
 - 但每个 decode step 的 batch tokens 很少；
 - main GEMM 算术强度下降后，elementwise residual I/O 占比会上升。
 
+
+<a id="read-106"></a>
+
 ## Prefill
 
 - token 数大；
 - gate projections 能形成较大 GEMM；
 - memory traversal 连续；
 - residual overhead 更容易被 Attention/MoE 计算摊薄。
+
+
+<a id="read-107"></a>
 
 ## Decode
 
@@ -2089,17 +2587,29 @@ Residual operator 不保存跨 decode step 的 KV-like history。每生成一个
 
 ---
 
+
+<a id="read-108"></a>
+
 # 52. Residual Kernel 应该融合到哪里？
 
 常见 fusion 边界：
+
+
+<a id="read-109"></a>
 
 ## 52.1 Norm + Input Projection
 
 将 RMSNorm scale 融合进 QKV 或 FFN projection，减少一次 materialization。
 
+
+<a id="read-110"></a>
+
 ## 52.2 Bias/Scale + Residual Add
 
 将 output scale、dropout、bias、residual add 融成一个 epilogue。
+
+
+<a id="read-111"></a>
 
 ## 52.3 Multi-stream Read
 
@@ -2111,6 +2621,9 @@ Residual operator 不保存跨 decode step 的 KV-like history。每生成一个
 - weighted branch reduce；
 - 输出 cast。
 
+
+<a id="read-112"></a>
+
 ## 52.4 Multi-stream Write
 
 融合：
@@ -2120,6 +2633,9 @@ Residual operator 不保存跨 decode step 的 KV-like history。每生成一个
 - amax/scale update；
 - FP8 quant；
 - store。
+
+
+<a id="read-113"></a>
 
 ## 52.5 Depth Attention
 
@@ -2137,6 +2653,9 @@ Residual operator 不保存跨 decode step 的 KV-like history。每生成一个
 ```
 
 ---
+
+
+<a id="read-114"></a>
 
 # 53. 为什么不能盲目使用 Persistent Kernel？
 
@@ -2160,9 +2679,15 @@ mHC 的系统设计明确对部分 attention path 避免长时间 persistent exe
 
 ---
 
+
+<a id="read-115"></a>
+
 # 54. 怎样正确 Benchmark Residual Architecture？
 
 至少分四层测量。
+
+
+<a id="read-116"></a>
 
 ## 54.1 算法层
 
@@ -2171,6 +2696,9 @@ mHC 的系统设计明确对部分 attention path 避免长时间 persistent exe
 - scaling law slope；
 - token-equivalent compute；
 - post-training 后收益是否保留。
+
+
+<a id="read-117"></a>
 
 ## 54.2 数值稳定层
 
@@ -2181,6 +2709,9 @@ mHC 的系统设计明确对部分 attention path 避免长时间 persistent exe
 - depth softmax entropy；
 - branch utilization / collapse。
 
+
+<a id="read-118"></a>
+
 ## 54.3 Kernel 层
 
 - read/write latency；
@@ -2190,6 +2721,9 @@ mHC 的系统设计明确对部分 attention path 避免长时间 persistent exe
 - achieved bandwidth；
 - register/shared-memory pressure；
 - forward/backward/recompute 分开测。
+
+
+<a id="read-119"></a>
 
 ## 54.4 End-to-end 层
 
@@ -2213,7 +2747,13 @@ mHC 的系统设计明确对部分 attention path 避免长时间 persistent exe
 
 ---
 
+
+<a id="read-120"></a>
+
 # 55. 关键诊断指标
+
+
+<a id="read-121"></a>
 
 ## 55.1 单流 Pre-Norm
 
@@ -2224,6 +2764,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 
 若深层 $r_l$ 持续趋近 0，可能存在 dilution 或 ineffective depth。
 
+
+<a id="read-122"></a>
+
 ## 55.2 HC/mHC
 
 - $\max$ row/column sum deviation；
@@ -2232,6 +2775,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - stream-to-stream cosine similarity；
 - mapping entropy；
 - Sinkhorn finite-iteration error。
+
+
+<a id="read-123"></a>
 
 ## 55.3 AttnRes
 
@@ -2242,6 +2788,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - query norm；
 - block summary RMS；
 - 不同 token/domain 的 depth path。
+
+
+<a id="read-124"></a>
 
 ## 55.4 Gated Residual
 
@@ -2256,7 +2805,13 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 
 ---
 
+
+<a id="read-125"></a>
+
 # 56. 常见故障排查
+
+
+<a id="read-126"></a>
 
 ## 56.1 Loss 正常，但加深模型几乎无收益
 
@@ -2267,6 +2822,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - LayerScale/ReZero gate 是否长期接近 0；
 - AttnRes 是否只读最近 source；
 - GR 是否只有一个 branch 被使用。
+
+
+<a id="read-127"></a>
 
 ## 56.2 mHC 训练到中后期出现 loss spike
 
@@ -2279,6 +2837,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - composite Amax gain 是否随深度上升；
 - gradient clipping 是否掩盖早期异常。
 
+
+<a id="read-128"></a>
+
 ## 56.3 启用多流后 MFU 显著下降，但 FLOPs 变化很小
 
 通常是 memory wall：
@@ -2290,6 +2851,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - 检查 read/write 是否真的 fused；
 - decode 是否 launch-bound。
 
+
+<a id="read-129"></a>
+
 ## 56.4 PP bubble 突然变大
 
 检查：
@@ -2299,6 +2863,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - recompute block 是否跨 PP boundary；
 - residual communication 是否与 EP A2A 同时拥塞；
 - persistent kernel 是否阻塞 comm stream。
+
+
+<a id="read-130"></a>
 
 ## 56.5 AttnRes quality 下降
 
@@ -2312,6 +2879,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - embedding source 是否存在；
 - pseudo-query 初始化是否正确。
 
+
+<a id="read-131"></a>
+
 ## 56.6 FP8 GR 推理出现逐层漂移
 
 检查：
@@ -2324,6 +2894,9 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 - fused kernel 与 BF16 reference 的逐层误差。
 
 ---
+
+
+<a id="read-132"></a>
 
 # 57. 一个最小正确性验证流程
 
@@ -2349,45 +2922,78 @@ r_l=\frac{\lVert\mathbf{v}_{l}\rVert_2}
 
 ---
 
+
+<a id="read-133"></a>
+
 # 58. 常见误区
+
+
+<a id="read-134"></a>
 
 ## 误区一：Residual 没有参数，所以没有性能成本
 
 标准 residual add 也需要读写 HBM。多流 residual 更可能是 memory-bound。
 
+
+<a id="read-135"></a>
+
 ## 误区二：Pre-Norm 完全解决了深层训练
 
 它主要改善梯度直通路径，同时可能带来 hidden growth、dilution 与 representation similarity。
+
+
+<a id="read-136"></a>
 
 ## 误区三：HC 的额外 FLOPs 很小，所以运行开销也小
 
 FLOPs 不代表 HBM traffic、PP communication、activation memory 和 kernel launch。
 
+
+<a id="read-137"></a>
+
 ## 误区四：mHC 就是给 HC 加 Sinkhorn
 
 完整贡献还包括 manifold parameterization、mixed precision、fusion、custom backward、recompute 与 DualPipe overlap。
+
+
+<a id="read-138"></a>
 
 ## 误区五：AttnRes 是在 token 维再做一次大 Attention
 
 它沿 depth sources 做 attention；source 数远小于 context tokens，但 Full variant 仍有 $O(Ld)$ memory。
 
+
+<a id="read-139"></a>
+
 ## 误区六：Block AttnRes block 越大越省，越值得
 
 过度压缩会丢失细粒度 depth information，需要通过 scaling 和 downstream eval 决定。
+
+
+<a id="read-140"></a>
 
 ## 误区七：多 residual branches 等于 ensemble
 
 branches 共享同一组 main operators，并通过读写 gate 协同，是单模型内部 state，不是独立模型投票。
 
+
+<a id="read-141"></a>
+
 ## 误区八：低精度 residual state 与普通 activation quantization 一样
 
 Residual state 跨很多层持续存在，量化误差会递归累积，稳定要求更高。
+
+
+<a id="read-142"></a>
 
 ## 误区九：训练 loss 更低就说明 residual 结构更好
 
 还需看 downstream、post-training、training throughput、decode latency、PP 扩展与部署复杂度。
 
 ---
+
+
+<a id="read-143"></a>
 
 # 59. 如何选择 Residual 方案？
 
@@ -2413,7 +3019,13 @@ Residual state 跨很多层持续存在，量化误差会递归累积，稳定�
 
 ---
 
+
+<a id="read-144"></a>
+
 # 60. 训练系统检查清单
+
+
+<a id="read-145"></a>
 
 ## Architecture
 
@@ -2423,12 +3035,18 @@ Residual state 跨很多层持续存在，量化误差会递归累积，稳定�
 - [ ] Norm 与 gate 顺序固定；
 - [ ] block/stream 数写入 config 和 checkpoint metadata。
 
+
+<a id="read-146"></a>
+
 ## Precision
 
 - [ ] coefficient、norm reduction、SK 使用合适 accumulator；
 - [ ] residual state dtype 与 main activation dtype 分开配置；
 - [ ] 保存每 branch/source 的 amax；
 - [ ] FP8 scale strategy 有 BF16 audit。
+
+
+<a id="read-147"></a>
 
 ## Memory
 
@@ -2437,12 +3055,18 @@ Residual state 跨很多层持续存在，量化误差会递归累积，稳定�
 - [ ] block recompute 不跨 PP boundary；
 - [ ] communication buffer 纳入 peak memory。
 
+
+<a id="read-148"></a>
+
 ## Parallelism
 
 - [ ] TP/CP layout 与 branch/source layout 一致；
 - [ ] PP payload 按多流和 depth summaries 重算；
 - [ ] 与 EP All-to-All 做 timeline overlap；
 - [ ] high-priority stream 不被 persistent kernel 长时间阻塞。
+
+
+<a id="read-149"></a>
 
 ## Validation
 
@@ -2453,6 +3077,9 @@ Residual state 跨很多层持续存在，量化误差会递归累积，稳定�
 - [ ] pretraining、post-training、inference 全链路验证。
 
 ---
+
+
+<a id="read-150"></a>
 
 # 61. Serving 系统检查清单
 
@@ -2469,9 +3096,15 @@ Residual state 跨很多层持续存在，量化误差会递归累积，稳定�
 
 ---
 
+
+<a id="read-151"></a>
+
 # 62. 我对下一阶段的判断
 
 Residual Evolution 很可能沿四个方向继续：
+
+
+<a id="read-152"></a>
 
 ## 62.1 Hierarchical Depth Memory
 
@@ -2483,13 +3116,22 @@ Residual Evolution 很可能沿四个方向继续：
 
 不同粒度通过同一 depth router 读取。
 
+
+<a id="read-153"></a>
+
 ## 62.2 Sparse Multi-Stream Update
 
 stream 数继续增加，但每层只写少量 streams；这与 Ultra-Sparse MoE 类似，会把瓶颈迁移到 router、load balance 和 scatter/gather。
 
+
+<a id="read-154"></a>
+
 ## 62.3 Role-Decoupled Depth Routing
 
 Attention 的 Q/K/V、MoE、memory layer 可能读取不同 depth mixture，而不是所有 operator 共用一个 residual input。
+
+
+<a id="read-155"></a>
 
 ## 62.4 Train–Serve Co-designed Residual
 
@@ -2518,6 +3160,9 @@ Attention 的 Q/K/V、MoE、memory layer 可能读取不同 depth mixture，而�
 共同最优。
 
 ---
+
+
+<a id="read-156"></a>
 
 # 63. 最终心智模型：Transformer 内部也有一张“深度网络”
 
@@ -2552,99 +3197,123 @@ flowchart TD
 
 ---
 
+
+<a id="read-157"></a>
+
 # 64. 推荐阅读顺序与资料索引
+
+
+<a id="read-158"></a>
 
 ## A. Residual 与稳定性基础
 
-1. [Highway Networks](https://arxiv.org/abs/1505.00387)  
+1. [Highway Networks](https://arxiv.org/abs/1505.00387)\
    输入相关 transform/carry gate 的早期代表。
 
-2. [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385)  
+2. [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385)\
    Residual Learning 与 identity shortcut 的起点。
 
-3. [Identity Mappings in Deep Residual Networks](https://arxiv.org/abs/1603.05027)  
+3. [Identity Mappings in Deep Residual Networks](https://arxiv.org/abs/1603.05027)\
    解释无阻碍 identity path 的前向与反向意义。
 
-4. [Attention Is All You Need](https://arxiv.org/abs/1706.03762)  
+4. [Attention Is All You Need](https://arxiv.org/abs/1706.03762)\
    原始 Transformer 的 residual + Post-LN。
 
-5. [On Layer Normalization in the Transformer Architecture](https://arxiv.org/abs/2002.04745)  
+5. [On Layer Normalization in the Transformer Architecture](https://arxiv.org/abs/2002.04745)\
    Pre-LN 与 Post-LN 初始化梯度分析。
 
-6. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467)  
+6. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467)\
    RMSNorm 的定义、效率与 invariance。
+
+
+<a id="read-159"></a>
 
 ## B. Initialization、Scaling 与 Norm 位置
 
-7. [Fixup Initialization](https://arxiv.org/abs/1901.09321)  
+7. [Fixup Initialization](https://arxiv.org/abs/1901.09321)\
    无 normalization 的 residual initialization。
 
-8. [ReZero is All You Need](https://proceedings.mlr.press/v161/bachlechner21a.html)  
+8. [ReZero is All You Need](https://proceedings.mlr.press/v161/bachlechner21a.html)\
    zero-initialized residual gate。
 
-9. [Understanding the Difficulty of Training Transformers](https://arxiv.org/abs/2004.08249)  
+9. [Understanding the Difficulty of Training Transformers](https://arxiv.org/abs/2004.08249)\
    residual dependency amplification 与 Admin。
 
-10. [Going Deeper with Image Transformers](https://arxiv.org/abs/2103.17239)  
+10. [Going Deeper with Image Transformers](https://arxiv.org/abs/2103.17239)\
     LayerScale 与深层 ViT。
 
-11. [DeepNet: Scaling Transformers to 1,000 Layers](https://arxiv.org/abs/2203.00555)  
+11. [DeepNet: Scaling Transformers to 1,000 Layers](https://arxiv.org/abs/2203.00555)\
     DeepNorm 与深度相关初始化。
 
-12. [ResiDual](https://arxiv.org/abs/2304.14802)  
+12. [ResiDual](https://arxiv.org/abs/2304.14802)\
     Pre/Post 双 residual 路径。
+
+
+<a id="read-160"></a>
 
 ## C. Depth Aggregation 与 Conditional Depth
 
-13. [DenseFormer](https://arxiv.org/abs/2402.02622)  
+13. [DenseFormer](https://arxiv.org/abs/2402.02622)\
     Depth-Weighted Average。
 
-14. [Mixture-of-Depths](https://arxiv.org/abs/2404.02258)  
+14. [Mixture-of-Depths](https://arxiv.org/abs/2404.02258)\
     token-level dynamic layer compute allocation。
+
+
+<a id="read-161"></a>
 
 ## D. Hyper-Connections 路线
 
-15. [Hyper-Connections](https://arxiv.org/abs/2409.19606)  
+15. [Hyper-Connections](https://arxiv.org/abs/2409.19606)\
     多 residual streams、动态 depth/width connections。
 
-16. [mHC: Manifold-Constrained Hyper-Connections](https://arxiv.org/abs/2512.24880)  
+16. [mHC: Manifold-Constrained Hyper-Connections](https://arxiv.org/abs/2512.24880)\
     双随机 manifold、Sinkhorn、fusion、recompute 与 DualPipe。
 
-17. [mHC-lite](https://arxiv.org/abs/2601.05732)  
+17. [mHC-lite](https://arxiv.org/abs/2601.05732)\
     通过 permutation mixture 简化双随机参数化。
 
-18. [xHC: Expanded Hyper-Connections](https://arxiv.org/abs/2607.14530)  
+18. [xHC: Expanded Hyper-Connections](https://arxiv.org/abs/2607.14530)\
     大 stream 数、sparse write 与 xHC-Flash。
+
+
+<a id="read-162"></a>
 
 ## E. Attention Residuals 路线
 
-19. [Attention Residuals](https://arxiv.org/abs/2603.15031) 与 [官方仓库](https://github.com/MoonshotAI/Attention-Residuals)  
+19. [Attention Residuals](https://arxiv.org/abs/2603.15031) 与 [官方仓库](https://github.com/MoonshotAI/Attention-Residuals)\
     Full / Block AttnRes、depth softmax 与系统实现。
 
-20. [Delta Attention Residuals](https://arxiv.org/abs/2605.18855)  
+20. [Delta Attention Residuals](https://arxiv.org/abs/2605.18855)\
     对 residual deltas 而非 cumulative states 做 routing。
 
-21. [Multi-Head Attention Residuals](https://arxiv.org/abs/2607.27230)  
+21. [Multi-Head Attention Residuals](https://arxiv.org/abs/2607.27230)\
     不同 feature subspaces 使用不同 depth distribution。
 
-22. [Role-Decoupled Attention Residuals](https://arxiv.org/abs/2608.01075)  
+22. [Role-Decoupled Attention Residuals](https://arxiv.org/abs/2608.01075)\
     分离 Q/K matching depth 与 V retrieval depth。
+
+
+<a id="read-163"></a>
 
 ## F. 现代模型采用
 
-23. [DeepSeek-V4](https://arxiv.org/abs/2606.19348)  
+23. [DeepSeek-V4](https://arxiv.org/abs/2606.19348)\
     将 mHC 用于主模型并与压缩式长上下文架构结合。
 
-24. [Kimi K3](https://arxiv.org/abs/2607.24653)  
+24. [Kimi K3](https://arxiv.org/abs/2607.24653)\
     Block AttnRes + Hybrid Attention + Stable LatentMoE。
 
-25. [Qwen3.8-Flash-Next Architecture Report](https://arxiv.org/abs/2608.30320)  
+25. [Qwen3.8-Flash-Next Architecture Report](https://arxiv.org/abs/2608.30320)\
     四分支 Gated Residual、FP8 state、fused read/write 与系统化 ablation。
 
-26. [GLM-5](https://arxiv.org/abs/2602.15763)  
+26. [GLM-5](https://arxiv.org/abs/2602.15763)\
     用于核对 GLM 当前公开结构边界，避免把其他团队 residual 方法误归于 GLM。
 
 ---
+
+
+<a id="read-164"></a>
 
 # 65. 与整套 AI Infra 笔记的接口
 

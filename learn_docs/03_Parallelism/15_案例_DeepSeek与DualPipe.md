@@ -1,5 +1,24 @@
 # 案例：DeepSeek-V3 的并行选择与 DualPipe
 
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../00_Foundations/README.md>)。
+> **首读/二读**：PP/EP 基础完成后对照 DualPipe；不直接照抄配置。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：读复杂流水线前先验证依赖
+
+DualPipe 等复杂流水设计同时安排计算与通信重叠。先在已有 PP/EP 知识上标出：token dispatch 完成前哪个 expert 不能开算，backward 的哪部分依赖输入梯度，哪些权重梯度工作可以稍后做。
+
+论文报告的收益依赖模型、路由、网络、microbatch 和资源配置。照搬 stage 数或 EP degree，不等于复制其性能条件。先把本机基线的空洞定位清楚，才知道这种 schedule 是否解决你的问题。
+
+练习：从报告中选一张时序图，列出每个彩色块的输入、输出、通信组和资源。无法解释依赖的块先回到 PP/AllToAll 主章，不需要一开始复现全规模。
+
+## 机制与实现
+
 本案例不把 DeepSeek 配置当作通用答案，而是推导“模型结构、硬件约束与并行方案为何相互塑造”。
 
 ## 已公开的关键配置
@@ -81,4 +100,3 @@ DeepSeek 的目标是联合隐藏：
 - [DeepSeek DualPipe](https://github.com/deepseek-ai/DualPipe)
 - [DeepSeek Profile Data](https://github.com/deepseek-ai/profile-data)
 - [DeepEP](https://github.com/deepseek-ai/DeepEP)
-

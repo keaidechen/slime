@@ -1,8 +1,53 @@
 # 1.2 一条 request 进入 SGLang 后如何流转
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 阅读范围](#read-01)
+- [2. 先看完整结论](#read-02)
+- [3. 进程拓扑与 IPC](#read-03)
+- [4. 端到端时序图](#read-04)
+- [5. 请求在不同层的对象形态](#read-05)
+- [6. 第一段：HTTP 与 OpenAI adapter](#read-06)
+- [7. 第二段：`TokenizerManager` 建立异步请求状态](#read-07)
+- [8. 第三段：scheduler 收到请求并创建 `Req`](#read-08)
+- [9. 第四段：scheduler event loop 与 continuous batching](#read-09)
+- [10. 第五段：prefix match、admission 与 prefill batch](#read-10)
+- [11. 第六段：从 `ScheduleBatch` 到模型 forward 和采样](#read-11)
+- [12. 第七段：处理 prefill 结果](#read-12)
+- [13. 第八段：decode 循环](#read-13)
+- [14. finish 判定的真实优先级](#read-14)
+- [15. 第九段：scheduler 输出 token，而不是直接输出字符串](#read-15)
+- [16. 第十段：`DetokenizerManager` 产生稳定文本 delta](#read-16)
+- [17. 第十一段：回到 `TokenizerManager` 和 HTTP](#read-17)
+- [18. finish 时 KV 和请求资源何时释放](#read-18)
+- [19. 一条请求的状态演化示例](#read-19)
+- [20. streaming 与 non-streaming 的真正差异](#read-20)
+- [21. client disconnect 与 abort 路径](#read-21)
+- [22. overlap scheduler 如何改变时间线](#read-22)
+- [23. 高级功能插入主链路的位置](#read-23)
+- [24. 三本账：读代码时始终对齐](#read-24)
+- [25. 建议的源码阅读顺序](#read-25)
+- [26. 最小单请求观测实验](#read-26)
+- [27. 卡住或延迟高时如何定位](#read-27)
+- [28. 本章结论](#read-28)
+- [29. 延伸阅读](#read-29)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4→A5 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：先普通文本请求的对象和跨进程流，再读异常、控制请求与特殊分支。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本文沿着一条普通文本生成请求，解释它从 HTTP 入口进入 SGLang，到 GPU 完成 prefill/decode，再到文本通过 HTTP 返回的完整代码路径。
 
 本文基于本仓库固定的 SGLang 快照 `f5155d960286db25952217f343ee0d3c358f7f77`。源码行号只用于快速定位；后续同步上游代码时，应优先搜索类名和函数名。
+
+
+<a id="read-01"></a>
 
 ## 1. 阅读范围
 
@@ -17,6 +62,9 @@
 - normal scheduler，即关闭 overlap 后的逻辑顺序。
 
 这些功能不会完全重写主链路，而是在请求转换、调度、模型执行或返回路径上增加分支。本文最后单独说明这些分支插在哪里。
+
+
+<a id="read-02"></a>
 
 ## 2. 先看完整结论
 
@@ -57,6 +105,9 @@ POST /v1/chat/completions
 4. scheduler 输出的是 token id 和元数据，`DetokenizerManager` 才负责稳定的增量文本。
 5. `rid` 是所有进程关联同一条请求的主键。
 
+
+<a id="read-03"></a>
+
 ## 3. 进程拓扑与 IPC
 
 典型 server 把 CPU 文本处理、GPU 调度和增量 detokenize 拆到不同进程：
@@ -89,6 +140,9 @@ flowchart LR
 | Scheduler → Tokenizer | `AbortReq` | waiting request 被取消或 scheduler 主动拒绝 |
 
 拆进程的目的不是代码风格，而是隔离不同资源：tokenization/detokenization 是 CPU 工作，scheduler 持有 KV 和请求资源状态，model worker 驱动 GPU。它们之间不能共享普通 Python 对象，只能传递可序列化消息和稳定的 request id。
+
+
+<a id="read-04"></a>
 
 ## 4. 端到端时序图
 
@@ -135,6 +189,9 @@ sequenceDiagram
 
 非流式请求的 GPU 路径基本相同，只是 `TokenizerManager` 不把中间结果交给 HTTP coroutine，直到 `finished_reason` 非空才返回完整结果。
 
+
+<a id="read-05"></a>
+
 ## 5. 请求在不同层的对象形态
 
 同一条请求会依次变成多个对象：
@@ -152,6 +209,9 @@ sequenceDiagram
 | HTTP 等待状态 | `ReqState` | `TokenizerManager` | asyncio event、待发送输出、累计文本/token、完成状态 |
 
 不要把这些类型合并理解成“request”。每次类型转换都代表一次所有权边界：协议层不管理 KV，scheduler 不管理 HTTP response，detokenizer 不决定 GPU admission。
+
+
+<a id="read-06"></a>
 
 ## 6. 第一段：HTTP 与 OpenAI adapter
 
@@ -202,6 +262,9 @@ _validate_request
 - non-streaming：`serving_chat.py:1444` 只取 `TokenizerManager.generate_request(...).__anext__()` 的最终结果，再组装 `ChatCompletionResponse`。
 
 streaming adapter 还负责把内部文本进一步拆成 OpenAI `delta`，并处理 reasoning、tool call、usage 和最终 `[DONE]`。这些属于协议输出层，不改变 scheduler 生成的 token 序列。
+
+
+<a id="read-07"></a>
 
 ## 7. 第二段：`TokenizerManager` 建立异步请求状态
 
@@ -280,6 +343,9 @@ await asyncio.wait_for(state.event.wait(), timeout=...)
 - finish 时记录 e2e/response 时间并写请求日志；
 - disconnect 时向 scheduler 发 `AbortReq`。
 
+
+<a id="read-08"></a>
+
 ## 8. 第三段：scheduler 收到请求并创建 `Req`
 
 ### 8.1 rank 0 收消息，再同步给并行 ranks
@@ -349,6 +415,9 @@ req.time_stats.set_wait_queue_entry_time()
 
 如果带 grammar，它可能先进入 grammar queue，grammar ready 后再进入 `waiting_queue`。PD 模式则进入专用 bootstrap/prealloc queue，不走普通 waiting queue。
 
+
+<a id="read-09"></a>
+
 ## 9. 第四段：scheduler event loop 与 continuous batching
 
 ### 9.1 normal loop
@@ -390,6 +459,9 @@ continuous batching 的含义就在这里：每轮都先接收新请求，再从
 6. 插入 DP attention、ngram/spec 等模式特有步骤。
 
 这意味着默认策略会在可行时优先安排新 prefill。chunked prefill、prefill delay 和 mixed chunk 会改变 prefill/decode 的交错方式，但不会改变 `waiting → prefill → running decode` 的基本生命周期。
+
+
+<a id="read-10"></a>
 
 ## 10. 第五段：prefix match、admission 与 prefill batch
 
@@ -444,6 +516,9 @@ new_batch.prepare_for_extend()
 
 `req_pool_idx` 不是 KV index；它是请求映射表的 slot。`out_cache_loc` 才描述本轮新 token 写入哪些物理 KV 位置。
 
+
+<a id="read-11"></a>
+
 ## 11. 第六段：从 `ScheduleBatch` 到模型 forward 和采样
 
 `Scheduler.run_batch()` 位于 `scheduler.py:3342`。普通 generation 路径依次进入：
@@ -494,6 +569,9 @@ prefill 把 prompt 中尚未缓存的多个 token 送入模型，最后一个位
 
 这时 KV 中已经提交的是 prompt token；刚采样出的第一个 output token 还没有自己的 KV。它将在下一轮 decode 中作为 input，模型计算它的 KV，并采样第二个 output token。
 
+
+<a id="read-12"></a>
+
 ## 12. 第七段：处理 prefill 结果
 
 `Scheduler.process_batch_result()` 位于 `scheduler.py:3619`。EXTEND batch 进入 `SchedulerBatchResultProcessor.process_batch_result_prefill()`，位于 `scheduler_components/batch_result_processor.py:181`。
@@ -525,6 +603,9 @@ self.output_streamer.stream_output(...)
 `maybe_cache_unfinished_req()` 会把已经计算的前缀纳入 prefix cache 管理，并更新请求持有的 prefix/lock 状态。它不代表请求结束；请求仍会用 request slot 和可复用 KV 继续 decode。
 
 下一轮 `get_next_batch_to_run()` 会把上一轮完成 prefill、尚未 finished 的请求并入 `running_batch`。
+
+
+<a id="read-13"></a>
 
 ## 13. 第八段：decode 循环
 
@@ -569,6 +650,9 @@ speculative decoding 时一次可能接受多个 token，但后续 finish、stre
 
 未结束请求留在 `running_batch`，下一轮重复 decode。不同请求可在同一轮分别完成、继续或 retract，`filter_batch()` 会在后续 iteration 重建 batch 视图。
 
+
+<a id="read-14"></a>
+
 ## 14. finish 判定的真实优先级
 
 `Req.update_finish_state()` 位于 `schedule_batch.py:1475`。除去“已经 finished 直接返回”，代码顺序是：
@@ -583,6 +667,9 @@ speculative decoding 时一次可能接受多个 token，但后续 finish、stre
 这个顺序会影响 `finish_reason`。例如同一个 speculative step 同时达到长度上限和 EOS，长度检查先执行；同一步既匹配 stop string 又出现 EOS 时，stop string 优先，以免 speculative 接受的多 token 尾部泄漏 stop 文本。
 
 `finished_len` 记录真正应该暴露给用户的 token 边界。speculative step 可能生成超过停止位置的 token，后续 `output_ids_through_stop` 会裁掉多余部分。
+
+
+<a id="read-15"></a>
 
 ## 15. 第九段：scheduler 输出 token，而不是直接输出字符串
 
@@ -614,6 +701,9 @@ speculative decoding 时一次可能接受多个 token，但后续 finish、stre
 - `finished_reasons`；
 - prompt/completion/cached token 计数；
 - 可选 logprob、hidden states、expert routing、time stats。
+
+
+<a id="read-16"></a>
 
 ## 16. 第十段：`DetokenizerManager` 产生稳定文本 delta
 
@@ -652,6 +742,9 @@ finished 时它会：
 结果被包装成 `BatchStrOutput`，经 ZMQ PUSH 回到 `TokenizerManager`。
 
 如果启动时设置 `skip_tokenizer_init`，scheduler 的输出会绕过 detokenizer，直接以 `BatchTokenIDOutput` 返回 tokenizer/API 一侧，此时调用者只能依赖 token ids。
+
+
+<a id="read-17"></a>
 
 ## 17. 第十一段：回到 `TokenizerManager` 和 HTTP
 
@@ -702,6 +795,9 @@ state.event.set()
 
 OpenAI streaming 路径再输出最终 `finish_reason` chunk、可选 usage chunk 和 `data: [DONE]`。non-streaming 路径把完整 text 转成一个 `ChatCompletionResponse`。
 
+
+<a id="read-18"></a>
+
 ## 18. finish 时 KV 和请求资源何时释放
 
 资源释放发生在 scheduler 的 result processing 中，早于 HTTP client 收到最终文本。
@@ -725,6 +821,9 @@ token id 已采样
 
 例如 prefill 刚采样的首 token 还没有自己的 KV。若它立刻命中 EOS，finish 时只能缓存 prompt 对应的已提交 KV，不能假设 `origin_input_ids + output_ids` 全都有 KV。`effective_kv_committed_len()` 就是这类边界的保护。
 
+
+<a id="read-19"></a>
+
 ## 19. 一条请求的状态演化示例
 
 假设 prompt token 为 `[P0, P1, P2]`，模型生成 `[A, B, EOS]`，无 prefix hit：
@@ -741,6 +840,9 @@ EOS 是 decode 2 的采样结果，因此 EOS 自己还没有 KV，也不需要�
 
 如果 prefix cache 已命中 `P0 P1`，prefill 只需 extend `P2`，但逻辑序列和最终输出不变。
 
+
+<a id="read-20"></a>
+
 ## 20. streaming 与 non-streaming 的真正差异
 
 | 层 | streaming | non-streaming |
@@ -753,6 +855,9 @@ EOS 是 decode 2 的采样结果，因此 EOS 自己还没有 KV，也不需要�
 | HTTP | SSE delta + `[DONE]` | 一个 JSON response |
 
 所以如果相同 seed、sampling 参数和运行模式下 streaming/non-streaming 的 token ids 不同，应优先怀疑请求参数、batching/RNG、grammar/tool parser 或实现 bug，而不是把差异归因于 HTTP 格式。
+
+
+<a id="read-21"></a>
 
 ## 21. client disconnect 与 abort 路径
 
@@ -771,6 +876,9 @@ abort 有两类入口：
 为什么 running request 不应在任意位置直接删除：GPU forward、KV allocator 或 overlap result 可能仍引用它。`to_finish` 把取消动作推迟到一致的提交边界，避免“HTTP 已取消，但 GPU/KV 状态被中途拆掉”。
 
 scheduler 回发的 `AbortReq` 由 `TokenizerManager._handle_abort_req()` 转成带 `finish_reason={type: abort}` 的最终输出，唤醒原 HTTP coroutine，并删除 `rid_to_state`。
+
+
+<a id="read-22"></a>
 
 ## 22. overlap scheduler 如何改变时间线
 
@@ -791,6 +899,9 @@ iteration t:
 - grammar/stop/finish 仍按实际返回 token 推进。
 
 因此调试 overlap 时，日志中的“当前 batch”和“当前处理 result”可能相差一轮。关闭 overlap 是建立主链路心智模型的好方法，但不能用关闭后的 timing 推断生产性能。
+
+
+<a id="read-23"></a>
 
 ## 23. 高级功能插入主链路的位置
 
@@ -828,6 +939,9 @@ OpenAI adapter 提取 image/video/audio，`TokenizerManager` 的 multimodal proc
 
 请求先经 tokenizer worker/router，消息携带 `http_worker_ipc`。detokenizer 根据它把 `BatchStrOutput` 发回原 worker，避免同一个 `rid` 唤醒错误进程中的状态。
 
+
+<a id="read-24"></a>
+
 ## 24. 三本账：读代码时始终对齐
 
 ### 24.1 Request 账
@@ -863,6 +977,9 @@ OpenAI adapter 提取 image/video/audio，`TokenizerManager` 的 multimodal proc
 
 最隐蔽的错误通常是三本账推进不同步：例如 output token 已 append，但 KV 未提交；HTTP state 已删除，但 scheduler 还会发 late output；batch 已 filter，但 allocator slot 未释放。
 
+
+<a id="read-25"></a>
+
 ## 25. 建议的源码阅读顺序
 
 按以下顺序设置断点或日志，比从 `model.forward()` 向外猜更容易：
@@ -889,6 +1006,9 @@ OpenAI adapter 提取 image/video/audio，`TokenizerManager` 的 multimodal proc
 20. `srt/managers/detokenizer_manager.py:290`：incremental decode；
 21. `srt/managers/tokenizer_manager.py:1905`：`_handle_batch_output`；
 22. 回到 `serving_chat.py` 的 streaming/non-streaming response builder。
+
+
+<a id="read-26"></a>
 
 ## 26. 最小单请求观测实验
 
@@ -936,6 +1056,9 @@ finish_reason
 | output return | Detokenizer 和 Tokenizer 状态删除 |
 
 再把 `stream` 改成 `false`。两次请求的 token ids 应一致，主要差异应出现在 scheduler output interval、API yield 和 HTTP response 组装。
+
+
+<a id="read-27"></a>
 
 ## 27. 卡住或延迟高时如何定位
 
@@ -1005,6 +1128,9 @@ detokenize + HTTP flush
 - `rid_to_state` 和 `DecodeStatus` 是否删除；
 - abort 是否只取消 HTTP task，却没发给 scheduler。
 
+
+<a id="read-28"></a>
+
 ## 28. 本章结论
 
 一条 request 在 SGLang 中不是“调用一次 model.generate”。它是一条跨进程、跨多轮 scheduler iteration 的状态机：
@@ -1027,6 +1153,9 @@ detokenize + HTTP flush
 3. 当前消息如何通过 `rid` 找到下一层状态，finish/abort 后由谁清理？
 
 掌握这三个问题后，再阅读 scheduler、RadixAttention、CUDA Graph、speculative decoding 和 PD disaggregation，复杂分支都会有明确的插入位置。
+
+
+<a id="read-29"></a>
 
 ## 29. 延伸阅读
 

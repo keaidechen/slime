@@ -1,5 +1,12 @@
 # GEMM、Tensor Core 与高性能 Kernel 设计模式
 
+<!-- learning-position -->
+> **学习定位**：A1→A8 · 分层必修。
+> **前置**：[基础课程](<../00_Foundations/README.md>)。
+> **首读/二读**：先懂 GEMM、Tensor Core、batch/shape；流水线和 warp specialization 后读。
+> **进度与实验**：[学习清单](<../学习清单.md>) · [总入口](<../README.md>)。
+<!-- /learning-position -->
+
 ## 1. GEMM 为什么是 AI Infra 的“发动机”？
 
 GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**：
@@ -177,3 +184,94 @@ Hopper/Blackwell 上硬件管线复杂，显式或编译器自动生成的 Warp 
 - [Triton Warp Specialization](https://pytorch.org/blog/warp-specialization-in-triton-design-and-roadmap/)
 - [PyTorch FlexAttention and FlashAttention-4](https://pytorch.org/blog/flexattention-flashattention-4-fast-and-flexible/)
 
+
+
+<a id="notebook-07-05"></a>
+
+## 07.5｜GEMM 是什么？Transformer 为什么到处都是它？
+
+
+GEMM = **General Matrix Multiply（通用矩阵乘法）**，经典形式：
+
+```text
+C = α · A @ B + β · C
+```
+
+对大模型而言，大量 Linear/Projection/MLP 本质上都是 GEMM。例如：
+
+```text
+X[tokens, hidden]
+    @
+W[hidden, ffn_hidden]
+    ↓
+Y[tokens, ffn_hidden]
+```
+
+假设：
+
+```text
+X = [4096, 4096]
+W = [4096, 14336]
+```
+
+那么就是一个：
+
+```text
+M = 4096
+K = 4096
+N = 14336
+```
+
+的 GEMM。
+
+现代 GPU 为 GEMM 提供 Tensor Core，因此大模型 Kernel 优化的很多核心问题都可以重新表述成：
+
+- tile 如何切；
+- 数据如何从 HBM → Shared Memory / TMEM / Register；
+- Tensor Core 如何持续有数据可算；
+- pipeline 能否把 load 与 MMA overlap；
+- workload 是否足够大，能否填满所有 SM。
+
+---
+
+
+<a id="notebook-07-06"></a>
+
+## 07.6｜普通 GEMM → Batched GEMM → Grouped GEMM
+
+
+#### 普通 GEMM
+
+```text
+A[M,K] @ B[K,N]
+```
+
+一个矩阵乘问题。
+
+#### Batched GEMM
+
+如果有很多组**shape 相同**的 GEMM：
+
+```text
+A0[128,K] @ B0[K,N]
+A1[128,K] @ B1[K,N]
+A2[128,K] @ B2[K,N]
+...
+```
+
+可以用 Batched GEMM 一次表达一批相同 shape 的矩阵乘。
+
+#### Grouped GEMM
+
+Grouped GEMM 解决的是一组**彼此独立、但 shape 可以不同**的 GEMM：
+
+```text
+A0[M0,K0] @ B0[K0,N0]
+A1[M1,K1] @ B1[K1,N1]
+A2[M2,K2] @ B2[K2,N2]
+...
+```
+
+MoE 恰好天然产生这种 workload。
+
+---

@@ -1,5 +1,24 @@
 # 模型谱系、转换与 Tokenizer
 
+<!-- learning-position -->
+> **学习定位**：A3/A5 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：模型/tokenizer/checkpoint 契约；模型目录只按任务查阅。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：模型接入是六项契约
+
+模型名字相同仍可能有不同词表、位置编码、QKV 布局或权重命名。先核对 config、tokenizer/template、state_dict 名字、shape/dtype、分片布局、forward 输出六项。
+
+用一小段固定文本验证 token ids；用一层固定输入核对输出；再做整模型少量 logits 对齐。随机采样生成文本相似不足以证明权重转换正确。
+
+练习：挑一项 QKV 权重，从 HF shape 画到本 rank local shape，再画回去。尤其注意 GQA 的 query 与 KV head 数，不能按三个相同矩阵盲切。
+
+## 机制与实现
+
 ## 1. 模型不是一组启动参数
 
 Megatron Core 的主要模型族包括 decoder-only GPT/LLaMA/Qwen/DeepSeek 类、encoder-only BERT、encoder-decoder T5，以及 Mamba/hybrid 和多模态组件。共同基础是可组合的 `TransformerConfig`、`TransformerBlock/Layer`、`ModuleSpec` 与 parallel-aware layer。

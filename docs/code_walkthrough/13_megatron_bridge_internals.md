@@ -1,5 +1,12 @@
 # 13 训练侧内部实现：slime 内建 HF↔Megatron 权重转换
 
+<!-- learning-position -->
+> **学习定位**：A5 · 必修。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **首读/二读**：HF↔Megatron、QKV/TP/EP 的往返校验；旧 Bridge 文件名暂保留。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 衔接 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)、[06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [12_megatron_lm_internals.md](12_megatron_lm_internals.md)。
 >
 > **历史说明**：文件名为兼容旧链接而保留。slime v0.3.1 已删除 `Megatron-Bridge/`、`AutoBridge`、`--megatron-to-hf-mode bridge` 与 bridge iterator。本篇只解释当前仓库内的 `hf_to_megatron/`、`megatron_to_hf/` 和 `HfWeightIteratorDirect`。

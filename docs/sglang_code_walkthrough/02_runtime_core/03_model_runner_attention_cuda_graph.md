@@ -1,5 +1,12 @@
 # 2.3 ModelRunner、Attention Backend 与 CUDA Graph
 
+<!-- learning-position -->
+> **学习定位**：A4/A6 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：ForwardBatch、backend、CUDA Graph 与运行 shape，连到热点分析。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. 调用链
 
 ```text

@@ -1,5 +1,12 @@
 # Context Parallel、MoE/EP 与低精度训练深读
 
+<!-- learning-position -->
+> **学习定位**：A8 · 专项。
+> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Foundations/README.md>)。
+> **首读/二读**：CP/EP 组合与低精度深读；先有标准 Dense 训练基线。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. Context Parallel（CP）
 
 TP 切 head/hidden，CP 切 sequence。每个 CP rank 只持有一段 query 和相关 activation，但 attention 需要访问全上下文的 K/V，因此必须交换 K/V 或中间统计量。

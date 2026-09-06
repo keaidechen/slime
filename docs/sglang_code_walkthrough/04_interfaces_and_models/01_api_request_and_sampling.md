@@ -1,6 +1,34 @@
 # 4.1 API、请求规范化与采样
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先看结论](#read-01)
+- [2. OpenAI Chat 请求在哪里转换](#read-02)
+- [3. Sampling 默认值到底来自哪里](#read-03)
+- [4. `GenerateReqInput` 规范化解决什么问题](#read-04)
+- [5. `SamplingParams` 何时规范化和校验](#read-05)
+- [6. 从 logits 到 next token 的准确顺序](#read-06)
+- [7. Stop、finish 和 streaming 为什么跨层](#read-07)
+- [8. Streaming 与 non-streaming 应怎样比较](#read-08)
+- [9. 常见问题定位](#read-09)
+- [10. 最小测试矩阵](#read-10)
+- [11. 源码定位](#read-11)
+- [12. 与其他章节的边界](#read-12)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4/A5 · 必修。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：请求规范化、sampling、tokenizer/template、logprob 与 RL 语义。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 本章不重复完整的 scheduler/GPU 调用链；那部分见 [1.2 进程拓扑与请求链路](../01_foundations/02_process_topology_and_request_path.md)。这里集中回答四个问题：OpenAI 请求在哪里变成内部对象，默认采样参数由谁决定，logits 到 token 的变换顺序是什么，以及 streaming/stop 为什么不能只当作返回格式。
+
+
+<a id="read-01"></a>
 
 ## 1. 先看结论
 
@@ -24,6 +52,9 @@ Req + SamplingBatchInfo
 - `SamplingBatchInfo` 把一批请求的温度、top-k/p、penalty、grammar mask 等整理成设备侧张量。
 
 因此，“请求里写了什么”不能直接回答“GPU 最后用了什么”。调试必须记录规范化后的 prompt token IDs 和 sampling params。
+
+
+<a id="read-02"></a>
 
 ## 2. OpenAI Chat 请求在哪里转换
 
@@ -81,6 +112,9 @@ flowchart TD
 
 这意味着调用方承担 token IDs 与当前 tokenizer/model 匹配的责任，同时仍可能受到请求中的 stop/tool 约束影响。
 
+
+<a id="read-03"></a>
+
 ## 3. Sampling 默认值到底来自哪里
 
 `ChatCompletionRequest.to_sampling_params()` 明确实现以下优先级：
@@ -117,6 +151,9 @@ flowchart TD
 
 单请求的 `SamplingParams.verify()` 还明确限制 `regex`、`json_schema`、`ebnf` 最多一个非空。结构化输出不是响应层的 JSON 校验，而是在 decode 时形成 vocabulary mask，直接改变每一步可选 token。
 
+
+<a id="read-04"></a>
+
 ## 4. `GenerateReqInput` 规范化解决什么问题
 
 `TokenizerManager.generate_request()` 的第一步是：
@@ -150,6 +187,9 @@ obj.normalize_batch_and_arguments()
 它没有拒绝任意“两者同时非空”。后续 `_determine_batch_size()` 又按 `text` → `input_ids` → `input_embeds` 的顺序选择分支，并在前两个分支清空 `input_embeds`。所以客户端不要依赖这种模糊输入组合；服务端若要严格保证三选一，应补充 pairwise 校验和测试。
 
 这是本快照的实现事实，不应在文档中写成“已严格验证 exactly one”。
+
+
+<a id="read-05"></a>
 
 ## 5. `SamplingParams` 何时规范化和校验
 
@@ -191,6 +231,9 @@ top_k = 1
 ```
 
 `top_k=-1` 则被改为代表完整 vocabulary 的 `TOP_K_ALL`。所以设备侧看到的 temperature 未必还是用户请求中的 `0`；greedy 由 `top_k=1`/批级 `is_all_greedy` 表达。
+
+
+<a id="read-06"></a>
 
 ## 6. 从 logits 到 next token 的准确顺序
 
@@ -252,6 +295,9 @@ seed 是请求级采样状态，但可复现性还依赖：
 
 当前代码在 FlashInfer 的复杂采样分支对某些 seed 组合有明确断言限制。seed 应理解为采样器输入，不是跨所有运行环境的完整复现契约。
 
+
+<a id="read-07"></a>
+
 ## 7. Stop、finish 和 streaming 为什么跨层
 
 停止条件分为 token 级和文本级：
@@ -269,6 +315,9 @@ seed 是请求级采样状态，但可复现性还依赖：
 
 Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终文本是否裁掉匹配内容。因此 streaming 不是简单地把非流式字符串切块；它持有增量 decode 和安全输出边界状态。
 
+
+<a id="read-08"></a>
+
 ## 8. Streaming 与 non-streaming 应怎样比较
 
 正确性测试至少比较：
@@ -282,6 +331,9 @@ Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终�
 - abort/disconnect 后 `rid`、request slot、KV 是否释放。
 
 “最终文本相同”仍可能掩盖 tokenization、stop trimming、usage 或 finish reason 错误。
+
+
+<a id="read-09"></a>
 
 ## 9. 常见问题定位
 
@@ -309,6 +361,9 @@ Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终�
 
 先拆成 queue、tokenization/media processing、prefill、首 token detokenize 和安全 stop-prefix buffering。只有最后一项属于 streaming 文本边界，其余通常是请求前半程或 GPU TTFT。
 
+
+<a id="read-10"></a>
+
 ## 10. 最小测试矩阵
 
 | 维度 | 用例 |
@@ -319,6 +374,9 @@ Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终�
 | 约束 | regex、JSON schema、tool call、冲突约束、非法 schema |
 | 结束 | EOS、stop token、跨 chunk stop string、stop regex、max tokens、abort |
 | 返回 | streaming/non-streaming、logprobs、usage、token IDs、reasoning/tool fields |
+
+
+<a id="read-11"></a>
 
 ## 11. 源码定位
 
@@ -338,6 +396,9 @@ Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终�
 | stop/finish 状态 | `srt/managers/schedule_batch.py`：`Req` 的 finish 检查方法 |
 | streaming 安全边界 | `srt/managers/scheduler_components/output_streamer.py` |
 | stop trimming | `srt/managers/detokenizer_manager.py` |
+
+
+<a id="read-12"></a>
 
 ## 12. 与其他章节的边界
 

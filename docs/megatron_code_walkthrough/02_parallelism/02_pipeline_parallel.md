@@ -1,5 +1,12 @@
 # Pipeline Parallel：1F1B、交错调度与 P2P
 
+<!-- learning-position -->
+> **学习定位**：A3 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：1F1B/交错/P2P、activation 生命周期，配 stage 时间线。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 ## 1. schedule 选择
 
 `get_forward_backward_func()` 位于 `megatron/core/pipeline_parallel/schedules.py:48`，按 PP/VPP 状态返回：

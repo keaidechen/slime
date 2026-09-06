@@ -1,5 +1,56 @@
 # 02｜PagedAttention / vLLM 论文详解：把 KV Cache 当成操作系统的虚拟内存
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 一句话理解这篇论文](#read-01)
+- [2. 为什么 FlashAttention 之后仍然需要 PagedAttention？](#read-02)
+- [3. 为什么 KV Cache 对 throughput 影响这么大？](#read-03)
+- [4. 先理解 LLM serving 的 iteration-level scheduling](#read-04)
+- [5. 旧式 KV Cache 管理为什么浪费？](#read-05)
+- [5.1 Reservation](#read-06)
+- [5.2 Internal Fragmentation](#read-07)
+- [5.3 External Fragmentation](#read-08)
+- [6. 为什么不能简单做 Memory Compaction？](#read-09)
+- [7. PagedAttention 最核心的 OS 类比](#read-10)
+- [8. Logical KV Block 与 Physical KV Block](#read-11)
+- [9. Block Table 是什么？](#read-12)
+- [10. PagedAttention kernel 在数学上变了吗？](#read-13)
+- [11. 为什么固定大小 block 可以减少碎片？](#read-14)
+- [12. PagedAttention 不只是节省空间，还带来了“共享”](#read-15)
+- [13. Parallel Sampling：为什么 Copy-on-Write 非常自然？](#read-16)
+- [14. Beam Search 为什么收益可能更大？](#read-17)
+- [15. Shared Prefix：PagedAttention 已经能做 Prefix Cache 了吗？](#read-18)
+- [16. Scheduler 为什么也必须和内存管理一起设计？](#read-19)
+- [17. 被 Preempt 的 KV 怎么恢复？](#read-20)
+- [Swapping](#read-21)
+- [Recomputation](#read-22)
+- [18. vLLM 的系统结构怎么理解？](#read-23)
+- [19. 为什么 PagedAttention 和操作系统虚拟内存“像，但不完全一样”？](#read-24)
+- [20. 论文最重要的实验结论](#read-25)
+- [21. PagedAttention 最深层的 Insight 是什么？](#read-26)
+- [22. PagedAttention 和 RadixAttention 最容易混淆的地方](#read-27)
+- [PagedAttention](#read-28)
+- [RadixAttention](#read-29)
+- [23. PagedAttention 与 FlashInfer 的关系](#read-30)
+- [24. PagedAttention 的 trade-off / 局限](#read-31)
+- [1. 地址 indirection](#read-32)
+- [2. 非连续读取](#read-33)
+- [3. Block size trade-off](#read-34)
+- [4. Scheduler 与 allocator 强耦合](#read-35)
+- [25. 最值得记住的 8 个 Insight](#read-36)
+- [26. 一句话串到下一篇：为什么还需要 RadixAttention？](#read-37)
+- [主要参考资料](#read-38)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4 · 分层必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：逻辑块/物理块/浪费/COW 的例子必读；论文实验与实现差异第二遍。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > **标题缩写与首次术语说明**：KV Cache = **Key-Value Cache（键值缓存）**；LLM = **Large Language Model（大语言模型）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**；HBM = **High Bandwidth Memory（高带宽内存，GPU 主显存）**；OS = **Operating System（操作系统）**；FCFS = **First-Come, First-Served（先到先服务）**；RAM = **Random-Access Memory（随机存取存储器）**。vLLM 是项目名，本文把它理解为“高吞吐 LLM 推理/服务框架”，不对项目名本身生造字母展开。**Virtual Memory（虚拟内存）**用逻辑地址抽象物理内存，**page（页）**是分页管理的基本单位，**fragmentation（内存碎片）**是分配方式造成的不可有效利用空间，**Copy-on-Write（写时复制）**是在真正修改共享数据时才复制，**preemption（抢占）**是在资源不足时暂停或移出部分请求。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**。
 
 > 论文：**Efficient Memory Management for Large Language Model Serving with PagedAttention**
@@ -11,6 +62,9 @@
 > **前置阅读**：`00_共享基础_GPU与LLM推理硬件基础.md`。本文默认你已经知道 HBM、KV Cache、prefill/decode、page、internal/external fragmentation 的基本含义。
 
 ---
+
+
+<a id="read-01"></a>
 
 # 1. 一句话理解这篇论文
 
@@ -31,15 +85,18 @@ Physical KV Blocks
 
 在这个机制之上，作者构建了：
 
-\[
+$$
 \boxed{vLLM}
-\]
+$$
 
 目标是：
 
 > **降低 KV Cache 显存浪费 → 放进更大的 batch → 提高 LLM serving throughput。**
 
 ---
+
+
+<a id="read-02"></a>
 
 # 2. 为什么 FlashAttention 之后仍然需要 PagedAttention？
 
@@ -74,11 +131,14 @@ Request E: 刚进入队列
 
 因此作者把问题从 Attention kernel 上升到了：
 
-\[
+$$
 \boxed{LLM\ Serving\ Memory\ Management}
-\]
+$$
 
 ---
+
+
+<a id="read-03"></a>
 
 # 3. 为什么 KV Cache 对 throughput 影响这么大？
 
@@ -117,6 +177,9 @@ GPU utilization / throughput
 这就是为什么一个“内存管理”论文最终能带来数倍 serving throughput 改善。
 
 ---
+
+
+<a id="read-04"></a>
 
 # 4. 先理解 LLM serving 的 iteration-level scheduling
 
@@ -162,9 +225,15 @@ A/B 完成后 GPU batch slot 还可能被浪费。
 
 ---
 
+
+<a id="read-05"></a>
+
 # 5. 旧式 KV Cache 管理为什么浪费？
 
 论文把浪费主要归纳成三类。
+
+
+<a id="read-06"></a>
 
 ## 5.1 Reservation
 
@@ -182,6 +251,9 @@ A/B 完成后 GPU batch slot 还可能被浪费。
 
 > 大量预留显存从未使用。
 
+
+<a id="read-07"></a>
+
 ## 5.2 Internal Fragmentation
 
 为了方便管理，系统可能按某种较大固定区域分配。
@@ -193,6 +265,9 @@ A/B 完成后 GPU batch slot 还可能被浪费。
 ```
 
 未使用空间属于内部碎片。
+
+
+<a id="read-08"></a>
 
 ## 5.3 External Fragmentation
 
@@ -207,6 +282,9 @@ used | hole | used | hole | used
 论文实验中显示，旧方案的 KV cache memory waste 可以非常显著，而 vLLM 的 block-based 设计能让绝大部分显存真正用于 token states。
 
 ---
+
+
+<a id="read-09"></a>
 
 # 6. 为什么不能简单做 Memory Compaction？
 
@@ -231,6 +309,9 @@ copy several GB KV
 > **不要强迫物理内存连续。**
 
 ---
+
+
+<a id="read-10"></a>
 
 # 7. PagedAttention 最核心的 OS 类比
 
@@ -278,11 +359,14 @@ Block 3
 
 最重要的抽象是：
 
-\[
+$$
 \boxed{Logical\ continuity\neq Physical\ continuity}
-\]
+$$
 
 ---
+
+
+<a id="read-11"></a>
 
 # 8. Logical KV Block 与 Physical KV Block
 
@@ -340,6 +424,9 @@ Logical 2 → Physical 3
 
 ---
 
+
+<a id="read-12"></a>
+
 # 9. Block Table 是什么？
 
 Block Table 就是一个请求的地址翻译表。
@@ -385,15 +472,18 @@ PagedAttention 以后：
 
 ---
 
+
+<a id="read-13"></a>
+
 # 10. PagedAttention kernel 在数学上变了吗？
 
 没有改变 Attention 语义。
 
 原本：
 
-\[
+$$
 Attention(q,K,V)
-\]
+$$
 
 其中 K/V 在连续 tensor 中。
 
@@ -412,6 +502,9 @@ kernel 分 block fetch K/V，再计算 attention contribution。
 > **memory addressing / data layout。**
 
 ---
+
+
+<a id="read-14"></a>
 
 # 11. 为什么固定大小 block 可以减少碎片？
 
@@ -456,6 +549,9 @@ block size 越小，最大 internal fragmentation 越小；但 block 太小又�
 
 ---
 
+
+<a id="read-15"></a>
+
 # 12. PagedAttention 不只是节省空间，还带来了“共享”
 
 一旦逻辑地址和物理 block 解耦，就可以：
@@ -477,6 +573,9 @@ Request B logical block 0 ─┘
 这与 OS 中多个进程映射同一物理 page 的思路非常相似。
 
 ---
+
+
+<a id="read-16"></a>
 
 # 13. Parallel Sampling：为什么 Copy-on-Write 非常自然？
 
@@ -524,6 +623,9 @@ B 继续保留原 block
 
 ---
 
+
+<a id="read-17"></a>
+
 # 14. Beam Search 为什么收益可能更大？
 
 Beam Search 会保留多个候选序列。
@@ -539,6 +641,9 @@ PagedAttention 可以让候选之间共享绝大多数历史 blocks，只对发�
 论文实验里，beam search 场景因为可共享部分更多，vLLM 相对于旧 baseline 的收益更加明显。
 
 ---
+
+
+<a id="read-18"></a>
 
 # 15. Shared Prefix：PagedAttention 已经能做 Prefix Cache 了吗？
 
@@ -575,6 +680,9 @@ Request C logical prefix ─┘
 
 ---
 
+
+<a id="read-19"></a>
+
 # 16. Scheduler 为什么也必须和内存管理一起设计？
 
 假设 GPU physical KV blocks 用完了。
@@ -595,9 +703,15 @@ Request C logical prefix ─┘
 
 ---
 
+
+<a id="read-20"></a>
+
 # 17. 被 Preempt 的 KV 怎么恢复？
 
 论文讨论两种经典选择。
+
+
+<a id="read-21"></a>
 
 ## Swapping
 
@@ -625,6 +739,9 @@ copy back GPU
 
 > CPU↔GPU 数据传输有成本。
 
+
+<a id="read-22"></a>
+
 ## Recomputation
 
 直接丢掉一部分 KV。
@@ -647,6 +764,9 @@ GPU recomputation
 这个“重算 vs 搬运”的思想与你在 FlashAttention backward 中看到的 trade-off 是同一个系统哲学。
 
 ---
+
+
+<a id="read-23"></a>
 
 # 18. vLLM 的系统结构怎么理解？
 
@@ -682,6 +802,9 @@ GPU worker 再根据 block table 读取对应 KV。
 
 ---
 
+
+<a id="read-24"></a>
+
 # 19. 为什么 PagedAttention 和操作系统虚拟内存“像，但不完全一样”？
 
 类比非常有帮助，但不要机械等同。
@@ -709,6 +832,9 @@ vLLM block table 的主要目标是：
 
 ---
 
+
+<a id="read-25"></a>
+
 # 20. 论文最重要的实验结论
 
 论文在多个模型、数据集和 decoding 场景上评估 vLLM，并报告：
@@ -730,6 +856,9 @@ vLLM block table 的主要目标是：
 
 ---
 
+
+<a id="read-26"></a>
+
 # 21. PagedAttention 最深层的 Insight 是什么？
 
 很多人第一次看会觉得：
@@ -738,9 +867,9 @@ vLLM block table 的主要目标是：
 
 真正重要的是它引入了一层：
 
-\[
+$$
 \boxed{Virtualization}
-\]
+$$
 
 过去：
 
@@ -773,6 +902,9 @@ Physical KV blocks
 
 ---
 
+
+<a id="read-27"></a>
+
 # 22. PagedAttention 和 RadixAttention 最容易混淆的地方
 
 两者都涉及：
@@ -780,6 +912,9 @@ Physical KV blocks
 > KV Cache。
 
 但关注的问题不同。
+
+
+<a id="read-28"></a>
 
 ## PagedAttention
 
@@ -798,6 +933,9 @@ logical blocks → physical blocks
 - memory fragmentation；
 - dynamic allocation；
 - block-level sharing。
+
+
+<a id="read-29"></a>
 
 ## RadixAttention
 
@@ -831,6 +969,9 @@ Paged layout
 SGLang 论文也明确说明 RadixAttention 与 paged attention 是兼容的。
 
 ---
+
+
+<a id="read-30"></a>
 
 # 23. PagedAttention 与 FlashInfer 的关系
 
@@ -866,11 +1007,17 @@ FlashInfer
 
 ---
 
+
+<a id="read-31"></a>
+
 # 24. PagedAttention 的 trade-off / 局限
 
 一个 abstraction 不可能免费。
 
 Paged layout 带来的代价包括：
+
+
+<a id="read-32"></a>
 
 ## 1. 地址 indirection
 
@@ -882,11 +1029,17 @@ base + offset
 
 PagedAttention 需要 block table lookup。
 
+
+<a id="read-33"></a>
+
 ## 2. 非连续读取
 
 physical KV 不连续，可能让 memory access pattern 更复杂。
 
 因此需要专门优化的 kernel。
+
+
+<a id="read-34"></a>
 
 ## 3. Block size trade-off
 
@@ -901,11 +1054,17 @@ block 大：
 - metadata 少；
 - 最后一个 block 浪费更多。
 
+
+<a id="read-35"></a>
+
 ## 4. Scheduler 与 allocator 强耦合
 
 为了真正发挥收益，不能只换一个 kernel，还需要 serving runtime 的 memory manager 配合。
 
 ---
+
+
+<a id="read-36"></a>
 
 # 25. 最值得记住的 8 个 Insight
 
@@ -919,6 +1078,9 @@ block 大：
 8. **这篇论文把操作系统虚拟内存的经典思想成功迁移到了 LLM serving。**
 
 ---
+
+
+<a id="read-37"></a>
 
 # 26. 一句话串到下一篇：为什么还需要 RadixAttention？
 
@@ -959,6 +1121,9 @@ System Prompt
 这就是 **SGLang / RadixAttention**。
 
 ---
+
+
+<a id="read-38"></a>
 
 ## 主要参考资料
 

@@ -1,6 +1,37 @@
 # 05 SGLang 与 vLLM 推理框架性能分析
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 先理解一次请求的阶段](#read-01)
+- [2. 四个必须会解释的延迟指标](#read-02)
+- [3. 公平 benchmark 的 workload 清单](#read-03)
+- [4. 第一次容量 sweep](#read-04)
+- [5. SGLang benchmark：一步一步](#read-05)
+- [6. SGLang PyTorch Profiler](#read-06)
+- [7. vLLM benchmark：一步一步](#read-07)
+- [8. vLLM PyTorch Profiler](#read-08)
+- [9. vLLM/SGLang 的 Nsight Systems](#read-09)
+- [10. 四层观测模型](#read-10)
+- [11. 常见症状的逐步排查](#read-11)
+- [12. 优化验收](#read-12)
+- [本章完成标准](#read-13)
+- [参考资料](#read-14)
+- [负载、容量与推理指标边界](#read-15)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A4/A6 · 必修。
+> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **首读/二读**：长度/并发/速率控制、容量曲线、KV 与延迟分布。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 推理性能分析必须同时看 workload、调度和 kernel。只跑一个并发、只报 output tokens/s，无法判断服务在真实负载下是否更好。
+
+
+<a id="read-01"></a>
 
 ## 1. 先理解一次请求的阶段
 
@@ -16,6 +47,9 @@
 
 Prefill 通常是较大的矩阵计算，受输入 token 数影响；decode 每步只为每条 sequence 生成少量 token，更容易受内存带宽、batching、调度和 launch overhead 影响。
 
+
+<a id="read-02"></a>
+
 ## 2. 四个必须会解释的延迟指标
 
 - **TTFT**：请求发出到收到首 token，包含排队、prefill 和服务开销。
@@ -24,6 +58,9 @@ Prefill 通常是较大的矩阵计算，受输入 token 数影响；decode 每�
 - **E2E**：完整请求端到端延迟。
 
 还要报告 request/s、input/output/total tokens/s 和 p50/p95/p99。vLLM 与 SGLang 的 benchmark 都提供这些指标；定义可能有边界差异，跨工具比较前先核对公式。
+
+
+<a id="read-03"></a>
 
 ## 3. 公平 benchmark 的 workload 清单
 
@@ -41,6 +78,9 @@ Prefill 通常是较大的矩阵计算，受输入 token 数影响；decode 每�
 - 原始 JSON/JSONL，而不只是终端截图。
 
 若 A 允许提前 EOS、B 强制固定输出长度，两者 tokens/s 不可比。
+
+
+<a id="read-04"></a>
 
 ## 4. 第一次容量 sweep
 
@@ -62,6 +102,9 @@ Prefill 通常是较大的矩阵计算，受输入 token 数影响；decode 每�
 6. 错误率非零则该点不是有效容量。
 
 吞吐趋平而 queue/TTFT 快速上升的位置就是容量拐点。生产容量应在拐点前留裕量。
+
+
+<a id="read-05"></a>
 
 ## 5. SGLang benchmark：一步一步
 
@@ -104,6 +147,9 @@ python -m sglang.bench_serving \
 固定长度用于归因，真实 ShareGPT/业务 replay 用于验收。Prefix cache 不能靠随机 prompt 测试；使用 shared-prefix 数据集或请求 dump/replay。
 
 SGLang 支持请求 dump/replay，可把真实请求保存后复现。见 [SGLang Observability](https://docs.sglang.ai/advanced_features/observability.html)。注意脱敏请求内容。
+
+
+<a id="read-06"></a>
 
 ## 6. SGLang PyTorch Profiler
 
@@ -154,6 +200,9 @@ PD 分离模式中 prefill 和 decode worker 要分别 profile；不要把两个
 
 SGLang v0.4 官方博客用 Nsight Systems 验证调度与 GPU 计算 overlap，展示了为什么“CPU scheduler 是否及时准备下一 batch”会直接影响 GPU 空洞：[SGLang v0.4](https://www.lmsys.org/blog/2024-12-04-sglang-v0-4/)。
 
+
+<a id="read-07"></a>
+
 ## 7. vLLM benchmark：一步一步
 
 当前 vLLM CLI 提供 latency、serve 和 throughput：
@@ -189,6 +238,9 @@ vllm bench latency \
   --batch-size 16
 ```
 
+
+<a id="read-08"></a>
+
 ## 8. vLLM PyTorch Profiler
 
 vLLM v0.13.0+ 的当前官方方式是 server `--profiler-config`，client `--profile`：
@@ -212,6 +264,9 @@ vllm bench serve \
 
 旧版 vLLM 使用过 `VLLM_TORCH_PROFILER_DIR` 等方式，不要把旧博客命令直接用于当前版本。
 
+
+<a id="read-09"></a>
+
 ## 9. vLLM/SGLang 的 Nsight Systems
 
 推理引擎常用 multiprocessing 和 CUDA Graph。vLLM 当前官方建议：
@@ -234,6 +289,9 @@ Server 动态 capture 需要框架的 CUDA profiler start/stop 与 `--capture-ra
 
 SGLang 也可通过 profile activity 使用 CUDA profiler，再让 nsys 捕获；或直接包裹最小 offline benchmark。先在单 worker、小请求上验证。
 
+
+<a id="read-10"></a>
+
 ## 10. 四层观测模型
 
 | 层 | 关键指标 |
@@ -250,6 +308,9 @@ curl http://localhost:30000/metrics
 ```
 
 指标名会随版本变化，先保存原始 `/metrics`，再建立 dashboard。只有四层沿同一时间窗口对齐，才能区分相关性和因果。
+
+
+<a id="read-11"></a>
 
 ## 11. 常见症状的逐步排查
 
@@ -302,6 +363,9 @@ model weights
 5. MoE 路由是否不均；
 6. kernel shape 是否因分片变小。
 
+
+<a id="read-12"></a>
+
 ## 12. 优化验收
 
 同一请求集合和 seed，对比：
@@ -316,6 +380,9 @@ model weights
 
 不要只报告优化最有利的单点。至少展示低并发延迟点、SLO 附近点和吞吐饱和点。
 
+
+<a id="read-13"></a>
+
 ## 本章完成标准
 
 - 能构造固定长度和真实 replay 两类 workload。
@@ -324,6 +391,9 @@ model weights
 - 能分别 profile SGLang/vLLM 的少量请求。
 - 能在 trace 中区分 prefill、decode、scheduler 和 communication。
 - 能说明 profiler 开启后的数据为什么不能作为 benchmark 基线。
+
+
+<a id="read-14"></a>
 
 ## 参考资料
 
@@ -334,3 +404,81 @@ model weights
 - [vLLM Benchmark CLI](https://docs.vllm.ai/en/latest/benchmarking/cli/)
 - [Profiling vLLM](https://docs.vllm.ai/en/stable/contributing/profiling/)
 - [vLLM Performance Dashboard](https://docs.vllm.ai/en/latest/benchmarking/dashboard/)
+
+
+<a id="concept-12"></a>
+
+
+<a id="read-15"></a>
+
+## 负载、容量与推理指标边界
+
+### 2. 开环与闭环压测
+
+- closed-loop（闭环）：固定并发，请求完成后才发下一个；服务变慢时到达率也下降，容易掩盖 overload。
+- open-loop（开环）：按目标 request rate 独立到达；更接近真实流量，可观察 queue 爆炸与拒绝。
+
+至少 sweep concurrency/request rate，画 throughput–latency Pareto curve，而不是只报“最大吞吐”和“最低延迟”两个不在同一工作点的数字。
+
+
+### 4. Prefill 与 Decode 的证据链
+
+```mermaid
+flowchart TD
+    A["请求到达"] --> B["Queue / scheduler"]
+    B --> C["Prefill：TTFT 主体"]
+    C --> D["KV cache 分配"]
+    D --> E["Decode：TPOT / ITL"]
+    E --> F["完成 / 释放 KV"]
+    D -->|空间不足| G["Preempt / recompute / reject"]
+    G --> B
+```
+
+TTFT 突增可能是长 prompt，也可能是 queue 或 chunked prefill 调度；TPOT 突增可能是 batch 变大、KV memory pressure、tensor-parallel communication 或 CPU detokenization。
+
+
+### 5. Goodput 为什么重要
+
+吞吐 100 req/s，但只有 70 req/s 同时满足 TTFT、TPOT/E2EL 和错误率 SLO，则 goodput 是 70 req/s。AIPerf 的最新文档强调多 SLO 同时过滤和最大 goodput 搜索；这避免通过过载提高总吞吐，却让用户体验崩溃。
+
+应明确 goodput 是：
+
+- `满足 SLO 的请求数 / 秒`，还是
+- `满足 SLO 的请求比例`。
+
+二者都常被使用，不能混称。
+
+
+### 6. Continuous batching 的权衡
+
+更大 running batch 通常提高 decode GEMM 效率和总吞吐，但会：
+
+- 增加每轮 decode duration，推高 ITL；
+- 占用更多 KV blocks；
+- 让新请求等待调度；
+- 在混合长短请求时引入 head-of-line blocking。
+
+所以调度参数必须在固定 SLO 下 sweep，而不是只最大化 batch。
+
+
+### 7. 线上应该关联的运行时指标
+
+| 用户指标 | 同图关联 |
+|---|---|
+| TTFT | waiting requests、queue time、prefill tokens、prefix hit |
+| TPOT/ITL | running requests、decode batch、KV usage、preemption |
+| E2EL | ISL/OSL、termination reason、retry/error |
+| throughput | GPU SM/DRAM、request rate、batch/token budget |
+| tail spike | compile/cache miss、GC、network、straggler、replica imbalance |
+
+
+### 8. 工具
+
+- NVIDIA GenAI-Perf：生成式模型 throughput/latency，支持 synthetic 或 dataset 与 concurrency/request-rate load；
+- NVIDIA AIPerf：进一步支持多 shape、SLO search、Pareto 与 goodput；
+- vLLM/SGLang 内置 benchmark 与 Prometheus metrics：贴近各自 scheduler/KV 内部状态；
+- Nsight Systems/PyTorch Profiler：在代表流量窗口定位 runtime 内部关键路径。
+
+结果必须注明 client 与 server 是否同机、network RTT、tokenizer 在 client 还是 server、stream chunking 方式。
+
+RTT = Round-Trip Time（往返时间）。

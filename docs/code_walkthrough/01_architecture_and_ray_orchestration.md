@@ -1,9 +1,33 @@
 # 01 顶层架构与 Ray 编排：一次 RL 训练是如何被组织起来的
 
+<details>
+<summary>本篇分段导航：按首读范围进入，其余二读</summary>
+
+- [1. 背景知识：这个系统里有哪些"人"](#read-01)
+- [2. 入口 `train.py` 全链路解读](#read-02)
+- [3. GPU 资源划分：placement group](#read-03)
+- [4. 训练 actor 组：`RayTrainGroup`](#read-04)
+- [5. 同步 vs 异步：`train.py` 与 `train_async.py`](#read-05)
+- [6. 参数体系速览](#read-06)
+- [7. 深入拆解：三个容易被忽略但很关键的机制](#read-07)
+- [8. 小结与阅读路线](#read-08)
+
+</details>
+
+<!-- learning-position -->
+> **学习定位**：A0→A5 · 分层必修。
+> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **首读/二读**：先读角色与同步主循环；placement/rank/rendezvous 在 A2、Ray 基础后读。
+> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
 > 对应综述（`00_rl_infra_survey.md`）§2.1「编排与资源管理」。
 > 本篇面向零基础读者：先讲清楚"一个 RL 训练任务里有哪些角色"，再逐行走进代码。
 
 ---
+
+
+<a id="read-01"></a>
 
 ## 1. 背景知识：这个系统里有哪些"人"
 
@@ -36,6 +60,9 @@ driver (train.py)
 注意：**driver 不做任何计算**，它只发号施令并 `ray.get` 等待结果。这与 verl 的"单控制器"神似，但 slime 的控制器逻辑极简（不到 100 行），重逻辑都在各 actor 内部。
 
 ---
+
+
+<a id="read-02"></a>
 
 ## 2. 入口 `train.py` 全链路解读
 
@@ -108,6 +135,9 @@ def train(args):
 
 ---
 
+
+<a id="read-03"></a>
+
 ## 3. GPU 资源划分：placement group
 
 ### 3.1 什么是 placement group（PG）
@@ -171,6 +201,9 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 
 ---
 
+
+<a id="read-04"></a>
+
 ## 4. 训练 actor 组：`RayTrainGroup`
 
 ### 4.1 为什么 `num_gpus_per_actor=0.4`？
@@ -214,6 +247,9 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 
 ---
 
+
+<a id="read-05"></a>
+
 ## 5. 同步 vs 异步：`train.py` 与 `train_async.py`
 
 `train_async.py` 实现的是 **one-step-async**（比同步版重叠"下一步 rollout"与"当前步训练"）：
@@ -247,6 +283,9 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 
 ---
 
+
+<a id="read-06"></a>
+
 ## 6. 参数体系速览
 
 slime 的参数分三类（README「参数说明」）：
@@ -267,6 +306,9 @@ slime 的参数分三类（README「参数说明」）：
 | `--num-rollout` / `--num-epoch` | 总步数（缺省由数据换算） |
 
 ---
+
+
+<a id="read-07"></a>
 
 ## 7. 深入拆解：三个容易被忽略但很关键的机制
 
@@ -356,6 +398,9 @@ for rank in range(world_size):
 3. **多 actor 一致性断言**：`create()` 返回的是**每个 rank 各自算出的** `start_rollout_id` 列表，`placement_group.py:216-219` 断言它们全部相等——如果某个 rank 的 checkpoint 损坏或版本不一致，这里会直接报错而不是静默用错误的起点继续训练（"RL bug 不报错只降智"哲学在启动阶段的体现，09 篇会继续展开）。
 
 ---
+
+
+<a id="read-08"></a>
 
 ## 8. 小结与阅读路线
 

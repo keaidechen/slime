@@ -1,5 +1,30 @@
 # 显存技术、确定性与 CUDA Graph
 
+<!-- learning-position -->
+> **学习定位**：A3/A6 · 必修。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **首读/二读**：offload、确定性、CUDA Graph 的具体生命周期与限制。
+> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+<!-- /learning-position -->
+
+<a id="beginner-example"></a>
+
+## 入门例子：三种优化，三种不同的交换
+
+Activation recompute 用更多计算换少存中间结果；offload 用数据搬运和同步换 GPU 驻留；CUDA Graph 用固定可重放的执行结构减少 host 提交开销。它们可能组合，但不能作为同一种“省显存开关”。
+
+例如 forward 后把 activation 放到 CPU，backward 前必须及时取回；若预取晚到，GPU 会等待。CUDA Graph 则需要满足实际实现对地址、shape 和控制流的约束；新 shape 的编译/capture 与稳态重放要分开统计。
+
+| 改动 | 正确性检查 | 性能证据 |
+|---|---|---|
+| recompute | RNG/dropout 与梯度是否符合预期 | 峰值减少量、额外 backward 计算 |
+| offload | consumer 读取前搬运完成 | H2D/D2H、CPU pinned memory、等待 |
+| graph | 输入更新与输出消费符合重放契约 | host launch 空洞、capture 次数、显存池 |
+
+验收：先关闭优化建立对照，再一次打开一项。记录峰值和总 step，不能只报告其中改善的那个指标。
+
+## 机制与实现
+
 ## 1. 三类技术解决三类问题
 
 - recompute：少保存 activation，backward 重算；用计算换显存。

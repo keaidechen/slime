@@ -1,0 +1,1782 @@
+{
+  "version": 1,
+  "baseline_documents": 158,
+  "documents": [
+    {
+      "source": "learn_docs/README.md",
+      "stage": "A0",
+      "level": "导航",
+      "plan": "升级总入口",
+      "scope": "统一全库课程、前置依赖、进度与查阅入口；原专题入口保留",
+      "current": [
+        "learn_docs/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/AI_Infra_学习笔记_2026-08-27.md",
+      "stage": "A1/A2/A3/A8",
+      "level": "分层必修",
+      "plan": "分段整编，保留问答原文",
+      "scope": "首读 GPU 层级、执行、进程；TP 通信推算在 A3 回读；架构代际放参考层，修复旧路径",
+      "current": [
+        "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+        "learn_docs/reference/GPU架构演进与历史资料.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+        "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+        "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+        "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+        "learn_docs/03_Parallelism/04_TensorParallelism.md",
+        "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+        "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+        "docs/performance_analysis_guide/04_megatron.md",
+        "learn_docs/00_Foundations/00_课程与系统地图.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md",
+      "stage": "A1/A8",
+      "level": "导航",
+      "plan": "保留并改路线",
+      "scope": "区分单卡基础与 Kernel 专项；不要求先读完所有 DSL",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+      "stage": "A1",
+      "level": "必修",
+      "plan": "保留，补最小运行例",
+      "scope": "Kernel/Block/Warp/SM、异步 launch、Stream/Event；高级调度二读",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md",
+      "stage": "A1→A8",
+      "level": "分层必修",
+      "plan": "保留，分两遍",
+      "scope": "首读内存层级、带宽、合并访存、tiling；bank conflict 与高级搬运二读",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+      "stage": "A1→A8",
+      "level": "分层必修",
+      "plan": "保留，补 shape 示例",
+      "scope": "先懂 GEMM、Tensor Core、batch/shape；流水线和 warp specialization 后读",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+      "stage": "A8",
+      "level": "分层必修",
+      "plan": "保留，分两遍",
+      "scope": "先区分 CUDA/cuBLAS/CUTLASS 的职责；CuTe layout 和模板实现按热点深入",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+      "stage": "A8",
+      "level": "分层必修",
+      "plan": "保留，拆主线与工具比较",
+      "scope": "Triton 基本编程与一个小算子实践；其余 DSL 保留为比较参考",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md",
+      "stage": "A1→A8",
+      "level": "分层必修",
+      "plan": "保留，配 graph break 实验",
+      "scope": "首读 eager/compile、fusion、graph break、冷启动；编译器内部二读",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+      "stage": "A1→A8",
+      "level": "分层必修",
+      "plan": "保留，分两遍",
+      "scope": "首读源码→PTX→SASS、JIT/AOT、架构兼容；IR/LLVM 深入参考",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留案例",
+      "scope": "先完成 A1/A4，再追 FlashAttention 与 Grouped GEMM 的 IO/shape/调度",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md",
+      "stage": "A1/A8",
+      "level": "必修",
+      "plan": "保留，接统一实验索引",
+      "scope": "正确计时与正确性基线先做；自定义 Kernel 比较在 A8 做",
+      "current": [
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md",
+      "stage": "A2",
+      "level": "导航",
+      "plan": "保留并补前置",
+      "scope": "先走两进程两卡示例，再进入通信与状态专题",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+      "stage": "A2",
+      "level": "必修",
+      "plan": "保留，补初学者前导",
+      "scope": "process/rank/local_rank/device/context；UVA 与 IPC 生命周期第二遍",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
+      "stage": "A1/A2",
+      "level": "必修",
+      "plan": "保留，补手算到实测",
+      "scope": "参数/梯度/优化器/activation/KV，区分 allocated/reserved/device used",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+      "stage": "A2",
+      "level": "必修",
+      "plan": "保留，补两卡张量演示",
+      "scope": "逐个列输入输出与 rank，演示 AllReduce/AllGather/ReduceScatter/AllToAll",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
+      "stage": "A2→A8",
+      "level": "分层必修",
+      "plan": "保留，增加消息时序",
+      "scope": "先懂 ring/tree 的步骤与开销；PAT/协议内部后读",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+      "stage": "A2",
+      "level": "必修",
+      "plan": "保留，配本机拓扑记录",
+      "scope": "PCIe/NVLink/NVSwitch、亲和性；用实际 H20 机器结果辨认路径",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
+      "stage": "A2→A7",
+      "level": "分层必修",
+      "plan": "保留，区分入门与网络深入",
+      "scope": "节点间路径、NIC/RDMA/GPUDirect 必读；RoCE 调优和 SHARP 专项",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
+      "stage": "A2→A7",
+      "level": "分层必修",
+      "plan": "保留，拆稳定原理与版本动态",
+      "scope": "通信组初始化、传输与 hang 排查；device-side 新能力参考",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+      "stage": "A2",
+      "level": "必修",
+      "plan": "保留，配消息尺寸扫描",
+      "scope": "α–β、有效带宽、algbw/busbw；先手算，再解释实测曲线",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
+      "stage": "A2/A3",
+      "level": "必修",
+      "plan": "保留，配依赖时间线",
+      "scope": "异步不等于重叠；用 Stream/Event 与 NCCL trace 验证",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，明确与并行篇边界",
+      "scope": "显存账本和优化取舍；FSDP 执行生命周期链接 A3 原理篇",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留为推理内存原理入口",
+      "scope": "KV 核算、paging、prefix reuse；调度细节接 SGLang 与论文",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
+      "stage": "A3/A7",
+      "level": "必修",
+      "plan": "保留，配恢复实验",
+      "scope": "状态完整性、一致性切面、重分片；中断恢复不能只检查加载成功",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留，接 MoE 实验",
+      "scope": "逐步走 dispatch→expert→combine；用真实 token 分布解释通信",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留，分原理与部署",
+      "scope": "先懂 KV 为什么跨节点搬、何时得不偿失；PD 实测后做",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md",
+      "stage": "A2/A7",
+      "level": "必修",
+      "plan": "保留，接统一实验索引",
+      "scope": "拓扑→P2P→Collective→多机，分别记录显存与带宽证据",
+      "current": [
+        "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/00_专题总览.md",
+      "stage": "A3",
+      "level": "导航",
+      "plan": "保留并重排入口",
+      "scope": "先看 DP/TP 的小例子，再用统一布局语言总结",
+      "current": [
+        "learn_docs/03_Parallelism/00_专题总览.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/01_统一切分语言.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，后移抽象介绍",
+      "scope": "先用两个矩阵解释 shard/replicate/partial，再进入 DeviceMesh API",
+      "current": [
+        "learn_docs/03_Parallelism/01_统一切分语言.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/02_DP与DDP.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，配梯度对齐实验",
+      "scope": "梯度平均、bucket、累积/no_sync、不同 token 数的归一化",
+      "current": [
+        "learn_docs/03_Parallelism/02_DP与DDP.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，配状态生命周期图",
+      "scope": "ZeRO 三种状态与 FSDP gather/reshard；区分原理和 Megatron 实现",
+      "current": [
+        "learn_docs/03_Parallelism/03_ZeRO与FSDP.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/04_TensorParallelism.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，配两卡 Linear 实验",
+      "scope": "Column/Row Linear 的 local shape、forward/backward 通信",
+      "current": [
+        "learn_docs/03_Parallelism/04_TensorParallelism.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/05_SequenceParallelism.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，分术语与实现",
+      "scope": "Megatron SP 与其他 sequence 切分的区别；先跟 TP 相邻层",
+      "current": [
+        "learn_docs/03_Parallelism/05_SequenceParallelism.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/06_PipelineParallelism.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，补手画 microbatch 时序",
+      "scope": "GPipe/1F1B、activation 生命周期与 bubble；Zero Bubble 二读",
+      "current": [
+        "learn_docs/03_Parallelism/06_PipelineParallelism.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/07_ContextParallelism.md",
+      "stage": "A3→A8",
+      "level": "分层必修",
+      "plan": "保留，分入门与长序列专项",
+      "scope": "理解切序列、交换 KV 和负载不均；具体算法与大规模实测后读",
+      "current": [
+        "learn_docs/03_Parallelism/07_ContextParallelism.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/08_ExpertParallelism.md",
+      "stage": "A3→A8",
+      "level": "分层必修",
+      "plan": "保留，分入门与 MoE 专项",
+      "scope": "expert/token/rank 映射及 A2A 先学；ETP/folding 后读",
+      "current": [
+        "learn_docs/03_Parallelism/08_ExpertParallelism.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
+      "stage": "A3/A5",
+      "level": "必修",
+      "plan": "保留，接 RL 数值正确性",
+      "scope": "分布式 logits/logsumexp、词表切分与全局 token loss",
+      "current": [
+        "learn_docs/03_Parallelism/09_Embedding与词表并行.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，补小网格再放大",
+      "scope": "先画 2×2 rank group，再看大配置；勿以缩写乘积替代布局",
+      "current": [
+        "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/11_训练并行方案设计.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，改为配置实战入口",
+      "scope": "根据容量、batch 语义和拓扑推配置，形成可核对账本",
+      "current": [
+        "learn_docs/03_Parallelism/11_训练并行方案设计.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/12_推理并行方案设计.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留，配 TP/副本对比",
+      "scope": "并行对容量、吞吐、延迟与 KV 的不同影响",
+      "current": [
+        "learn_docs/03_Parallelism/12_推理并行方案设计.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/13_RL角色级并行.md",
+      "stage": "A0→A5",
+      "level": "分层必修",
+      "plan": "保留，前后两遍",
+      "scope": "A0 看角色与两层并行；A5 深读共置、分离、异步与 freshness",
+      "current": [
+        "learn_docs/03_Parallelism/13_RL角色级并行.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "理解代价模型和搜索约束，作为调度设计拓展",
+      "current": [
+        "learn_docs/03_Parallelism/14_自动并行与代价模型.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "PP/EP 基础完成后对照 DualPipe；不直接照抄配置",
+      "current": [
+        "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/03_Parallelism/16_实验与配置工作表.md",
+      "stage": "A3/A4/A5",
+      "level": "必修",
+      "plan": "保留，接统一实验索引",
+      "scope": "所有并行实验统一填布局、状态、通信、batch 与实际拓扑",
+      "current": [
+        "learn_docs/03_Parallelism/16_实验与配置工作表.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md",
+      "stage": "A6",
+      "level": "导航",
+      "plan": "保留，修路径命名计划",
+      "scope": "17 篇现已齐全；区分原理入口与性能教程操作入口",
+      "current": [
+        "docs/performance_analysis_guide/README.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/01_方法论与测量陷阱.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留为方法原理",
+      "scope": "测量边界、warmup、重复、干预与噪声；操作链接教程",
+      "current": [
+        "docs/performance_analysis_guide/00_concepts.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/02_GPU指标与遥测.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "GPU/SM/DRAM 指标、采样与降频；不能只读 GPU-Util",
+      "current": [
+        "docs/performance_analysis_guide/01_baseline.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/03_NsightSystems时间线.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "CPU/GPU/通信关键路径；首次采集命令接软件教程",
+      "current": [
+        "docs/performance_analysis_guide/03_cuda_kernels.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/04_NsightCompute_Kernel分析.md",
+      "stage": "A6→A8",
+      "level": "分层必修",
+      "plan": "保留",
+      "scope": "先会选热点与读报告；计数器重放和 kernel 深入后读",
+      "current": [
+        "docs/performance_analysis_guide/03_cuda_kernels.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/05_PyTorchProfiler.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "operator、shape、stack、memory 对应关系；配首次 trace",
+      "current": [
+        "docs/performance_analysis_guide/02_pytorch.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/06_Roofline与瓶颈分类.md",
+      "stage": "A1→A6",
+      "level": "分层必修",
+      "plan": "保留",
+      "scope": "先懂算力/带宽限制，再补口径与其他瓶颈类别",
+      "current": [
+        "docs/performance_analysis_guide/03_cuda_kernels.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/07_CPU与数据加载.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留，补 Python 调度前置",
+      "scope": "DataLoader、pin memory、H2D、CPU 空洞与隐式同步",
+      "current": [
+        "docs/performance_analysis_guide/02_pytorch.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/08_显存与OOM.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "显存峰值、引用保留、碎片、snapshot 与回归",
+      "current": [
+        "docs/performance_analysis_guide/02_pytorch.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/09_分布式通信Profiling.md",
+      "stage": "A2/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "先分到达晚、排队与真实传输慢，再选通信工具",
+      "current": [
+        "docs/performance_analysis_guide/04_megatron.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/10_并行策略与Bubble.md",
+      "stage": "A3/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "把不同并行策略映射到 trace；需要先理解 A3",
+      "current": [
+        "docs/performance_analysis_guide/04_megatron.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/11_训练性能指标.md",
+      "stage": "A3/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "step 边界、有效 token、MFU/HFU、扩展效率",
+      "current": [
+        "docs/performance_analysis_guide/04_megatron.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/12_推理性能分析.md",
+      "stage": "A4/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "TTFT/TPOT、负载长度、开闭环与 goodput；配容量曲线",
+      "current": [
+        "docs/performance_analysis_guide/05_inference.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/13_专项负载_MoE_长上下文_RL.md",
+      "stage": "A5/A6/A8",
+      "level": "分层必修",
+      "plan": "保留，新补齐",
+      "scope": "RL 角色时间线与版本 lag 必读；MoE/长上下文跟专项",
+      "current": [
+        "docs/performance_analysis_guide/09_dynamic_workloads.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/14_线上可观测性.md",
+      "stage": "A7",
+      "level": "必修",
+      "plan": "保留，新补齐",
+      "scope": "指标/日志/trace、基数与常驻采样，建立小型观测面板",
+      "current": [
+        "docs/performance_analysis_guide/10_observability.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/15_案例_GPU利用率低.md",
+      "stage": "A6",
+      "level": "必修",
+      "plan": "保留，新补齐",
+      "scope": "从模糊现象到可证伪假设；在首份 trace 后做案例",
+      "current": [
+        "docs/performance_analysis_guide/11_case_gpu_idle.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/04_Profiling_Performence_Analysis/16_实验与排查工作表.md",
+      "stage": "A6/A7",
+      "level": "必修",
+      "plan": "保留，新补齐",
+      "scope": "现场工作表保留；正式报告引用 performance_report_template",
+      "current": [
+        "docs/performance_analysis_guide/experiment_worksheet.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留，按架构索引",
+      "scope": "用于查模型差异和资料来源；具体型号/能力单独核对版本",
+      "current": [
+        "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/model_arc/MLA.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留长文，增加短入口",
+      "scope": "先读 MHA/GQA/MLA 的 KV 形状与容量影响；推导与实现二读",
+      "current": [
+        "learn_docs/model_arc/MLA.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "stage": "A3→A8",
+      "level": "分层必修",
+      "plan": "保留长文，按问题分段导航",
+      "scope": "首读 router→dispatch→GEMM→combine；通信/调优/模型案例专项回读",
+      "current": [
+        "learn_docs/model_arc/MoE-Infra.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "先学标准 attention 与 KV；再看稀疏结构对访问和负载的影响",
+      "current": [
+        "learn_docs/model_arc/Sparse-Attention.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "递归状态与 KV 的差别、混合模型资源特征；数学长推导后读",
+      "current": [
+        "learn_docs/model_arc/Linear-Attention.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "训练稳定性、结构与执行依赖的专题参考，不作为并行入门前置",
+      "current": [
+        "learn_docs/model_arc/Residual-Evolution.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/README.md",
+      "stage": "A0/A5",
+      "level": "导航",
+      "plan": "保留为 slime 子入口",
+      "scope": "链接总学习路线；区分初次角色概览与完整源码阅读",
+      "current": [
+        "docs/code_walkthrough/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/00_rl_infra_survey.md",
+      "stage": "A0",
+      "level": "分层必修",
+      "plan": "保留，拆入门与动态综述",
+      "scope": "首读工程问题地图；各框架近况与 Roadmap 为版本化参考",
+      "current": [
+        "docs/code_walkthrough/00_rl_infra_survey.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/01_architecture_and_ray_orchestration.md",
+      "stage": "A0→A5",
+      "level": "分层必修",
+      "plan": "保留，补 Ray 前导",
+      "scope": "先读角色与同步主循环；placement/rank/rendezvous 在 A2、Ray 基础后读",
+      "current": [
+        "docs/code_walkthrough/01_architecture_and_ray_orchestration.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/02_rollout_sglang_server_mode.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "读服务拓扑、生成循环、并发限制与 abort；前置 SGLang 请求基础",
+      "current": [
+        "docs/code_walkthrough/02_rollout_sglang_server_mode.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留，按状态机分段",
+      "scope": "先 Sample/buffer 不变量，再 partial/async/backpressure，串到算法语义",
+      "current": [
+        "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/04_weight_sync_and_memory.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留，明确测量前提",
+      "scope": "布局转换、NCCL/IPC/disk、offload；“头号瓶颈”应按 workload 限定",
+      "current": [
+        "docs/code_walkthrough/04_weight_sync_and_memory.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/05_rl_algorithms.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留算法系统边界",
+      "scope": "已有算法可快读；logprob、mask、全局归一化、重要性修正重点读",
+      "current": [
+        "docs/code_walkthrough/05_rl_algorithms.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留 slime 接入职责",
+      "scope": "训练 actor/provider/格式转换入口；Megatron 内部链接专门系列",
+      "current": [
+        "docs/code_walkthrough/06_megatron_backend_and_mbridge.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/07_customization_and_agentic.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留，分基础扩展与 Agentic",
+      "scope": "先 hook/自定义 rollout，再多轮工具等待、轨迹对齐与失败",
+      "current": [
+        "docs/code_walkthrough/07_customization_and_agentic.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/08_rm_hub_and_eval.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "reward/filter/eval 的顺序与样本组语义；算法背景不替代工程校验",
+      "current": [
+        "docs/code_walkthrough/08_rm_hub_and_eval.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/09_engineering_observability.md",
+      "stage": "A5/A7",
+      "level": "必修",
+      "plan": "保留框架专属部分",
+      "scope": "分离调试、对账、健康状态、CI；通用 profiler 操作引用性能教程",
+      "current": [
+        "docs/code_walkthrough/09_engineering_observability.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/10_transferqueue.md",
+      "stage": "A5→A8",
+      "level": "专项",
+      "plan": "保留对比专题",
+      "scope": "主线 buffer 学完后比较独立数据平面；标明不是 slime 当前依赖",
+      "current": [
+        "docs/code_walkthrough/10_transferqueue.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/11_engine_internals_sglang.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留跨框架接线图",
+      "scope": "slime 调用→SGLang 端点→执行与释放；内部机制引用 SGLang 系列",
+      "current": [
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md",
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md",
+        "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md",
+        "docs/code_walkthrough/03_data_buffer_partial_rollout_async.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/code_walkthrough/12_megatron_lm_internals.md",
+      "stage": "A3/A5",
+      "level": "必修",
+      "plan": "保留接入摘要与调用链",
+      "scope": "回答 slime 如何进入 Megatron；重复引擎解释由 Megatron 系列承载",
+      "current": [
+        "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md",
+        "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md",
+        "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md",
+        "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md",
+        "docs/code_walkthrough/06_megatron_backend_and_mbridge.md",
+        "docs/megatron_code_walkthrough/06_reference/03_source_questions.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/code_walkthrough/13_megatron_bridge_internals.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留独立转换专题",
+      "scope": "HF↔Megatron、QKV/TP/EP 的往返校验；旧 Bridge 文件名暂保留",
+      "current": [
+        "docs/code_walkthrough/13_megatron_bridge_internals.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/code_walkthrough/tau-bench_qwen3_4B.md",
+      "stage": "A5/A7",
+      "level": "专项",
+      "plan": "保留综合项目",
+      "scope": "基础闭环后再做多轮 Agent；不作为第一次跑 RL 的默认实验",
+      "current": [
+        "docs/code_walkthrough/tau-bench_qwen3_4B.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/README.md",
+      "stage": "A3",
+      "level": "导航",
+      "plan": "保留子入口",
+      "scope": "挂接基础前置与 RL 训练后端路线，保留源码版本",
+      "current": [
+        "docs/megatron_code_walkthrough/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/01_foundations/00_ecosystem_install_and_data.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，补最小启动说明",
+      "scope": "环境、数据、第一次 step；明确预训练示例与 RL backend 的关系",
+      "current": [
+        "docs/megatron_code_walkthrough/01_foundations/00_ecosystem_install_and_data.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/01_foundations/01_learning_map.md",
+      "stage": "A3",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "只承担 Megatron 源码地图，基础通识链接统一入口",
+      "current": [
+        "docs/megatron_code_walkthrough/01_foundations/01_learning_map.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留，补一次 step 例子",
+      "scope": "microbatch→forward/backward→optimizer；含 loss closure 与更新边界",
+      "current": [
+        "docs/megatron_code_walkthrough/01_foundations/02_training_mainline.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/01_foundations/03_model_and_transformer.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "GPTModel/ModuleSpec/Transformer Engine、local shape 与模型构建",
+      "current": [
+        "docs/megatron_code_walkthrough/01_foundations/03_model_and_transformer.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/02_parallelism/00_strategy_and_topology.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留实现约束与配置",
+      "scope": "通用选型链接并行原理，本篇讲 Megatron 的约束与拓扑落实",
+      "current": [
+        "docs/megatron_code_walkthrough/02_parallelism/00_strategy_and_topology.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "rank group、TP/SP、词表并行，结合两卡张量核对",
+      "current": [
+        "docs/megatron_code_walkthrough/02_parallelism/01_parallel_state_and_tensor_parallel.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md",
+      "stage": "A3",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "1F1B/交错/P2P、activation 生命周期，配 stage 时间线",
+      "current": [
+        "docs/megatron_code_walkthrough/02_parallelism/02_pipeline_parallel.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md",
+      "stage": "A3/A7",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "DDP bucket、DistributedOptimizer、状态保存恢复；配中断验证",
+      "current": [
+        "docs/megatron_code_walkthrough/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/03_state_and_memory/02_megatron_fsdp.md",
+      "stage": "A3→A8",
+      "level": "分层必修",
+      "plan": "保留",
+      "scope": "先区分 DistributedOptimizer 与 FSDP；具体策略源码第二遍读",
+      "current": [
+        "docs/megatron_code_walkthrough/03_state_and_memory/02_megatron_fsdp.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/03_state_and_memory/03_memory_determinism_cuda_graph.md",
+      "stage": "A3/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "offload、确定性、CUDA Graph 的具体生命周期与限制",
+      "current": [
+        "docs/megatron_code_walkthrough/03_state_and_memory/03_memory_determinism_cuda_graph.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/04_models_and_features/01_models_and_tokenizers.md",
+      "stage": "A3/A5",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "模型/tokenizer/checkpoint 契约；模型目录只按任务查阅",
+      "current": [
+        "docs/megatron_code_walkthrough/04_models_and_features/01_models_and_tokenizers.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/04_models_and_features/02_moe_mla_mtp.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "MoE/MLA/MTP 的具体模块与 router replay，承接模型基础",
+      "current": [
+        "docs/megatron_code_walkthrough/04_models_and_features/02_moe_mla_mtp.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/04_models_and_features/03_hybrid_multimodal_rl.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留并按主题导航",
+      "scope": "RL 相关入口可提前；Hybrid/Mamba/多模态/Energon 后续按需",
+      "current": [
+        "docs/megatron_code_walkthrough/04_models_and_features/03_hybrid_multimodal_rl.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/04_models_and_features/04_context_moe_precision_deep_dive.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "CP/EP 组合与低精度深读；先有标准 Dense 训练基线",
+      "current": [
+        "docs/megatron_code_walkthrough/04_models_and_features/04_context_moe_precision_deep_dive.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/05_practice/01_performance_debugging.md",
+      "stage": "A3/A6/A7",
+      "level": "必修",
+      "plan": "保留框架故障树",
+      "scope": "OOM/hang/straggler→源码与配置；通用采集操作接性能指南",
+      "current": [
+        "docs/megatron_code_walkthrough/05_practice/01_performance_debugging.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/05_practice/02_configuration_review.md",
+      "stage": "A3/A7",
+      "level": "必修",
+      "plan": "保留为配置验收",
+      "scope": "每个 Megatron 实验填写，避免只保存启动命令",
+      "current": [
+        "docs/megatron_code_walkthrough/05_practice/02_configuration_review.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/06_reference/01_official_docs_coverage.md",
+      "stage": "A3",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "官方能力与本快照的覆盖边界，不要求逐项背诵",
+      "current": [
+        "docs/megatron_code_walkthrough/06_reference/01_official_docs_coverage.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/06_reference/02_glossary.md",
+      "stage": "A3",
+      "level": "参考",
+      "plan": "保留局部词典",
+      "scope": "基础公共术语指向总词典，Megatron 专属术语保留",
+      "current": [
+        "docs/megatron_code_walkthrough/06_reference/02_glossary.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/megatron_code_walkthrough/06_reference/03_source_questions.md",
+      "stage": "A3/A5",
+      "level": "分层必修",
+      "plan": "保留，分配到相关章节",
+      "scope": "先读 world size/batch/token mean；overflow/reshard 等在对应实验回读",
+      "current": [
+        "docs/megatron_code_walkthrough/06_reference/03_source_questions.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/00_共享基础_GPU与LLM推理硬件基础.md",
+      "stage": "A1/A4/A8",
+      "level": "分层必修",
+      "plan": "保留全文，抽取为入门教材来源",
+      "scope": "首读 §1–14 GPU 与性能直觉；A4 读 §15–21 KV/分页；§26 高级硬件后读",
+      "current": [
+        "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+        "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+        "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/paper_read/01_FlashAttention论文详解.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留论文完整推导",
+      "scope": "先读 IO 与 tiling 的动机、精确 attention；online softmax 推导专项二读",
+      "current": [
+        "docs/paper_read/01_FlashAttention论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/02_PagedAttention-vLLM论文详解.md",
+      "stage": "A4",
+      "level": "分层必修",
+      "plan": "保留，增加首读导航",
+      "scope": "逻辑块/物理块/浪费/COW 的例子必读；论文实验与实现差异第二遍",
+      "current": [
+        "docs/paper_read/02_PagedAttention-vLLM论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/03_SGLang-RadixAttention论文详解.md",
+      "stage": "A4",
+      "level": "分层必修",
+      "plan": "保留，增加首读导航",
+      "scope": "prefix 复用、radix tree、锁/驱逐与调度；论文其他设计第二遍",
+      "current": [
+        "docs/paper_read/03_SGLang-RadixAttention论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/04_FlashAttention-2论文详解.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "FA1 基础后读非 matmul 开销、warp 分工与并行粒度",
+      "current": [
+        "docs/paper_read/04_FlashAttention-2论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/05_FlashAttention-3论文详解.md",
+      "stage": "A8",
+      "level": "专项",
+      "plan": "保留",
+      "scope": "异步搬运/计算、流水线与资源；实验能力以实际 H20 环境核验",
+      "current": [
+        "docs/paper_read/05_FlashAttention-3论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/06_Orca与Continuous-Batching论文详解.md",
+      "stage": "A4",
+      "level": "分层必修",
+      "plan": "保留，调度课程主读",
+      "scope": "静态 batch→iteration-level；区分论文设计与当前引擎实现",
+      "current": [
+        "docs/paper_read/06_Orca与Continuous-Batching论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/07_DistServe与Prefill-Decode分离论文详解.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留",
+      "scope": "首读 prefill/decode 干扰与传 KV 成本；PD 部署与复现实验专项",
+      "current": [
+        "docs/paper_read/07_DistServe与Prefill-Decode分离论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/08_TensorRT-LLM_Runtime架构详解.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留为 Runtime 比较",
+      "scope": "移到逻辑上的系统架构比较栏，暂不改原路径",
+      "current": [
+        "docs/runtime_comparisons/TensorRT-LLM.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/paper_read/09_vLLM-V1_Runtime架构详解.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留为 Runtime 比较",
+      "scope": "SGLang 主线后对照 token budget、KV 管理与 worker 边界",
+      "current": [
+        "docs/runtime_comparisons/vLLM-V1.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/paper_read/10_SGLang_Runtime架构详解.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留概念桥梁",
+      "scope": "在源码前建立进程/调度/执行全景；具体符号以源码系列为准",
+      "current": [
+        "docs/sglang_code_walkthrough/01_foundations/00_runtime_concepts.md"
+      ],
+      "kind": "兼容入口"
+    },
+    {
+      "source": "docs/paper_read/11_LLM推理Runtime技术演化总览.md",
+      "stage": "A0/A4",
+      "level": "导航",
+      "plan": "保留技术地图",
+      "scope": "先看调度、KV、Kernel 三条线；不作为全部论文读完的要求",
+      "current": [
+        "docs/paper_read/11_LLM推理Runtime技术演化总览.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/paper_read/FlashInfer 论文详解.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留长文，增加分段入口",
+      "scope": "A4 看 backend 的职责与 KV layout；A8 深入 ragged/page/kernel 调度",
+      "current": [
+        "docs/paper_read/FlashInfer 论文详解.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/README.md",
+      "stage": "A6",
+      "level": "导航",
+      "plan": "保留统一实验入口",
+      "scope": "以学习阶段索引实验；与原理专题互链",
+      "current": [
+        "docs/performance_analysis_guide/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/00_concepts.md",
+      "stage": "A1",
+      "level": "必修",
+      "plan": "保留初学者教程",
+      "scope": "延迟/吞吐/关键路径/测量边界，先于专业 profiler",
+      "current": [
+        "docs/performance_analysis_guide/00_concepts.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/01_baseline.md",
+      "stage": "A1",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "固定环境、workload、重复统计；建立 H20 环境记录",
+      "current": [
+        "docs/performance_analysis_guide/01_baseline.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/02_pytorch.md",
+      "stage": "A1/A6",
+      "level": "必修",
+      "plan": "保留手把手操作",
+      "scope": "从 CUDA 正确计时到首份 operator/kernel/memory trace",
+      "current": [
+        "docs/performance_analysis_guide/02_pytorch.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/03_cuda_kernels.md",
+      "stage": "A1→A8",
+      "level": "分层必修",
+      "plan": "保留，按工具层次拆阅读范围",
+      "scope": "先 nsys/NVTX；热点确定后 ncu；Triton/SASS 在 A8",
+      "current": [
+        "docs/performance_analysis_guide/03_cuda_kernels.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/04_megatron.md",
+      "stage": "A3/A6",
+      "level": "必修",
+      "plan": "保留训练实验操作",
+      "scope": "step 分解、并行扫描；原理链接 A3，源码定位链接 Megatron",
+      "current": [
+        "docs/performance_analysis_guide/04_megatron.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/05_inference.md",
+      "stage": "A4/A6",
+      "level": "必修",
+      "plan": "保留推理实验操作",
+      "scope": "长度/并发/速率控制、容量曲线、KV 与延迟分布",
+      "current": [
+        "docs/performance_analysis_guide/05_inference.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/06_slime.md",
+      "stage": "A5/A6",
+      "level": "必修",
+      "plan": "保留 RL 综合实验",
+      "scope": "分离两侧、测换权/offload、观察角色关键路径与质量约束",
+      "current": [
+        "docs/performance_analysis_guide/06_slime.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/07_labs.md",
+      "stage": "A1/A3/A4/A5/A8",
+      "level": "必修",
+      "plan": "保留六实验并拆阶段入口",
+      "scope": "实验 1–2 在 A1，3 在 A8 或热点出现时，4/5/6 随训练/推理/RL",
+      "current": [
+        "docs/performance_analysis_guide/07_labs.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/08_toolbox_and_sources.md",
+      "stage": "A6",
+      "level": "参考",
+      "plan": "保留查阅索引",
+      "scope": "按问题找工具；资料清单不变成额外必读课程",
+      "current": [
+        "docs/performance_analysis_guide/08_toolbox_and_sources.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/glossary.md",
+      "stage": "A1–A8",
+      "level": "参考",
+      "plan": "保留为公共术语入口",
+      "scope": "首次读最先掌握的 30 词，后续随问题查，不先背完整词典",
+      "current": [
+        "docs/performance_analysis_guide/glossary.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/performance_report_template.md",
+      "stage": "A6/A7",
+      "level": "必修",
+      "plan": "保留正式报告模板",
+      "scope": "实验工作表收原始记录，本模板组织可复现结论与回归",
+      "current": [
+        "docs/performance_analysis_guide/performance_report_template.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/performance_analysis_guide/software_tutorials.md",
+      "stage": "A1/A6/A7",
+      "level": "分层必修",
+      "plan": "保留工具操作手册",
+      "scope": "按首次使用取章节；先 nvidia-smi/Profiler/Perfetto/nsys，后 DCGM/ncu",
+      "current": [
+        "docs/performance_analysis_guide/software_tutorials.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/README.md",
+      "stage": "A4/A5",
+      "level": "导航",
+      "plan": "保留子入口",
+      "scope": "把 Runtime 与 RL 路线接入总课程，保留源码快照边界",
+      "current": [
+        "docs/sglang_code_walkthrough/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/01_foundations/README.md",
+      "stage": "A4",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "进程/请求基础入口，补 A1/A2 前置链接",
+      "current": [
+        "docs/sglang_code_walkthrough/01_foundations/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/01_foundations/01_learning_map.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留，配请求观察",
+      "scope": "训练与推理差异、指标、KV 核算；复杂模型术语按需回查",
+      "current": [
+        "docs/sglang_code_walkthrough/01_foundations/01_learning_map.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/01_foundations/02_process_topology_and_request_path.md",
+      "stage": "A4→A5",
+      "level": "分层必修",
+      "plan": "保留长文，增加普通请求首读路线",
+      "scope": "先普通文本请求的对象和跨进程流，再读异常、控制请求与特殊分支",
+      "current": [
+        "docs/sglang_code_walkthrough/01_foundations/02_process_topology_and_request_path.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/README.md",
+      "stage": "A4",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "按 scheduler→KV→runner→生成控制顺序",
+      "current": [
+        "docs/sglang_code_walkthrough/02_runtime_core/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/01_scheduler_and_batch.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留调度主章",
+      "scope": "waiting/running、token budget、prefill/decode、overlap 与请求状态",
+      "current": [
+        "docs/sglang_code_walkthrough/02_runtime_core/01_scheduler_and_batch.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/02_kv_cache_and_radix_attention.md",
+      "stage": "A4",
+      "level": "必修",
+      "plan": "保留内存实现主章",
+      "scope": "pool、页映射、radix、lock_ref、evict/free；配 finish/abort 检查",
+      "current": [
+        "docs/sglang_code_walkthrough/02_runtime_core/02_kv_cache_and_radix_attention.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/03_model_runner_attention_cuda_graph.md",
+      "stage": "A4/A6",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "ForwardBatch、backend、CUDA Graph 与运行 shape，连到热点分析",
+      "current": [
+        "docs/sglang_code_walkthrough/02_runtime_core/03_model_runner_attention_cuda_graph.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/02_runtime_core/04_speculative_structured_sampling.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留，按功能分层",
+      "scope": "采样正确性和约束输出先读；speculative 树与性能专项",
+      "current": [
+        "docs/sglang_code_walkthrough/02_runtime_core/04_speculative_structured_sampling.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md",
+      "stage": "A4",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "单实例正确后再进入多副本、TP 与 PD",
+      "current": [
+        "docs/sglang_code_walkthrough/03_scaling_and_deployment/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/01_distributed_and_pd_disaggregation.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留，拆普通并行与 PD",
+      "scope": "TP/DP 基础必修；PD KV 交接、EP、多机复杂组合后读",
+      "current": [
+        "docs/sglang_code_walkthrough/03_scaling_and_deployment/01_distributed_and_pd_disaggregation.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md",
+      "stage": "A4/A5",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "副本、路由、readiness、多节点启动，关联 RL placement",
+      "current": [
+        "docs/sglang_code_walkthrough/03_scaling_and_deployment/02_deployment_topology_and_routing.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/03_scaling_and_deployment/03_hardware_platforms.md",
+      "stage": "A1/A4",
+      "level": "分层必修",
+      "plan": "保留",
+      "scope": "先核实实际环境/backend；其他硬件平台比较参考",
+      "current": [
+        "docs/sglang_code_walkthrough/03_scaling_and_deployment/03_hardware_platforms.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md",
+      "stage": "A4/A5",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "采样、模型支持与控制面按依赖串联",
+      "current": [
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md",
+      "stage": "A4/A5",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "请求规范化、sampling、tokenizer/template、logprob 与 RL 语义",
+      "current": [
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/01_api_request_and_sampling.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/02_model_support_and_multimodal.md",
+      "stage": "A4→A8",
+      "level": "分层必修",
+      "plan": "保留，分文本基础与多模态",
+      "scope": "模型注册、加载、fallback 契约先读；多模态分支专项",
+      "current": [
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/02_model_support_and_multimodal.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md",
+      "stage": "A5",
+      "level": "必修",
+      "plan": "保留控制面实现主章",
+      "scope": "在线换权、暂停/恢复、cache 失效、失败边界；不假设事务保证",
+      "current": [
+        "docs/sglang_code_walkthrough/04_interfaces_and_models/03_control_plane_and_post_training.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/05_production_engineering/README.md",
+      "stage": "A6/A7",
+      "level": "导航",
+      "plan": "保留",
+      "scope": "链接统一实验和 SGLang 专属运维/扩展",
+      "current": [
+        "docs/sglang_code_walkthrough/05_production_engineering/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/05_production_engineering/01_benchmark_profiling_observability.md",
+      "stage": "A4/A6",
+      "level": "必修",
+      "plan": "保留框架观测点",
+      "scope": "通用计时/工具安装接性能教程，保留 runtime 指标与因果链",
+      "current": [
+        "docs/sglang_code_walkthrough/05_production_engineering/01_benchmark_profiling_observability.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/05_production_engineering/02_extension_and_correctness.md",
+      "stage": "A7",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "模型/backend 契约、数值容差与回归，供首次代码改动使用",
+      "current": [
+        "docs/sglang_code_walkthrough/05_production_engineering/02_extension_and_correctness.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/05_production_engineering/03_reliability_capacity_operations.md",
+      "stage": "A5/A7",
+      "level": "必修",
+      "plan": "保留",
+      "scope": "admission、超时/取消、资源回收与故障注入",
+      "current": [
+        "docs/sglang_code_walkthrough/05_production_engineering/03_reliability_capacity_operations.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/06_diffusion/README.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留专题入口",
+      "scope": "作为扩展方向，不设为当前 LLM RL 主线前置",
+      "current": [
+        "docs/sglang_code_walkthrough/06_diffusion/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/06_diffusion/01_pipeline_architecture_and_serving.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "Diffusion 请求和 pipeline 与 LLM 调度对比",
+      "current": [
+        "docs/sglang_code_walkthrough/06_diffusion/01_pipeline_architecture_and_serving.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/06_diffusion/02_parallelism_cache_and_quantization.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "Diffusion 并行/cache/量化按相关任务查阅",
+      "current": [
+        "docs/sglang_code_walkthrough/06_diffusion/02_parallelism_cache_and_quantization.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/06_diffusion/03_profiling_extension_and_correctness.md",
+      "stage": "A8",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "Diffusion profiling 与正确性验证，后续方向使用",
+      "current": [
+        "docs/sglang_code_walkthrough/06_diffusion/03_profiling_extension_and_correctness.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/07_reference/README.md",
+      "stage": "A4",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "官方覆盖与局部术语索引",
+      "current": [
+        "docs/sglang_code_walkthrough/07_reference/README.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/07_reference/01_official_docs_coverage.md",
+      "stage": "A4/A7",
+      "level": "参考",
+      "plan": "保留",
+      "scope": "框架能力和当前源码版本核对入口",
+      "current": [
+        "docs/sglang_code_walkthrough/07_reference/01_official_docs_coverage.md"
+      ],
+      "kind": "主文档"
+    },
+    {
+      "source": "docs/sglang_code_walkthrough/07_reference/02_glossary.md",
+      "stage": "A4",
+      "level": "参考",
+      "plan": "保留局部词典",
+      "scope": "框架专属名词就近解释，公共术语链接总词典",
+      "current": [
+        "docs/sglang_code_walkthrough/07_reference/02_glossary.md"
+      ],
+      "kind": "主文档"
+    }
+  ]
+}
