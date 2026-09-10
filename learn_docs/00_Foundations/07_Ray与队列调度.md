@@ -55,6 +55,10 @@ Placement group 把若干资源需求作为一组进行预留，具体 bundle �
 python learn_docs/labs/ray_backpressure.py --max-pending 4
 ```
 
+`python` 是解释器，`learn_docs/labs/ray_backpressure.py` 是要执行的脚本，`--max-pending 4` 是传给脚本的参数，表示最多保留 4 个已提交但尚未被消费的 ObjectRef。可用 `python learn_docs/labs/ray_backpressure.py --help` 只查看参数帮助，不运行实验。
+
+正常输出有两部分：`completion order` 是 12 个任务的完成顺序，`elapsed seconds` 是本次运行的总耗时。完成顺序不一定是 0、1、2……，每次耗时也会波动；这正是脚本要展示的并发现象，不是结果错了。`--max-pending` 小于 1 时，脚本会打印参数错误并以非 0 状态退出。
+
 脚本最多保留指定数量的未消费引用；达到上限时等一个结果就绪，消费后再提交。`ray.wait` 给出 ready 与 remaining 两组引用，`ray.get` 读取已就绪结果。这既限制积压，也避免一定按提交顺序等待最慢的第一项。[Ray wait](https://docs.ray.io/en/latest/ray-core/api/doc/ray.wait.html)
 
 这个例子限制的是提交窗口；它没有解决所有问题，例如结果落盘速度、字节预算和跨系统取消。对于真实流水线，还需要为生产、存储、消费分别设边界。

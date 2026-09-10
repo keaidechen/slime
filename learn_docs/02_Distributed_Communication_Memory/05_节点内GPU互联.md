@@ -57,6 +57,19 @@ nvidia-smi topo -p2p w
 nvidia-smi topo -p2p a
 ```
 
+命令可按下表拆解：
+
+| 输入 | 输出回答的问题 |
+|---|---|
+| `nvidia-smi topo -m` | GPU、NIC 之间如何连接，以及 GPU 的 CPU/内存亲和性 |
+| `nvidia-smi topo -p2p r` | 每一对 GPU 是否具有 P2P read capability |
+| `nvidia-smi topo -p2p w` | 每一对 GPU 是否具有 P2P write capability |
+| `nvidia-smi topo -p2p a` | 每一对 GPU 是否具有 P2P atomic capability |
+
+`-p2p` 后面的 `r`、`w`、`a` 是 capability 类型，不是 GPU 编号。输出矩阵的行和列是 GPU，交叉格才是该 GPU pair 的支持状态。矩阵中“可支持”不等于实际复制一定走 P2P，也不说明实际速度；还要用 CUDA peer-access API 和带宽实验验证。
+
+`topo -m` 的行列交叉格表示“两个设备之间最近的已识别路径”。`X` 表示设备自己，`NV#` 中的 `#` 是 NVLink 数量，而 `SYS` 表示路径穿过 PCIe 和 NUMA 节点之间的 SMP 互联。右侧的 `CPU Affinity`、`Memory Affinity`、`NUMA Affinity` 用来选择更近的 CPU 线程和 host memory；它们不是 GPU 编号。
+
 Non-Uniform Memory Access（NUMA，非一致内存访问）亲和性同样重要：负责 rank 的 CPU thread、pinned memory 和 NIC interrupt 若跨 NUMA socket，可能产生额外延迟。
 
 ## 从拓扑到 rank placement
@@ -73,6 +86,7 @@ Non-Uniform Memory Access（NUMA，非一致内存访问）亲和性同样重要
 ## 资料
 
 - [NVIDIA NVLink](https://www.nvidia.com/en-us/data-center/nvlink/)
+- [`nvidia-smi` Topology 命令](https://docs.nvidia.com/deploy/nvidia-smi/index.html#topology)
 - [DGX SuperPOD GB200 Network Fabrics](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/network-fabrics.html)
 - [CUDA Multi-GPU Systems](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/multi-gpu-systems.html)
 

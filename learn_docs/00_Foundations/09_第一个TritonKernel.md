@@ -12,6 +12,10 @@
 python learn_docs/labs/vector_add.py
 ```
 
+这个脚本没有命令行参数。第一行输出会显示 GPU 名称和 PyTorch 版本；之后每行是一个字典：`n` 是向量元素个数，`torch_ms_median_min_max` 和 `triton_ms_median_min_max` 依次是中位数、最小值和最大值，单位都是毫秒。
+
+正确性检查成功时不会额外打印“通过”；整个程序正常退出就表示所有 `assert_close` 检查已通过。如果环境没有可用 CUDA，脚本会以 `This lesson requires CUDA and Triton` 错误退出；这是环境前置条件不满足，不是 Kernel 数值检查失败。
+
 ## 2. Program、tile 与尾块
 
 Triton 的 program instance 处理一块元素。若 `BLOCK=256`，第 `p` 个实例处理 `p*256 + [0,...,255]`。这不是要求你把每个元素固定绑定到某个物理 CUDA Core；实际线程和指令映射由编译与硬件执行决定。

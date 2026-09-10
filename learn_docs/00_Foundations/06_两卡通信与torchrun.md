@@ -27,6 +27,19 @@ torchrun --standalone --nproc-per-node=2 learn_docs/labs/collectives.py --backen
 torchrun --standalone --nproc-per-node=2 learn_docs/labs/collectives.py --backend nccl
 ```
 
+这条命令要分成“启动器参数”和“教学脚本参数”来读：
+
+| 输入部分 | 作用 |
+|---|---|
+| `torchrun` | PyTorch 分布式启动器，负责创建 worker 进程并设置 rank 相关环境变量 |
+| `--standalone` | 使用本机独立 rendezvous（会合）服务，适合这个单机示例 |
+| `--nproc-per-node=2` | 在当前节点启动 2 个 worker；不是让一个进程开 2 个线程 |
+| `learn_docs/labs/collectives.py` | 每个 worker 都执行的 Python 脚本 |
+| `--backend gloo` | 传给教学脚本，选择 Gloo；本例中 tensor 放在 CPU |
+| `--backend nccl` | 传给教学脚本，选择 NCCL；需要 CUDA-enabled PyTorch 和至少两张可见 GPU |
+
+脚本正常时会打印两行字典，一行对应一个 worker。`pid` 应不同，`rank`/`local_rank` 应分别为 0 和 1，`world_size` 应为 2，`sum` 应为 `[3.0, 3.0]`，`gather` 应包含两个 rank 的原始输入。两行谁先出现不固定，不能用日志顺序推断 rank 顺序。
+
 脚本只创建小 tensor，打印身份并检查 AllReduce/AllGather 的结果，正常退出时销毁进程组。日志先后顺序可能变化，结果不应变化。初始化失败先查两个 worker 是否都启动，再查设备与 backend；不要先调整几十个 NCCL 环境变量。
 
 ## 3. 手算两种结果
