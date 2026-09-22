@@ -51,7 +51,7 @@ Choosing SGLang as the single rollout backend is also intentional. Multi-backend
 
 ## Correctness, Stability, and CI
 
-slime is developed as RL infrastructure, where "the script runs" is not enough. The project maintains CPU unit tests, contract tests for customization hooks, and GPU end-to-end tests covering dense and MoE models, Megatron training paths, SGLang deployment configurations, checkpointing, numerical precision, async rollout, OPD, PPO-style workflows, and debug rollout-then-train replay.
+slime is developed as RL infrastructure, where "the script runs" is not enough. The project maintains CPU unit tests, contract tests for customization hooks, and GPU end-to-end tests covering dense and MoE models, Megatron training paths, SGLang deployment configurations, checkpointing, numerical precision, fully-async rollout, OPD, PPO-style workflows, and debug rollout-then-train replay.
 
 Useful engineering docs:
 
@@ -102,7 +102,7 @@ We also provide examples for some use cases not covered in the quick start guide
 
 For agentic RL workloads, the following examples plug into the standard rollout / Data Buffer loop through customization interfaces — they are not separate frameworks:
 
-- [`examples/multi_agent`](examples/multi_agent/README.md): Multi-agent rollout via a custom `--rollout-function-path`.
+- [`examples/multi_agent`](examples/multi_agent/README.md): Multi-agent generation via `--custom-generate-function-path` inside the standard rollout loop.
 - [`examples/search-r1`](examples/search-r1/): Search/RAG-style multi-turn generation via `--custom-generate-function-path`.
 - [`examples/fully_async`](examples/fully_async/README.md): Fully-async rollout, useful for long-tail agentic generation where some samples take much longer than others.
 - [`examples/coding_agent_rl`](examples/coding_agent_rl/README.md): End-to-end SWE coding-agent RL with sandboxed tool use, test-based rewards, and token-correct trajectory segments via `--custom-generate-function-path`.
@@ -131,7 +131,7 @@ These are not just demos. They are independent systems that use slime as a reusa
 
 ### 🦞 OpenClaw-RL: Train a Personalized Clawbot Simply by Talking to It
 
-[**OpenClaw-RL**](https://github.com/Gen-Verse/OpenClaw-RL) is an RL server for personalized OpenClaw agents. It hosts the OpenClaw model and improves it from prior conversations across deployments, while slime's asynchronous RL infrastructure prevents training from interfering with API serving. It supports two automatic optimization methods: GRPO with binary feedback inferred from subsequent states, and on-policy distillation that extracts hindsight hints from later feedback for the current policy.
+[**OpenClaw-RL**](https://github.com/Gen-Verse/OpenClaw-RL) is an RL server for personalized OpenClaw agents. It hosts the OpenClaw model and improves it from prior conversations across deployments, while slime's decoupled RL infrastructure prevents training from interfering with API serving. It supports two automatic optimization methods: GRPO with binary feedback inferred from subsequent states, and on-policy distillation that extracts hindsight hints from later feedback for the current policy.
 
 ### ⚛️ P1: Mastering Physics Olympiads with Reinforcement Learning
 

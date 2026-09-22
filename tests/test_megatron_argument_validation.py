@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import sys
 import types
@@ -248,7 +249,6 @@ def make_slime_validate_args(**overrides):
         rollout_max_prompt_len=None,
         train_backend="megatron",
         release_train=False,
-        keep_old_actor=False,
         only_train_params_name_list=None,
         freeze_params_name_list=None,
         update_weight_transport="nccl",
@@ -387,6 +387,19 @@ def test_update_weight_delta_requires_local_checkpoint_dir(monkeypatch):
 
     with pytest.raises(ValueError, match="requires --update-weight-local-checkpoint-dir"):
         module.slime_validate_args(args)
+
+
+@pytest.mark.unit
+def test_force_fp8_ue8m0_scale_argument(monkeypatch):
+    module = load_slime_arguments_module(monkeypatch)
+    parser = argparse.ArgumentParser()
+    module.get_slime_extra_args_provider()(parser)
+
+    defaults = parser.parse_args(["--rollout-batch-size", "1"])
+    configured = parser.parse_args(["--rollout-batch-size", "1", "--force-fp8-ue8m0-scale"])
+
+    assert defaults.force_fp8_ue8m0_scale is False
+    assert configured.force_fp8_ue8m0_scale is True
 
 
 if __name__ == "__main__":
