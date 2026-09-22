@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A8 · 参考。
-> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[GPU、tensor 与通信基础](<../../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：RL 相关入口可提前；Hybrid/Mamba/多模态/Energon 后续按需。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 <a id="beginner-example"></a>

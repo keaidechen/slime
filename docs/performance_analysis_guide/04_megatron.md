@@ -26,9 +26,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A3/A6 · 必修。
-> **前置**：[通信与 tensor 基础](<../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **前置**：[通信与 tensor 基础](<../../learn_docs/07_Communication/两卡通信与torchrun.md>)。
 > **首读/二读**：step 分解、并行扫描；原理链接 A3，源码定位链接 Megatron。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 Megatron 的难点不是 kernel 更多，而是同一个 step 同时包含多种并行通信和流水线调度。分析目标是把 step time 拆成可行动的部分，并找到最慢 rank 的关键路径。

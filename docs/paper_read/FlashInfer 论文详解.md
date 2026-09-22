@@ -65,9 +65,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4→A8 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：A4 看 backend 的职责与 KV layout；A8 深入 ragged/page/kernel 调度。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：FlashInfer 是面向大语言模型推理的高性能算子与 Attention runtime（运行时）库；LLM = **Large Language Model（大语言模型）**；MLSys = **Conference on Machine Learning and Systems（机器学习与系统会议）**；AI Infra = **Artificial Intelligence Infrastructure（人工智能基础设施）**；KV Cache = **Key-Value Cache（键值缓存）**；JIT = **Just-In-Time（即时编译）**；GPU = **Graphics Processing Unit（图形处理器）**；MHA = **Multi-Head Attention（多头注意力）**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**；MLA = **Multi-head Latent Attention（多头潜在注意力）**；IR = **Intermediate Representation（中间表示）**；DSL = **Domain-Specific Language（领域专用语言）**；OI = **Operational Intensity（运算强度，单位数据搬运对应的计算量）**；LSE = **Log-Sum-Exp（对指数和取对数的数值稳定统计量）**；BSR = **Block Sparse Row（块稀疏行存储格式）**；TTFT = **Time To First Token（首 Token 延迟）**；ITL = **Inter-Token Latency（相邻 Token 延迟）**。本文中的 **kernel** 是 GPU 核函数，**scheduler** 是调度器，**block sparse** 是块稀疏表示，**composable format** 指可组合的数据布局抽象。 另外：CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；HBM = **High Bandwidth Memory（高带宽内存）**；SM = **Streaming Multiprocessor（流式多处理器）**；CTA = **Cooperative Thread Array（协作线程阵列）**；CPU = **Central Processing Unit（中央处理器）**；FP16 = **16-bit Floating Point（16 位浮点格式）**；I/O = **Input/Output（输入/输出）**；API = **Application Programming Interface（应用程序编程接口）**；LLVM 是现代编译器基础设施项目（名称历史上源于 **Low Level Virtual Machine**）；ARM 是主流精简指令集 CPU 架构；MLC = **Machine Learning Compilation（机器学习编译）**。

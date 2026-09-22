@@ -20,9 +20,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5/A6 · 必修。
-> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：分离两侧、测换权/offload、观察角色关键路径与质量约束。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 Slime 的性能问题不是“训练性能 + 推理性能”的简单相加。一个 rollout step 里还包含数据准备、reward、优势计算、权重同步、显存 offload/onload，以及训练侧和推理侧互相等待。真正要优化的是端到端关键路径，而不是某个局部 kernel 的峰值。

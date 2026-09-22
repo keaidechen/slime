@@ -24,9 +24,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1→A8 · 分层必修。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：先 nsys/NVTX；热点确定后 ncu；Triton/SASS 在 A8。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本章建立“先宏观、后微观”的工具链：Nsight Systems 找到关键路径和热点 kernel，Nsight Compute 解释单 kernel 为什么慢，Triton/二进制工具继续检查 IR、PTX 和 SASS。

@@ -37,9 +37,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4 · 必修。
-> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：先读普通请求的 Scheduler/KV/ModelRunner 分工；计算模型回读，高级能力按专题进入。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 阅读位置：SGLang 源码之前的概念课。先读普通文本生成的 Scheduler、KV、ModelRunner 分工，再读高级能力；实际符号与分支以本仓库快照及后续源码章节为准。

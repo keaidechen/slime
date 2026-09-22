@@ -14,9 +14,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A0 · 分层必修。
-> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **前置**：[系统概览](<../../learn_docs/11_RL_Systems/RL系统全景.md>)。
 > **首读/二读**：首读工程问题地图；各框架近况与 Roadmap 为版本化参考。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 本文是"从 0 系统学习 RL infra"系列的第一篇：先建立领域地图，再逐篇深入本仓库（slime）的代码。

@@ -37,9 +37,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4→A5 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：先普通文本请求的对象和跨进程流，再读异常、控制请求与特殊分支。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本文沿着一条普通文本生成请求，解释它从 HTTP 入口进入 SGLang，到 GPU 完成 prefill/decode，再到文本通过 HTTP 返回的完整代码路径。

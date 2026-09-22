@@ -35,9 +35,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4→A8 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：首读 prefill/decode 干扰与传 KV 成本；PD 部署与复现实验专项。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；GPU = **Graphics Processing Unit（图形处理器）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；P/D 或 PD = **Prefill/Decode（预填充/解码）**；TTFT = **Time To First Token（首 Token 延迟）**；TPOT = **Time Per Output Token（平均每个输出 Token 的耗时）**；ITL = **Inter-Token Latency（相邻输出 Token 延迟）**；TBT = **Time Between Tokens（相邻 Token 时间间隔）**；SLO = **Service Level Objective（服务等级目标）**；P2P = **Peer-to-Peer（点到点通信）**；RDMA = **Remote Direct Memory Access（远程直接内存访问）**；NIXL = **NVIDIA Inference Xfer Library（NVIDIA 推理数据传输库，Xfer 即 transfer）**。**goodput（有效吞吐量）**只统计满足 SLO 的请求吞吐；**disaggregation（解耦/分离部署）**指把 Prefill 与 Decode 放到不同资源池。 另外：KV Cache = **Key-Value Cache（键值缓存）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；HBM = **High Bandwidth Memory（高带宽内存）**；AI = **Artificial Intelligence（人工智能）**。
@@ -45,7 +45,7 @@
 > 论文：Yinmin Zhong et al., **DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving**，OSDI 2024。
 >
 > 推荐前置：
-> - [Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)
+> - [Transformer 与 KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)
 > - `06_Orca与Continuous-Batching论文详解.md`
 > - `02_PagedAttention-vLLM论文详解.md`
 >

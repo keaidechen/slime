@@ -18,9 +18,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5/A7 · 专项。
-> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：基础闭环后再做多轮 Agent；不作为第一次跑 RL 的默认实验。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 本文档基于 `examples/tau-bench/run_qwen3_4B.sh` 与 slime 源码逐行梳理，重点讲解 **rollout（生成/采样）**、**训练（Megatron actor 更新）** 以及 **与 sglang 训练引擎的对接** 三部分，并顺着代码逻辑盘点其余模块。最后用「一条数据」贯穿所有阶段，展示其字段如何逐步变化。

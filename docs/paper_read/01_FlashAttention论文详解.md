@@ -39,9 +39,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4→A8 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：先读 IO 与 tiling 的动机、精确 attention；online softmax 推导专项二读。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：I/O = **Input/Output（输入/输出）**，本文主要指 GPU 显存读写和数据搬运；HBM = **High Bandwidth Memory（高带宽内存，GPU 主显存）**；SRAM = **Static Random-Access Memory（静态随机存取存储器，本文主要指片上高速存储）**；GPU = **Graphics Processing Unit（图形处理器）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；FLOP = **Floating-Point Operation（一次浮点运算）**，FLOPs 表示浮点运算次数。本文中的 **kernel** 是 GPU 核函数，**tiling** 是分块计算，**online softmax** 是“在线/增量 Softmax”，即扫描分块时维护全局归一化统计量，**IO-aware** 指“显式把数据搬运成本纳入算法设计”。 另外：LLM = **Large Language Model（大语言模型）**；AI = **Artificial Intelligence（人工智能）**；CPU = **Central Processing Unit（中央处理器）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；Q/K/V = **Query/Key/Value（查询/键/值向量）**；KV = **Key/Value（键/值）**；FA1/FA2 = **FlashAttention-1/2**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**；ICLR = **International Conference on Learning Representations（国际学习表征会议）**。
@@ -52,7 +52,7 @@
 >
 > 发表：NeurIPS 2022，arXiv:2205.14135
 >
-> **前置阅读**：先读[GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)。本文不再重复解释 HBM、SRAM、kernel、tiling、memory-bound 等基础概念。
+> **前置阅读**：先读[GPU 执行与内存基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)。本文不再重复解释 HBM、SRAM、kernel、tiling、memory-bound 等基础概念。
 
 ---
 

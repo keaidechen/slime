@@ -20,9 +20,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4/A5 · 必修。
-> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：请求规范化、sampling、tokenizer/template、logprob 与 RL 语义。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本章不重复完整的 scheduler/GPU 调用链；那部分见 [1.2 进程拓扑与请求链路](../01_foundations/02_process_topology_and_request_path.md)。这里集中回答四个问题：OpenAI 请求在哪里变成内部对象，默认采样参数由谁决定，logits 到 token 的变换顺序是什么，以及 streaming/stop 为什么不能只当作返回格式。

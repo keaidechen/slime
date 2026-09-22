@@ -7,4 +7,4 @@
 - [SGLang 概念课](../sglang_code_walkthrough/01_foundations/00_runtime_concepts.md)：本课程主线。
 - [技术演化总览](../paper_read/11_LLM推理Runtime技术演化总览.md)：论文与 Runtime 的不同层次。
 
-原材料的版本与性能条件需要随实验核对。统一使用[推理性能教程](../performance_analysis_guide/05_inference.md)设计公平负载，回到[总学习清单](../../learn_docs/学习清单.md)安排时间。
+原材料的版本与性能条件需要随实验核对。统一使用[推理性能教程](../performance_analysis_guide/05_inference.md)设计公平负载，回到[总学习清单](../../learn_docs/guides/16周实践路线.md)安排时间。

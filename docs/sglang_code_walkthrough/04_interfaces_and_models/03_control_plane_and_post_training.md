@@ -22,9 +22,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5 · 必修。
-> **前置**：[Ray、队列与前置系统](<../../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：在线换权、暂停/恢复、cache 失效、失败边界；不假设事务保证。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 控制面请求会改变整个服务的共享状态，不能按普通 inference request 理解。本章重点回答：换权时在途请求怎样隔离、哪些路径能回滚、KV/Graph 为什么要失效、LoRA 如何安全上下线，以及 RL 系统应如何建立 policy version 闭环。

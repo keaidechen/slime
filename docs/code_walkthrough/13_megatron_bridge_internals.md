@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5 · 必修。
-> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：HF↔Megatron、QKV/TP/EP 的往返校验；旧 Bridge 文件名暂保留。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 衔接 [04_weight_sync_and_memory.md](04_weight_sync_and_memory.md)、[06_megatron_backend_and_mbridge.md](06_megatron_backend_and_mbridge.md) 与 [Megatron 训练主线](../megatron_code_walkthrough/01_foundations/02_training_mainline.md)。

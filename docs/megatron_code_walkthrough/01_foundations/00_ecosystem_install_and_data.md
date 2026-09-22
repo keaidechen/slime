@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A3 · 必修。
-> **前置**：[通信与 tensor 基础](<../../../learn_docs/00_Foundations/06_两卡通信与torchrun.md>)。
+> **前置**：[通信与 tensor 基础](<../../../learn_docs/07_Communication/两卡通信与torchrun.md>)。
 > **首读/二读**：环境、数据、第一次 step；明确预训练示例与 RL backend 的关系。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 <a id="beginner-example"></a>

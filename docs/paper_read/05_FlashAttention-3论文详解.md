@@ -30,9 +30,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A8 · 专项。
-> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：异步搬运/计算、流水线与资源；实验能力以实际 H20 环境核验。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：FA1/FA2/FA3 分别指 **FlashAttention-1/2/3**；GPU = **Graphics Processing Unit（图形处理器）**；TMA = **Tensor Memory Accelerator（张量内存加速器，用于异步搬运大块张量）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级异步矩阵乘加）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；HBM = **High Bandwidth Memory（高带宽内存）**；FP8 = **8-bit Floating Point（8 位浮点格式）**；FP16 = **16-bit Floating Point（16 位浮点格式）**。本文中的 **pipeline（流水线）**指把数据搬运、矩阵乘法和 Softmax 等阶段重叠执行，**warp specialization（warp 专职化）**指让不同 warp group 分别长期承担 producer/consumer 等不同职责。 另外：LLM = **Large Language Model（大语言模型）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；Q/K/V = **Query/Key/Value（查询/键/值向量）**，QKᵀ 与 PV 分别对应 Attention 的两次主要矩阵乘；AI = **Artificial Intelligence（人工智能）**；CUTLASS = **CUDA Templates for Linear Algebra Subroutines（NVIDIA 高性能线性代数 CUDA 模板库）**。H100/A100/B200 是 NVIDIA GPU 产品型号，不属于需要展开的缩写。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
@@ -40,7 +40,7 @@
 > 论文：Jay Shah et al., **FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision**，2024，NeurIPS 2024。
 >
 > 推荐前置：
-> - [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)，再读 [Hopper 异步硬件专题](../../learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md)中的 TMA/WGMMA 部分
+> - [GPU 执行与内存基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)，再读 [Hopper 异步硬件专题](../../learn_docs/03_Hardware_Systems/Hopper异步硬件专题.md)中的 TMA/WGMMA 部分
 > - `01_FlashAttention论文详解.md`
 > - `04_FlashAttention-2论文详解.md`
 >

@@ -14,4 +14,4 @@
 
 随 SGLang 主线先读 PagedAttention、Orca、RadixAttention 的首读部分；FA1 建立 IO 直觉，其余按瓶颈深入。[技术演化总览](11_LLM推理Runtime技术演化总览.md)作为地图。
 
-配套：[GPU 基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)、[KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)、[SGLang 概念](../sglang_code_walkthrough/01_foundations/00_runtime_concepts.md)、[Runtime 对比](../runtime_comparisons/README.md)。论文结论按原工作负载理解；当前实现以本仓库代码为准。
+配套：[GPU 基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)、[KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)、[SGLang 概念](../sglang_code_walkthrough/01_foundations/00_runtime_concepts.md)、[Runtime 对比](../runtime_comparisons/README.md)。论文结论按原工作负载理解；当前实现以本仓库代码为准。

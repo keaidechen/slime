@@ -14,9 +14,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1/A3/A4/A5/A8 · 必修。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：实验 1–2 在 A1，3 在 A8 或热点出现时，4/5/6 随训练/推理/RL。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 这六个实验按依赖关系排列。前 3 个单卡即可完成；后 3 个需要能够运行对应框架。每个实验都要求保存原始结果，不以截图代替数据。

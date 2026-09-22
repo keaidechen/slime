@@ -20,9 +20,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1–A8 · 参考。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：首次读最先掌握的 30 词，后续随问题查，不先背完整词典。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 这不是需要背诵的单词表。第一次阅读其他章节时，遇到缩写就回到这里查。每个词条都回答三个问题：全称是什么、中文是什么意思、在性能分析中应该想到什么。

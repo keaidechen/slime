@@ -30,9 +30,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4/A8 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：SGLang 主线后比较 token budget、KV owner 与 worker 边界。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：vLLM 是高吞吐大语言模型推理/服务框架，项目名不强行字母展开；V1 指 vLLM 的新一代运行时架构；LLM = **Large Language Model（大语言模型）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；API = **Application Programming Interface（应用程序编程接口）**；P/D = **Prefill/Decode（预填充/解码）**；TP = **Tensor Parallelism（张量并行）**；DP = **Data Parallelism（数据并行）**；NCCL = **NVIDIA Collective Communications Library（NVIDIA 集合通信库）**；HBM = **High Bandwidth Memory（高带宽内存）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；MoE = **Mixture of Experts（混合专家模型）**。本文中的 **Engine Core** 是调度和状态管理核心，**worker** 是执行模型计算的工作进程，**Model Runner** 是组织一次模型前向执行的运行组件。 另外：HTTP = **Hypertext Transfer Protocol（超文本传输协议）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；AI = **Artificial Intelligence（人工智能）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**。

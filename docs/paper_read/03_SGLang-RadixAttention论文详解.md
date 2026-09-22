@@ -50,9 +50,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：prefix 复用、radix tree、锁/驱逐与调度；论文其他设计第二遍。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：SGLang 是项目名，可理解为“面向结构化生成与高性能 LLM serving 的框架”；LLM = **Large Language Model（大语言模型）**；LM = **Language Model（语言模型）**；KV Cache = **Key-Value Cache（键值缓存）**；RAG = **Retrieval-Augmented Generation（检索增强生成）**；JSON = **JavaScript Object Notation（常用结构化数据格式）**；LRU = **Least Recently Used（最近最少使用缓存淘汰策略）**；DFS = **Depth-First Search（深度优先搜索）**；FCFS = **First-Come, First-Served（先到先服务）**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**。本文中的 **runtime** 指运行时系统，**prefix cache** 指复用相同输入前缀已计算出的状态，**cache-aware scheduling（缓存感知调度）** 指调度决策会显式考虑缓存命中与复用价值。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；API = **Application Programming Interface（应用程序编程接口）**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；AI = **Artificial Intelligence（人工智能）**；OS = **Operating System（操作系统）**；JIT = **Just-In-Time（即时编译）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
@@ -63,7 +63,7 @@
 >
 > arXiv:2312.07104；后发表于 NeurIPS 2024
 >
-> **前置阅读**：先读[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)和[PagedAttention 论文详解](02_PagedAttention-vLLM论文详解.md)。本文默认你已经理解 KV Cache、continuous batching 和 paged KV 的基本概念。
+> **前置阅读**：先读[Transformer 与 KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)和[PagedAttention 论文详解](02_PagedAttention-vLLM论文详解.md)。本文默认你已经理解 KV Cache、continuous batching 和 paged KV 的基本概念。
 
 ---
 

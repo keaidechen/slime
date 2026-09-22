@@ -46,9 +46,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：逻辑块/物理块/浪费/COW 的例子必读；论文实验与实现差异第二遍。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：KV Cache = **Key-Value Cache（键值缓存）**；LLM = **Large Language Model（大语言模型）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**；HBM = **High Bandwidth Memory（高带宽内存，GPU 主显存）**；OS = **Operating System（操作系统）**；FCFS = **First-Come, First-Served（先到先服务）**；RAM = **Random-Access Memory（随机存取存储器）**。vLLM 是项目名，本文把它理解为“高吞吐 LLM 推理/服务框架”，不对项目名本身生造字母展开。**Virtual Memory（虚拟内存）**用逻辑地址抽象物理内存，**page（页）**是分页管理的基本单位，**fragmentation（内存碎片）**是分配方式造成的不可有效利用空间，**Copy-on-Write（写时复制）**是在真正修改共享数据时才复制，**preemption（抢占）**是在资源不足时暂停或移出部分请求。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**。
@@ -59,7 +59,7 @@
 >
 > 发表：SOSP 2023，arXiv:2309.06180
 >
-> **前置阅读**：[GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)和[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)。本文默认你已经知道 HBM、KV Cache、prefill/decode、page、internal/external fragmentation 的基本含义。
+> **前置阅读**：[GPU 执行与内存基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)和[Transformer 与 KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)。本文默认你已经知道 HBM、KV Cache、prefill/decode、page、internal/external fragmentation 的基本含义。
 
 ---
 

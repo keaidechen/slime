@@ -1,4 +1,4 @@
-"""Check the learning corpus' local Markdown links, anchors, and migration records.
+"""Check encyclopedia and related docs: links, anchors, catalog, and migrations.
 
 Run from any directory: python tools/validate_learning_docs.py
 GPU/framework examples are not executed by this validator.
@@ -140,6 +140,23 @@ def audit():
             elif row.get('anchor') and row['anchor'] not in anchors(target.read_text(encoding='utf-8')):
                 errors.append({'kind': 'migration-missing-anchor', 'target': row['destination'],
                                'anchor': row['anchor']})
+    catalog_path = ROOT/'learn_docs/encyclopedia_catalog.json'
+    if catalog_path.exists():
+        catalog = json.loads(catalog_path.read_text(encoding='utf-8'))['documents']
+        paths = [row['path'] for row in catalog]
+        ids = [row['id'] for row in catalog]
+        if len(paths) != len(set(paths)) or len(ids) != len(set(ids)):
+            errors.append({'kind': 'duplicate-catalog-entry'})
+        current = {p.relative_to(ROOT).as_posix() for p in (ROOT/'learn_docs').rglob('*.md')}
+        for path in sorted(current - set(paths)):
+            errors.append({'kind': 'uncatalogued-document', 'target': path})
+        for path in sorted(set(paths) - current):
+            errors.append({'kind': 'catalog-missing-document', 'target': path})
+        for row in catalog:
+            for relation in row.get('related', []):
+                if not (ROOT/relation['path']).is_file():
+                    errors.append({'kind': 'catalog-missing-relation', 'file': row['path'],
+                                   'target': relation['path']})
     for file in (ROOT/'learn_docs/labs').glob('*.py'):
         try:
             ast.parse(file.read_text(encoding='utf-8'), filename=str(file))

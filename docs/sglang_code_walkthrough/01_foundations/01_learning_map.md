@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4 · 必修。
-> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：训练与推理差异、指标、KV 核算；复杂模型术语按需回查。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 先读[Runtime 概念课](00_runtime_concepts.md)，再跟一条普通文本请求。通用 GPU、KV、并行与指标分别在基础课和性能教材维护，本页只负责源码阅读顺序。
@@ -40,4 +40,4 @@ sglang/python/sglang/srt/
 
 ## 配套练习
 
-先运行一个请求，再做同前缀/异前缀、长度/并发、完成/取消的控制实验。具体步骤统一由[推理性能教材](../../performance_analysis_guide/05_inference.md)承担；所有框架的共同前置见[基础课程](../../../learn_docs/00_Foundations/README.md)。
+先运行一个请求，再做同前缀/异前缀、长度/并发、完成/取消的控制实验。具体步骤统一由[推理性能教材](../../performance_analysis_guide/05_inference.md)承担；所有框架的共同前置见[基础课程](../../../learn_docs/00_Physical_Foundations/README.md)。

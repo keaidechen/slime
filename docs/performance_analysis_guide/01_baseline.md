@@ -20,9 +20,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1 · 必修。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：固定环境、workload、重复统计；建立 H20 环境记录。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本章完成后，你会得到一个不依赖高级 profiler 的基线包：环境、启动命令、workload、端到端指标和系统资源曲线。后续所有分析都从它开始。

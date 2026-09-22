@@ -18,9 +18,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1 · 必修。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：延迟/吞吐/关键路径/测量边界，先于专业 profiler。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本章不使用 profiler。目标是先建立一套不会混淆的语言。你需要知道“测什么”“为什么慢”和“下一步该看哪里”。

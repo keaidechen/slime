@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A7 · 必修。
-> **前置**：[对应系统的基础实践](<../../../learn_docs/学习清单.md>)。
+> **前置**：[对应系统的基础实践](<../../../learn_docs/guides/16周实践路线.md>)。
 > **首读/二读**：模型/backend 契约、数值容差与回归，供首次代码改动使用。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 <a id="beginner-example"></a>

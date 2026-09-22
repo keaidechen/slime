@@ -1,0 +1,2189 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "id": "00_Physical_Foundations/README",
+      "path": "learn_docs/00_Physical_Foundations/README.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "物理基础：计算、存储与通信",
+      "source": "learn_docs/00_Foundations/README.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "00_Physical_Foundations/从一次矩阵乘到分布式训练",
+      "path": "learn_docs/00_Physical_Foundations/从一次矩阵乘到分布式训练.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "贯穿案例：从一次矩阵乘到分布式训练",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/信息与数字电路",
+      "path": "learn_docs/00_Physical_Foundations/信息与数字电路.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "bit、逻辑电平、CMOS"
+      ],
+      "related": [],
+      "title": "信息与数字电路：从物理状态到 bit",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/存储器件与层次",
+      "path": "learn_docs/00_Physical_Foundations/存储器件与层次.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "SRAM、DRAM、HBM、NAND"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/04_Memory_Storage/地址转换与内存分配.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "存储：从物理状态到内存与持久化层次",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/局部性与数据移动",
+      "path": "learn_docs/00_Physical_Foundations/局部性与数据移动.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "局部性、算术强度、Roofline"
+      ],
+      "related": [],
+      "title": "计算、存储与通信的交汇：局部性、复用和数据移动",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/能量封装与物理边界",
+      "path": "learn_docs/00_Physical_Foundations/能量封装与物理边界.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "Die、封装、功率、能量"
+      ],
+      "related": [],
+      "title": "能量、封装与物理边界",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/计算电路与处理器",
+      "path": "learn_docs/00_Physical_Foundations/计算电路与处理器.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "流水线、SIMD、SIMT、FMA"
+      ],
+      "related": [],
+      "title": "计算：从算术电路到 CPU、GPU 与矩阵单元",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "00_Physical_Foundations/通信信号与链路",
+      "path": "learn_docs/00_Physical_Foundations/通信信号与链路.md",
+      "domain": "00_Physical_Foundations",
+      "kind": "article",
+      "aliases": [
+        "串行化、lane、带宽、传播延迟"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/07_Communication/Collective通信算法.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "通信：从电信号和光信号到可靠的数据链路",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "01_Math_Numerics/PyTorch张量与自动微分",
+      "path": "learn_docs/01_Math_Numerics/PyTorch张量与自动微分.md",
+      "domain": "01_Math_Numerics",
+      "kind": "article",
+      "aliases": [
+        "view、clone、detach、allocator"
+      ],
+      "related": [],
+      "title": "PyTorch 的系统视角：张量、存储、复制与自动微分",
+      "source": "learn_docs/00_Foundations/02_PyTorch张量与自动微分.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "01_Math_Numerics/README",
+      "path": "learn_docs/01_Math_Numerics/README.md",
+      "domain": "01_Math_Numerics",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "数学、数值与计算基础",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "01_Math_Numerics/张量形状与复杂度",
+      "path": "learn_docs/01_Math_Numerics/张量形状与复杂度.md",
+      "domain": "01_Math_Numerics",
+      "kind": "article",
+      "aliases": [
+        "Tensor、shape、stride、broadcast"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/统一切分语言.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "张量、形状、布局与复杂度",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "01_Math_Numerics/浮点数与低精度",
+      "path": "learn_docs/01_Math_Numerics/浮点数与低精度.md",
+      "domain": "01_Math_Numerics",
+      "kind": "article",
+      "aliases": [
+        "FP16、BF16、量化、scale"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/训练步与优化器.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "浮点数、数值误差与低精度计算",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "01_Math_Numerics/计算图与自动微分",
+      "path": "learn_docs/01_Math_Numerics/计算图与自动微分.md",
+      "domain": "01_Math_Numerics",
+      "kind": "article",
+      "aliases": [
+        "Autograd、VJP、梯度累积"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/训练显存优化.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "计算图、自动微分与状态生命周期",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "02_Model_Architecture/Attention设计空间与演进",
+      "path": "learn_docs/02_Model_Architecture/Attention设计空间与演进.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [
+        "MHA、MQA、GQA、MLA"
+      ],
+      "related": [],
+      "title": "Attention 的设计空间与问题演进",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "02_Model_Architecture/README",
+      "path": "learn_docs/02_Model_Architecture/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "模型结构与计算过程",
+      "source": "learn_docs/model_arc/README.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/Transformer与Attention基础",
+      "path": "learn_docs/02_Model_Architecture/Transformer与Attention基础.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [
+        "Transformer、QKV、FFN、Mask"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/10_Inference_Serving/推理内存系统.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "Transformer 与 Attention：从 token 到一层完整计算",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/KV压缩与稀疏访问",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/KV压缩与稀疏访问.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "KV压缩与稀疏访问",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/README",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "模型架构案例与历史资料",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/数值优化器与预测",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/数值优化器与预测.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "数值优化器与预测",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/模型路线与条件计算",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/模型路线与条件计算.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "模型路线与条件计算",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/残差与深度方向",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/残差与深度方向.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "残差与深度方向",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/系统综合与资料",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/系统综合与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "系统综合与资料",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/architecture_cases/线性状态与混合架构",
+      "path": "learn_docs/02_Model_Architecture/architecture_cases/线性状态与混合架构.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "线性状态与混合架构",
+      "source": "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/README",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [
+        "Linear Attention、Delta、SSM、Hybrid"
+      ],
+      "related": [],
+      "title": "线性注意力：递推状态与混合记忆",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/基本定义与状态记忆",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/基本定义与状态记忆.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "基本定义与状态记忆",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/并行执行与反向传播",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/并行执行与反向传播.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "并行执行与反向传播",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/检索边界与混合模型",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/检索边界与混合模型.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "检索边界与混合模型",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/运行时并行与数值",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/运行时并行与数值.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "运行时并行与数值",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/递推结构与演进",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/递推结构与演进.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "递推结构与演进",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/linear_attention/验证算例与资料",
+      "path": "learn_docs/02_Model_Architecture/linear_attention/验证算例与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "验证算例与资料",
+      "source": "learn_docs/model_arc/Linear-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/README",
+      "path": "learn_docs/02_Model_Architecture/mla/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "MLA：压缩 KV 表示与执行变换",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/低秩投影与矩阵吸收",
+      "path": "learn_docs/02_Model_Architecture/mla/低秩投影与矩阵吸收.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "低秩投影与矩阵吸收",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/内核并行与运行时",
+      "path": "learn_docs/02_Model_Architecture/mla/内核并行与运行时.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "内核并行与运行时",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/基础与KV表示",
+      "path": "learn_docs/02_Model_Architecture/mla/基础与KV表示.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "基础与KV表示",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/执行模式与容量",
+      "path": "learn_docs/02_Model_Architecture/mla/执行模式与容量.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "执行模式与容量",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/mla/边界验证与资料",
+      "path": "learn_docs/02_Model_Architecture/mla/边界验证与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "边界验证与资料",
+      "source": "learn_docs/model_arc/MLA.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/README",
+      "path": "learn_docs/02_Model_Architecture/moe/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [
+        "MoE、Router、Expert、Capacity"
+      ],
+      "related": [],
+      "title": "MoE：条件计算、路由与专家系统",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/专家并行与通信",
+      "path": "learn_docs/02_Model_Architecture/moe/专家并行与通信.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "专家并行与通信",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/专家算子与调度",
+      "path": "learn_docs/02_Model_Architecture/moe/专家算子与调度.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/05_Kernels/GEMM与高性能Kernel模式.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "专家算子与调度",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/成本验证与资料",
+      "path": "learn_docs/02_Model_Architecture/moe/成本验证与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "成本验证与资料",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/推理部署与模型案例",
+      "path": "learn_docs/02_Model_Architecture/moe/推理部署与模型案例.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "推理部署与模型案例",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/条件计算与数据流",
+      "path": "learn_docs/02_Model_Architecture/moe/条件计算与数据流.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "条件计算与数据流",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/训练状态与重叠",
+      "path": "learn_docs/02_Model_Architecture/moe/训练状态与重叠.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "训练状态与重叠",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/moe/路由与负载均衡",
+      "path": "learn_docs/02_Model_Architecture/moe/路由与负载均衡.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/ExpertParallelism.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "路由与负载均衡",
+      "source": "learn_docs/model_arc/MoE-Infra.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/README",
+      "path": "learn_docs/02_Model_Architecture/residual/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [
+        "Residual、Pre-Norm、RMSNorm"
+      ],
+      "related": [],
+      "title": "残差、归一化与深度方向的状态",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/初始化与深度稳定性",
+      "path": "learn_docs/02_Model_Architecture/residual/初始化与深度稳定性.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "初始化与深度稳定性",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/多流连接与状态变换",
+      "path": "learn_docs/02_Model_Architecture/residual/多流连接与状态变换.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "多流连接与状态变换",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/模型案例与设计分支",
+      "path": "learn_docs/02_Model_Architecture/residual/模型案例与设计分支.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "模型案例与设计分支",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/残差与归一化基础",
+      "path": "learn_docs/02_Model_Architecture/residual/残差与归一化基础.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "残差与归一化基础",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/深度注意力与分块",
+      "path": "learn_docs/02_Model_Architecture/residual/深度注意力与分块.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "深度注意力与分块",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/residual/系统成本验证与资料",
+      "path": "learn_docs/02_Model_Architecture/residual/系统成本验证与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "系统成本验证与资料",
+      "source": "learn_docs/model_arc/Residual-Evolution.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/sparse_attention/README",
+      "path": "learn_docs/02_Model_Architecture/sparse_attention/README.md",
+      "domain": "02_Model_Architecture",
+      "kind": "overview",
+      "aliases": [
+        "Sparse Attention、Indexer、Top-K"
+      ],
+      "related": [],
+      "title": "稀疏注意力：访问集合与选择成本",
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/sparse_attention/参考实现验证与资料",
+      "path": "learn_docs/02_Model_Architecture/sparse_attention/参考实现验证与资料.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "参考实现验证与资料",
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/sparse_attention/方法比较与成本边界",
+      "path": "learn_docs/02_Model_Architecture/sparse_attention/方法比较与成本边界.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "方法比较与成本边界",
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/sparse_attention/索引器与Kernel数据流",
+      "path": "learn_docs/02_Model_Architecture/sparse_attention/索引器与Kernel数据流.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "索引器与Kernel数据流",
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "02_Model_Architecture/sparse_attention/访问集合与稀疏模式",
+      "path": "learn_docs/02_Model_Architecture/sparse_attention/访问集合与稀疏模式.md",
+      "domain": "02_Model_Architecture",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "访问集合与稀疏模式",
+      "source": "learn_docs/model_arc/Sparse-Attention.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/CUDA_Stream与依赖",
+      "path": "learn_docs/03_Hardware_Systems/CUDA_Stream与依赖.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [
+        "Stream、Event、依赖"
+      ],
+      "related": [],
+      "title": "CUDA Stream、依赖与调度层次",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/CUDA执行模型与调度",
+      "path": "learn_docs/03_Hardware_Systems/CUDA执行模型与调度.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [
+        "Warp、Block、CTA、SM、Occupancy"
+      ],
+      "related": [],
+      "title": "CUDA 执行模型与调度",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/GPU执行与内存基础",
+      "path": "learn_docs/03_Hardware_Systems/GPU执行与内存基础.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "GPU 执行与内存基础",
+      "source": "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/GPU架构演进与历史资料",
+      "path": "learn_docs/03_Hardware_Systems/GPU架构演进与历史资料.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "GPU 架构演进与历史资料",
+      "source": "learn_docs/reference/GPU架构演进与历史资料.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/Hopper异步硬件专题",
+      "path": "learn_docs/03_Hardware_Systems/Hopper异步硬件专题.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Hopper 异步硬件：TMA、WGMMA 与流水线",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/Linux与运行环境",
+      "path": "learn_docs/03_Hardware_Systems/Linux与运行环境.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Linux 与运行环境：先知道程序运行在哪里",
+      "source": "learn_docs/00_Foundations/01_Linux与运行环境.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "03_Hardware_Systems/README",
+      "path": "learn_docs/03_Hardware_Systems/README.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "计算机系统与 GPU 架构",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "03_Hardware_Systems/主机设备与执行边界",
+      "path": "learn_docs/03_Hardware_Systems/主机设备与执行边界.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "主机、设备与执行边界",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "03_Hardware_Systems/进程线程与四种异步",
+      "path": "learn_docs/03_Hardware_Systems/进程线程与四种异步.md",
+      "domain": "03_Hardware_Systems",
+      "kind": "article",
+      "aliases": [
+        "Process、Thread、Coroutine"
+      ],
+      "related": [],
+      "title": "进程、线程与四种异步：谁提交，谁执行，谁等待",
+      "source": "learn_docs/00_Foundations/03_进程线程与四种异步.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "04_Memory_Storage/GPU内存组成与显存核算",
+      "path": "learn_docs/04_Memory_Storage/GPU内存组成与显存核算.md",
+      "domain": "04_Memory_Storage",
+      "kind": "article",
+      "aliases": [
+        "allocated、reserved、显存峰值"
+      ],
+      "related": [],
+      "title": "GPU 内存组成与显存核算",
+      "source": "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "04_Memory_Storage/README",
+      "path": "learn_docs/04_Memory_Storage/README.md",
+      "domain": "04_Memory_Storage",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "内存、地址与持久化存储",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "04_Memory_Storage/地址转换与内存分配",
+      "path": "learn_docs/04_Memory_Storage/地址转换与内存分配.md",
+      "domain": "04_Memory_Storage",
+      "kind": "article",
+      "aliases": [
+        "虚拟地址、页表、TLB、碎片"
+      ],
+      "related": [],
+      "title": "地址转换、分页与内存分配",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "04_Memory_Storage/持久化与恢复语义",
+      "path": "learn_docs/04_Memory_Storage/持久化与恢复语义.md",
+      "domain": "04_Memory_Storage",
+      "kind": "article",
+      "aliases": [
+        "持久化、提交、Checksum"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/分布式Checkpoint与恢复.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "持久化、文件系统与恢复语义",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "04_Memory_Storage/进程设备与地址空间",
+      "path": "learn_docs/04_Memory_Storage/进程设备与地址空间.md",
+      "domain": "04_Memory_Storage",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "进程、设备与地址空间",
+      "source": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/CUDA算子库_CUTLASS与CuTe",
+      "path": "learn_docs/05_Kernels/CUDA算子库_CUTLASS与CuTe.md",
+      "domain": "05_Kernels",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "CUDA 算子库、CUTLASS 与 CuTe",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/GEMM与高性能Kernel模式",
+      "path": "learn_docs/05_Kernels/GEMM与高性能Kernel模式.md",
+      "domain": "05_Kernels",
+      "kind": "article",
+      "aliases": [
+        "GEMM、Tile、Grouped GEMM"
+      ],
+      "related": [],
+      "title": "GEMM、Tensor Core 与高性能 Kernel 设计模式",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/GPU内存编程与数据搬运",
+      "path": "learn_docs/05_Kernels/GPU内存编程与数据搬运.md",
+      "domain": "05_Kernels",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "GPU 内存编程与数据搬运",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/README",
+      "path": "learn_docs/05_Kernels/README.md",
+      "domain": "05_Kernels",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "Kernel 与算子实现",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/实验与排查手册",
+      "path": "learn_docs/05_Kernels/实验与排查手册.md",
+      "domain": "05_Kernels",
+      "kind": "practice",
+      "aliases": [],
+      "related": [],
+      "title": "Kernel 与编译器实验、Benchmark 和排查手册",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/案例_FlashAttention与GroupedGEMM",
+      "path": "learn_docs/05_Kernels/案例_FlashAttention与GroupedGEMM.md",
+      "domain": "05_Kernels",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "案例：FlashAttention 与 MoE Grouped GEMM",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/第一个TritonKernel",
+      "path": "learn_docs/05_Kernels/第一个TritonKernel.md",
+      "domain": "05_Kernels",
+      "kind": "practice",
+      "aliases": [],
+      "related": [],
+      "title": "第一个 Triton Kernel：把线程工作与数据地址连起来",
+      "source": "learn_docs/00_Foundations/09_第一个TritonKernel.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "05_Kernels/算子优化的问题演进",
+      "path": "learn_docs/05_Kernels/算子优化的问题演进.md",
+      "domain": "05_Kernels",
+      "kind": "article",
+      "aliases": [
+        "Fusion、双缓冲、Warp Specialization"
+      ],
+      "related": [],
+      "title": "算子优化：从数学操作到资源调度",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "06_Compilers/IR_PTX_SASS与编译模式",
+      "path": "learn_docs/06_Compilers/IR_PTX_SASS与编译模式.md",
+      "domain": "06_Compilers",
+      "kind": "article",
+      "aliases": [
+        "IR、PTX、SASS、JIT、AOT"
+      ],
+      "related": [],
+      "title": "IR、PTX、SASS 与编译模式",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "06_Compilers/PyTorch编译栈",
+      "path": "learn_docs/06_Compilers/PyTorch编译栈.md",
+      "domain": "06_Compilers",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "PyTorch 编译栈：从 Python 模型到高性能 Kernel",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "06_Compilers/README",
+      "path": "learn_docs/06_Compilers/README.md",
+      "domain": "06_Compilers",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "编译器与执行运行时",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "06_Compilers/Triton_TileLang_CUDA-Tile与Helion",
+      "path": "learn_docs/06_Compilers/Triton_TileLang_CUDA-Tile与Helion.md",
+      "domain": "06_Compilers",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Triton、TileLang、CUDA Tile、CuTe DSL 与 Helion",
+      "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "06_Compilers/编译器分层与执行图",
+      "path": "learn_docs/06_Compilers/编译器分层与执行图.md",
+      "domain": "06_Compilers",
+      "kind": "article",
+      "aliases": [
+        "Graph Break、Guard、CUDA Graph"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/03_Hardware_Systems/主机设备与执行边界.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "编译器分层：从模型表达式到设备执行",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "07_Communication/Collective通信算法",
+      "path": "learn_docs/07_Communication/Collective通信算法.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [
+        "Ring、Tree、分层算法"
+      ],
+      "related": [],
+      "title": "Collective 通信算法",
+      "source": "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/DMA与RDMA完成语义",
+      "path": "learn_docs/07_Communication/DMA与RDMA完成语义.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [
+        "DMA、RDMA、GPUDirect"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/11_RL_Systems/权重样本与异步一致性.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "DMA、RDMA 与通信完成语义",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "07_Communication/NCCL软件栈",
+      "path": "learn_docs/07_Communication/NCCL软件栈.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [
+        "NCCL、Channel、Protocol"
+      ],
+      "related": [],
+      "title": "NCCL 软件栈：从 API 到传输路径",
+      "source": "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/README",
+      "path": "learn_docs/07_Communication/README.md",
+      "domain": "07_Communication",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "分布式通信",
+      "source": "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/两卡通信与torchrun",
+      "path": "learn_docs/07_Communication/两卡通信与torchrun.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "从两个进程、两张卡学通信",
+      "source": "learn_docs/00_Foundations/06_两卡通信与torchrun.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/实验与排查手册",
+      "path": "learn_docs/07_Communication/实验与排查手册.md",
+      "domain": "07_Communication",
+      "kind": "practice",
+      "aliases": [],
+      "related": [],
+      "title": "实验与排查手册",
+      "source": "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/案例_MoE-AllToAll",
+      "path": "learn_docs/07_Communication/案例_MoE-AllToAll.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "案例：MoE 的 All-to-All 为什么难",
+      "source": "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/节点内GPU互联",
+      "path": "learn_docs/07_Communication/节点内GPU互联.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "节点内 GPU 互联：PCIe、NVLink 与 NVSwitch",
+      "source": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/跨节点网络",
+      "path": "learn_docs/07_Communication/跨节点网络.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "跨节点网络：InfiniBand、RoCE、RDMA 与 GPUDirect",
+      "source": "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/通信原语与Collective",
+      "path": "learn_docs/07_Communication/通信原语与Collective.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [
+        "rank、Process Group、Collective",
+        "AllReduce、AllGather、ReduceScatter、All-to-All"
+      ],
+      "related": [],
+      "title": "通信原语与 Collective",
+      "source": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/通信性能模型",
+      "path": "learn_docs/07_Communication/通信性能模型.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "通信性能模型：从 $\\alpha$–$\\beta$ 到有效带宽",
+      "source": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "07_Communication/通信计算重叠",
+      "path": "learn_docs/07_Communication/通信计算重叠.md",
+      "domain": "07_Communication",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "通信计算重叠：从“两个 Stream”到真实隐藏时间",
+      "source": "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/ContextParallelism",
+      "path": "learn_docs/08_Parallelism/ContextParallelism.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Context Parallelism：长上下文 Attention 如何跨 GPU",
+      "source": "learn_docs/03_Parallelism/07_ContextParallelism.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/DP与DDP",
+      "path": "learn_docs/08_Parallelism/DP与DDP.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Data Parallelism 与 DistributedDataParallel",
+      "source": "learn_docs/03_Parallelism/02_DP与DDP.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/Embedding与词表并行",
+      "path": "learn_docs/08_Parallelism/Embedding与词表并行.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Embedding 与词表并行",
+      "source": "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/ExpertParallelism",
+      "path": "learn_docs/08_Parallelism/ExpertParallelism.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Expert Parallelism：模型稀疏，系统不一定轻松",
+      "source": "learn_docs/03_Parallelism/08_ExpertParallelism.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/PipelineParallelism",
+      "path": "learn_docs/08_Parallelism/PipelineParallelism.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Pipeline Parallelism：切 Layer、排 Micro-batch",
+      "source": "learn_docs/03_Parallelism/06_PipelineParallelism.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/README",
+      "path": "learn_docs/08_Parallelism/README.md",
+      "domain": "08_Parallelism",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "并行计算与状态分片",
+      "source": "learn_docs/03_Parallelism/00_专题总览.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/SequenceParallelism",
+      "path": "learn_docs/08_Parallelism/SequenceParallelism.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Sequence Parallelism：两个同名概念必须分开",
+      "source": "learn_docs/03_Parallelism/05_SequenceParallelism.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/TensorParallelism",
+      "path": "learn_docs/08_Parallelism/TensorParallelism.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "Tensor Parallelism：在算子内部切矩阵",
+      "source": "learn_docs/03_Parallelism/04_TensorParallelism.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/ZeRO与FSDP",
+      "path": "learn_docs/08_Parallelism/ZeRO与FSDP.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [
+        "ZeRO、FSDP、HSDP"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/训练步与优化器.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "ZeRO 与 FSDP：分片数据并行的执行语义",
+      "source": "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/多维并行与DeviceMesh",
+      "path": "learn_docs/08_Parallelism/多维并行与DeviceMesh.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "多维并行与 DeviceMesh",
+      "source": "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/实验与配置工作表",
+      "path": "learn_docs/08_Parallelism/实验与配置工作表.md",
+      "domain": "08_Parallelism",
+      "kind": "practice",
+      "aliases": [],
+      "related": [],
+      "title": "实验与配置工作表",
+      "source": "learn_docs/03_Parallelism/16_实验与配置工作表.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/并行设计空间与演进",
+      "path": "learn_docs/08_Parallelism/并行设计空间与演进.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [
+        "DP、DDP、TP、PP、SP、CP、EP"
+      ],
+      "related": [],
+      "title": "并行设计空间：从完整副本到多维布局",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_DDP梯度与通信时间线",
+      "path": "learn_docs/08_Parallelism/推演_DDP梯度与通信时间线.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 DDP：不等长数据、梯度累积与 Bucket 时间线",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_EP路由与多维通信组",
+      "path": "learn_docs/08_Parallelism/推演_EP路由与多维通信组.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 EP 与多维通信组：token 去哪里，梯度由谁更新",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_FSDP参数生命周期",
+      "path": "learn_docs/08_Parallelism/推演_FSDP参数生命周期.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 FSDP：参数展开、梯度归属与峰值内存",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_PP调度与激活峰值",
+      "path": "learn_docs/08_Parallelism/推演_PP调度与激活峰值.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 PP：GPipe 与同步 1F1B 的逐时隙调度",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_SP与CP布局和梯度",
+      "path": "learn_docs/08_Parallelism/推演_SP与CP布局和梯度.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 SP 与 CP：布局转换、在线 Softmax 与远端梯度",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/推演_TP前向反向与Attention",
+      "path": "learn_docs/08_Parallelism/推演_TP前向反向与Attention.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 TP：两层 MLP 的前向、反向与 Attention 布局",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "08_Parallelism/案例_DeepSeek与DualPipe",
+      "path": "learn_docs/08_Parallelism/案例_DeepSeek与DualPipe.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "案例：DeepSeek-V3 的并行选择与 DualPipe",
+      "source": "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/统一切分语言",
+      "path": "learn_docs/08_Parallelism/统一切分语言.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [
+        "Shard、Replicate、Partial、DeviceMesh"
+      ],
+      "related": [],
+      "title": "统一切分语言：DeviceMesh、DTensor 与布局变换",
+      "source": "learn_docs/03_Parallelism/01_统一切分语言.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/自动并行与代价模型",
+      "path": "learn_docs/08_Parallelism/自动并行与代价模型.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "自动并行与代价模型：为什么仍不能“一键最优”",
+      "source": "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "08_Parallelism/训练并行演进史",
+      "path": "learn_docs/08_Parallelism/训练并行演进史.md",
+      "domain": "08_Parallelism",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/08_Parallelism/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "训练并行演进史：瓶颈如何从副本转移到布局与调度",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "09_Training_Systems/README",
+      "path": "learn_docs/09_Training_Systems/README.md",
+      "domain": "09_Training_Systems",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "训练系统",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "09_Training_Systems/分布式Checkpoint与恢复",
+      "path": "learn_docs/09_Training_Systems/分布式Checkpoint与恢复.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [
+        "Checkpoint、Reshard、恢复"
+      ],
+      "related": [],
+      "title": "分布式 Checkpoint 与恢复",
+      "source": "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "09_Training_Systems/推演_Packing目标与Checkpoint恢复",
+      "path": "learn_docs/09_Training_Systems/推演_Packing目标与Checkpoint恢复.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "数据到恢复：Packing的目标、游标与Checkpoint提交",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "09_Training_Systems/推演_梯度处理与AdamW更新",
+      "path": "learn_docs/09_Training_Systems/推演_梯度处理与AdamW更新.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/09_Training_Systems/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "一次完整更新：从缩放梯度到AdamW与跳步",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "09_Training_Systems/数据管线与训练演进",
+      "path": "learn_docs/09_Training_Systems/数据管线与训练演进.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [
+        "Packing、Padding、Prefetch"
+      ],
+      "related": [],
+      "title": "训练数据管线：从样本到持续供给的 microbatch",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "09_Training_Systems/训练并行方案设计",
+      "path": "learn_docs/09_Training_Systems/训练并行方案设计.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "训练并行方案设计：从约束推出配置",
+      "source": "learn_docs/03_Parallelism/11_训练并行方案设计.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "09_Training_Systems/训练显存优化",
+      "path": "learn_docs/09_Training_Systems/训练显存优化.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [
+        "Activation Checkpointing、Offload"
+      ],
+      "related": [],
+      "title": "训练显存优化：重算、分片与 Offload",
+      "source": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "09_Training_Systems/训练步与优化器",
+      "path": "learn_docs/09_Training_Systems/训练步与优化器.md",
+      "domain": "09_Training_Systems",
+      "kind": "article",
+      "aliases": [
+        "Optimizer、Adam、主权重"
+      ],
+      "related": [],
+      "title": "一次训练 step：目标、梯度、状态与更新",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/README",
+      "path": "learn_docs/10_Inference_Serving/README.md",
+      "domain": "10_Inference_Serving",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "推理与服务系统",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/Transformer执行与KV基础",
+      "path": "learn_docs/10_Inference_Serving/Transformer执行与KV基础.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [
+        "Prefill、Decode、KV Cache"
+      ],
+      "related": [],
+      "title": "Transformer 执行与 KV 基础",
+      "source": "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "10_Inference_Serving/批处理排队与调度演进",
+      "path": "learn_docs/10_Inference_Serving/批处理排队与调度演进.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [
+        "Continuous Batching、TTFT、TPOT、SLO"
+      ],
+      "related": [],
+      "title": "批处理、排队与推理调度的演进",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/推演_KV分页共享与取消",
+      "path": "learn_docs/10_Inference_Serving/推演_KV分页共享与取消.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/10_Inference_Serving/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演 KV：分页、前缀共享、分叉与取消",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/推演_服务容量与PD交接",
+      "path": "learn_docs/10_Inference_Serving/推演_服务容量与PD交接.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/10_Inference_Serving/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "服务容量与Prefill–Decode交接：算清页、时间和完成边界",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/推演_调度批次与设备执行",
+      "path": "learn_docs/10_Inference_Serving/推演_调度批次与设备执行.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/10_Inference_Serving/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "手工推演运行时：请求队列、Token Budget、CUDA Graph 与结果返回",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/推理内存系统",
+      "path": "learn_docs/10_Inference_Serving/推理内存系统.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [
+        "PagedAttention、Prefix Cache、COW"
+      ],
+      "related": [],
+      "title": "推理内存系统：KV Cache、Paging 与复用",
+      "source": "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "10_Inference_Serving/推理并行方案设计",
+      "path": "learn_docs/10_Inference_Serving/推理并行方案设计.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "推理并行方案设计：延迟、吞吐与 KV 的三角形",
+      "source": "learn_docs/03_Parallelism/12_推理并行方案设计.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "10_Inference_Serving/推理运行时演进史",
+      "path": "learn_docs/10_Inference_Serving/推理运行时演进史.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/10_Inference_Serving/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "推理运行时演进史：从执行一个batch到管理不断变化的状态",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "10_Inference_Serving/案例_Prefill-Decode分离",
+      "path": "learn_docs/10_Inference_Serving/案例_Prefill-Decode分离.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [
+        "PD Disaggregation"
+      ],
+      "related": [],
+      "title": "案例：Prefill–Decode 分离与 KV Cache 传输",
+      "source": "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "10_Inference_Serving/采样与推测解码",
+      "path": "learn_docs/10_Inference_Serving/采样与推测解码.md",
+      "domain": "10_Inference_Serving",
+      "kind": "article",
+      "aliases": [
+        "Sampling、Top-p、Speculative Decoding"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/11_RL_Systems/RL算法与系统接口.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "采样、自回归依赖与推测解码",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/README",
+      "path": "learn_docs/11_RL_Systems/README.md",
+      "domain": "11_RL_Systems",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "RL 与后训练系统",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/RL数据与数值正确性",
+      "path": "learn_docs/11_RL_Systems/RL数据与数值正确性.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "RL 数据与数值正确性：系统优化前先确定等价关系",
+      "source": "learn_docs/00_Foundations/08_RL数据与数值正确性.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "11_RL_Systems/RL算法与系统接口",
+      "path": "learn_docs/11_RL_Systems/RL算法与系统接口.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [
+        "Actor、Critic、Reward、Reference、PPO、GRPO"
+      ],
+      "related": [],
+      "title": "RL 算法需要系统保存什么",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/RL系统全景",
+      "path": "learn_docs/11_RL_Systems/RL系统全景.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "RL 系统全景：角色、状态与执行阶段",
+      "source": "learn_docs/00_Foundations/00_课程与系统地图.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "11_RL_Systems/RL系统演进史",
+      "path": "learn_docs/11_RL_Systems/RL系统演进史.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/11_RL_Systems/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "RL系统演进史：从同步算法循环到分布式角色与版本管理",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/RL角色级并行",
+      "path": "learn_docs/11_RL_Systems/RL角色级并行.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [],
+      "title": "RL 角色级并行：模型内部之外还有数据流",
+      "source": "learn_docs/03_Parallelism/13_RL角色级并行.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "11_RL_Systems/Ray与队列调度",
+      "path": "learn_docs/11_RL_Systems/Ray与队列调度.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [
+        "Ray、Actor、ObjectRef"
+      ],
+      "related": [],
+      "title": "Ray、队列与背压：从远程调用走到 RL 调度",
+      "source": "learn_docs/00_Foundations/07_Ray与队列调度.md",
+      "evidence_scope": "inherited-versioned-material"
+    },
+    {
+      "id": "11_RL_Systems/推演_从轨迹到PPO与GRPO目标",
+      "path": "learn_docs/11_RL_Systems/推演_从轨迹到PPO与GRPO目标.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/11_RL_Systems/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "从轨迹到目标：Token对齐、GRPO组统计与PPO裁剪",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/推演_异步队列与权重发布",
+      "path": "learn_docs/11_RL_Systems/推演_异步队列与权重发布.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/11_RL_Systems/README.md",
+          "relation": "belongs-to"
+        },
+        {
+          "path": "learn_docs/手工推演索引.md",
+          "relation": "indexed-by"
+        }
+      ],
+      "title": "异步RL推演：队列、样本身份与权重发布边界",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "11_RL_Systems/权重样本与异步一致性",
+      "path": "learn_docs/11_RL_Systems/权重样本与异步一致性.md",
+      "domain": "11_RL_Systems",
+      "kind": "article",
+      "aliases": [
+        "Policy Lag、行为策略、背压、换权"
+      ],
+      "related": [],
+      "title": "权重、样本与异步系统的一致性",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "12_Performance_Reliability/README",
+      "path": "learn_docs/12_Performance_Reliability/README.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "性能分析与可靠性",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "12_Performance_Reliability/成本模型与测量方法",
+      "path": "learn_docs/12_Performance_Reliability/成本模型与测量方法.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [
+        "关键路径、Amdahl、Benchmark"
+      ],
+      "related": [
+        {
+          "path": "docs/performance_analysis_guide/README.md",
+          "relation": "concept_dependency"
+        }
+      ],
+      "title": "成本模型、关键路径与测量方法",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "12_Performance_Reliability/故障模型与恢复",
+      "path": "learn_docs/12_Performance_Reliability/故障模型与恢复.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [
+        "幂等、超时、恢复点、可观测性"
+      ],
+      "related": [],
+      "title": "故障模型、可观测性与恢复",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "12_Performance_Reliability/贯穿案例_从Rollout到参数更新",
+      "path": "learn_docs/12_Performance_Reliability/贯穿案例_从Rollout到参数更新.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/12_Performance_Reliability/README.md",
+          "relation": "belongs-to"
+        }
+      ],
+      "title": "贯穿案例一：一组Rollout如何变成一次参数更新",
+      "source": null,
+      "evidence_scope": "source-inspected-runtime-unmeasured"
+    },
+    {
+      "id": "12_Performance_Reliability/贯穿案例_分布式训练等待与通信重叠",
+      "path": "learn_docs/12_Performance_Reliability/贯穿案例_分布式训练等待与通信重叠.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/12_Performance_Reliability/README.md",
+          "relation": "belongs-to"
+        }
+      ],
+      "title": "贯穿案例三：一次分布式训练究竟在等待什么",
+      "source": null,
+      "evidence_scope": "source-inspected-runtime-unmeasured"
+    },
+    {
+      "id": "12_Performance_Reliability/贯穿案例_换权失败与训练恢复",
+      "path": "learn_docs/12_Performance_Reliability/贯穿案例_换权失败与训练恢复.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/12_Performance_Reliability/README.md",
+          "relation": "belongs-to"
+        }
+      ],
+      "title": "贯穿案例四：换权或恢复之后，系统处于哪个一致状态",
+      "source": null,
+      "evidence_scope": "source-inspected-runtime-unmeasured"
+    },
+    {
+      "id": "12_Performance_Reliability/贯穿案例_生成请求与KV生命周期",
+      "path": "learn_docs/12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "article",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/12_Performance_Reliability/README.md",
+          "relation": "belongs-to"
+        }
+      ],
+      "title": "贯穿案例二：一个生成请求如何穿过队列、GPU与KV生命周期",
+      "source": null,
+      "evidence_scope": "source-inspected-runtime-unmeasured"
+    },
+    {
+      "id": "12_Performance_Reliability/贯穿案例索引",
+      "path": "learn_docs/12_Performance_Reliability/贯穿案例索引.md",
+      "domain": "12_Performance_Reliability",
+      "kind": "overview",
+      "aliases": [],
+      "related": [
+        {
+          "path": "learn_docs/12_Performance_Reliability/README.md",
+          "relation": "belongs-to"
+        }
+      ],
+      "title": "四个贯穿案例：把原理连接到真实系统行为",
+      "source": null,
+      "evidence_scope": "source-inspected-runtime-unmeasured"
+    },
+    {
+      "id": "README",
+      "path": "learn_docs/README.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "AI Infra 百科",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "guides/16周实践路线",
+      "path": "learn_docs/guides/16周实践路线.md",
+      "domain": "guides",
+      "kind": "guides",
+      "aliases": [],
+      "related": [],
+      "title": "RL Infra 学习清单",
+      "source": "learn_docs/学习清单.md",
+      "evidence_scope": "optional-practice-guide"
+    },
+    {
+      "id": "guides/按目标阅读",
+      "path": "learn_docs/guides/按目标阅读.md",
+      "domain": "guides",
+      "kind": "guides",
+      "aliases": [],
+      "related": [],
+      "title": "按目标阅读",
+      "source": null,
+      "evidence_scope": "optional-practice-guide"
+    },
+    {
+      "id": "reference/2026-09-06迁移记录",
+      "path": "learn_docs/reference/2026-09-06迁移记录.md",
+      "domain": "reference",
+      "kind": "reference",
+      "aliases": [],
+      "related": [],
+      "title": "文档清理结果与迁移索引",
+      "source": null,
+      "evidence_scope": "historical-migration-record"
+    },
+    {
+      "id": "写作与证据约定",
+      "path": "learn_docs/写作与证据约定.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "写作、归属与证据约定",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "手工推演索引",
+      "path": "learn_docs/手工推演索引.md",
+      "domain": "index",
+      "kind": "overview",
+      "aliases": [],
+      "related": [],
+      "title": "手工推演索引：从局部数值到完整系统过程",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "技术演进索引",
+      "path": "learn_docs/技术演进索引.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "技术演进索引：问题、方法与新的约束",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "文档补充TODO",
+      "path": "learn_docs/文档补充TODO.md",
+      "domain": "index",
+      "kind": "overview",
+      "aliases": [
+        "TODO",
+        "待办",
+        "文档补充计划"
+      ],
+      "related": [
+        {
+          "path": "learn_docs/README.md",
+          "relation": "indexed-by"
+        },
+        {
+          "path": "learn_docs/12_Performance_Reliability/贯穿案例索引.md",
+          "relation": "extends"
+        }
+      ],
+      "title": "AI Infra文档补充TODO",
+      "source": null,
+      "evidence_scope": "editorial-plan-not-executed"
+    },
+    {
+      "id": "术语索引",
+      "path": "learn_docs/术语索引.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "术语索引",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "概念关系与正文归属",
+      "path": "learn_docs/概念关系与正文归属.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "概念关系与正文归属",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "版本与验证范围",
+      "path": "learn_docs/版本与验证范围.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "版本与验证范围",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "重构说明与迁移索引",
+      "path": "learn_docs/重构说明与迁移索引.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "百科重构与迁移索引",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    },
+    {
+      "id": "问题索引",
+      "path": "learn_docs/问题索引.md",
+      "domain": "index",
+      "kind": "index",
+      "aliases": [],
+      "related": [],
+      "title": "从问题查机制",
+      "source": null,
+      "evidence_scope": "new-or-reworked-principles"
+    }
+  ]
+}

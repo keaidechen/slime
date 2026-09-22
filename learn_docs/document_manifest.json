@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": "encyclopedia-2026-09-22",
   "baseline_documents": 158,
   "documents": [
     {
@@ -21,23 +21,23 @@
       "plan": "分段整编，保留问答原文",
       "scope": "首读 GPU 层级、执行、进程；TP 通信推算在 A3 回读；架构代际放参考层，修复旧路径",
       "current": [
-        "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
-        "learn_docs/reference/GPU架构演进与历史资料.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
-        "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
-        "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
-        "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
-        "learn_docs/03_Parallelism/04_TensorParallelism.md",
-        "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
-        "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+        "learn_docs/03_Hardware_Systems/GPU执行与内存基础.md",
+        "learn_docs/03_Hardware_Systems/GPU架构演进与历史资料.md",
+        "learn_docs/03_Hardware_Systems/CUDA执行模型与调度.md",
+        "learn_docs/06_Compilers/IR_PTX_SASS与编译模式.md",
+        "learn_docs/03_Hardware_Systems/CUDA_Stream与依赖.md",
+        "learn_docs/05_Kernels/CUDA算子库_CUTLASS与CuTe.md",
+        "learn_docs/06_Compilers/Triton_TileLang_CUDA-Tile与Helion.md",
+        "learn_docs/05_Kernels/GEMM与高性能Kernel模式.md",
+        "learn_docs/05_Kernels/案例_FlashAttention与GroupedGEMM.md",
+        "learn_docs/04_Memory_Storage/进程设备与地址空间.md",
+        "learn_docs/07_Communication/通信原语与Collective.md",
+        "learn_docs/07_Communication/节点内GPU互联.md",
+        "learn_docs/08_Parallelism/TensorParallelism.md",
+        "learn_docs/09_Training_Systems/训练显存优化.md",
+        "learn_docs/07_Communication/通信性能模型.md",
         "docs/performance_analysis_guide/04_megatron.md",
-        "learn_docs/00_Foundations/00_课程与系统地图.md"
+        "learn_docs/11_RL_Systems/RL系统全景.md"
       ],
       "kind": "已合并并删除旧页",
       "source_status": "removed"
@@ -49,10 +49,10 @@
       "plan": "保留并改路线",
       "scope": "区分单卡基础与 Kernel 专项；不要求先读完所有 DSL",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md"
+        "learn_docs/05_Kernels/README.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
@@ -61,10 +61,10 @@
       "plan": "保留，补最小运行例",
       "scope": "Kernel/Block/Warp/SM、异步 launch、Stream/Event；高级调度二读",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md"
+        "learn_docs/03_Hardware_Systems/CUDA执行模型与调度.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md",
@@ -73,10 +73,10 @@
       "plan": "保留，分两遍",
       "scope": "首读内存层级、带宽、合并访存、tiling；bank conflict 与高级搬运二读",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md"
+        "learn_docs/05_Kernels/GPU内存编程与数据搬运.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
@@ -85,10 +85,10 @@
       "plan": "保留，补 shape 示例",
       "scope": "先懂 GEMM、Tensor Core、batch/shape；流水线和 warp specialization 后读",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md"
+        "learn_docs/05_Kernels/GEMM与高性能Kernel模式.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
@@ -97,10 +97,10 @@
       "plan": "保留，分两遍",
       "scope": "先区分 CUDA/cuBLAS/CUTLASS 的职责；CuTe layout 和模板实现按热点深入",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md"
+        "learn_docs/05_Kernels/CUDA算子库_CUTLASS与CuTe.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
@@ -109,10 +109,10 @@
       "plan": "保留，拆主线与工具比较",
       "scope": "Triton 基本编程与一个小算子实践；其余 DSL 保留为比较参考",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md"
+        "learn_docs/06_Compilers/Triton_TileLang_CUDA-Tile与Helion.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md",
@@ -121,10 +121,10 @@
       "plan": "保留，配 graph break 实验",
       "scope": "首读 eager/compile、fusion、graph break、冷启动；编译器内部二读",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md"
+        "learn_docs/06_Compilers/PyTorch编译栈.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
@@ -133,10 +133,10 @@
       "plan": "保留，分两遍",
       "scope": "首读源码→PTX→SASS、JIT/AOT、架构兼容；IR/LLVM 深入参考",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md"
+        "learn_docs/06_Compilers/IR_PTX_SASS与编译模式.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
@@ -145,10 +145,10 @@
       "plan": "保留案例",
       "scope": "先完成 A1/A4，再追 FlashAttention 与 Grouped GEMM 的 IO/shape/调度",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md"
+        "learn_docs/05_Kernels/案例_FlashAttention与GroupedGEMM.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md",
@@ -157,10 +157,10 @@
       "plan": "保留，接统一实验索引",
       "scope": "正确计时与正确性基线先做；自定义 Kernel 比较在 A8 做",
       "current": [
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md"
+        "learn_docs/05_Kernels/实验与排查手册.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md",
@@ -169,10 +169,10 @@
       "plan": "保留并补前置",
       "scope": "先走两进程两卡示例，再进入通信与状态专题",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md"
+        "learn_docs/07_Communication/README.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
@@ -181,10 +181,10 @@
       "plan": "保留，补初学者前导",
       "scope": "process/rank/local_rank/device/context；UVA 与 IPC 生命周期第二遍",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md"
+        "learn_docs/04_Memory_Storage/进程设备与地址空间.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
@@ -193,10 +193,10 @@
       "plan": "保留，补手算到实测",
       "scope": "参数/梯度/优化器/activation/KV，区分 allocated/reserved/device used",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md"
+        "learn_docs/04_Memory_Storage/GPU内存组成与显存核算.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
@@ -205,10 +205,10 @@
       "plan": "保留，补两卡张量演示",
       "scope": "逐个列输入输出与 rank，演示 AllReduce/AllGather/ReduceScatter/AllToAll",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md"
+        "learn_docs/07_Communication/通信原语与Collective.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
@@ -217,10 +217,10 @@
       "plan": "保留，增加消息时序",
       "scope": "先懂 ring/tree 的步骤与开销；PAT/协议内部后读",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md"
+        "learn_docs/07_Communication/Collective通信算法.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
@@ -229,10 +229,10 @@
       "plan": "保留，配本机拓扑记录",
       "scope": "PCIe/NVLink/NVSwitch、亲和性；用实际 H20 机器结果辨认路径",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md"
+        "learn_docs/07_Communication/节点内GPU互联.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
@@ -241,10 +241,10 @@
       "plan": "保留，区分入门与网络深入",
       "scope": "节点间路径、NIC/RDMA/GPUDirect 必读；RoCE 调优和 SHARP 专项",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md"
+        "learn_docs/07_Communication/跨节点网络.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
@@ -253,10 +253,10 @@
       "plan": "保留，拆稳定原理与版本动态",
       "scope": "通信组初始化、传输与 hang 排查；device-side 新能力参考",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md"
+        "learn_docs/07_Communication/NCCL软件栈.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
@@ -265,10 +265,10 @@
       "plan": "保留，配消息尺寸扫描",
       "scope": "α–β、有效带宽、algbw/busbw；先手算，再解释实测曲线",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md"
+        "learn_docs/07_Communication/通信性能模型.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
@@ -277,10 +277,10 @@
       "plan": "保留，配依赖时间线",
       "scope": "异步不等于重叠；用 Stream/Event 与 NCCL trace 验证",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md"
+        "learn_docs/07_Communication/通信计算重叠.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
@@ -289,10 +289,10 @@
       "plan": "保留，明确与并行篇边界",
       "scope": "显存账本和优化取舍；FSDP 执行生命周期链接 A3 原理篇",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md"
+        "learn_docs/09_Training_Systems/训练显存优化.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
@@ -301,10 +301,10 @@
       "plan": "保留为推理内存原理入口",
       "scope": "KV 核算、paging、prefix reuse；调度细节接 SGLang 与论文",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md"
+        "learn_docs/10_Inference_Serving/推理内存系统.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
@@ -313,10 +313,10 @@
       "plan": "保留，配恢复实验",
       "scope": "状态完整性、一致性切面、重分片；中断恢复不能只检查加载成功",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md"
+        "learn_docs/09_Training_Systems/分布式Checkpoint与恢复.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
@@ -325,10 +325,10 @@
       "plan": "保留，接 MoE 实验",
       "scope": "逐步走 dispatch→expert→combine；用真实 token 分布解释通信",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md"
+        "learn_docs/07_Communication/案例_MoE-AllToAll.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
@@ -337,10 +337,10 @@
       "plan": "保留，分原理与部署",
       "scope": "先懂 KV 为什么跨节点搬、何时得不偿失；PD 实测后做",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md"
+        "learn_docs/10_Inference_Serving/案例_Prefill-Decode分离.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md",
@@ -349,10 +349,10 @@
       "plan": "保留，接统一实验索引",
       "scope": "拓扑→P2P→Collective→多机，分别记录显存与带宽证据",
       "current": [
-        "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md"
+        "learn_docs/07_Communication/实验与排查手册.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/00_专题总览.md",
@@ -361,10 +361,10 @@
       "plan": "保留并重排入口",
       "scope": "先看 DP/TP 的小例子，再用统一布局语言总结",
       "current": [
-        "learn_docs/03_Parallelism/00_专题总览.md"
+        "learn_docs/08_Parallelism/README.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/01_统一切分语言.md",
@@ -373,10 +373,10 @@
       "plan": "保留，后移抽象介绍",
       "scope": "先用两个矩阵解释 shard/replicate/partial，再进入 DeviceMesh API",
       "current": [
-        "learn_docs/03_Parallelism/01_统一切分语言.md"
+        "learn_docs/08_Parallelism/统一切分语言.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/02_DP与DDP.md",
@@ -385,10 +385,10 @@
       "plan": "保留，配梯度对齐实验",
       "scope": "梯度平均、bucket、累积/no_sync、不同 token 数的归一化",
       "current": [
-        "learn_docs/03_Parallelism/02_DP与DDP.md"
+        "learn_docs/08_Parallelism/DP与DDP.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
@@ -397,10 +397,10 @@
       "plan": "保留，配状态生命周期图",
       "scope": "ZeRO 三种状态与 FSDP gather/reshard；区分原理和 Megatron 实现",
       "current": [
-        "learn_docs/03_Parallelism/03_ZeRO与FSDP.md"
+        "learn_docs/08_Parallelism/ZeRO与FSDP.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/04_TensorParallelism.md",
@@ -409,10 +409,10 @@
       "plan": "保留，配两卡 Linear 实验",
       "scope": "Column/Row Linear 的 local shape、forward/backward 通信",
       "current": [
-        "learn_docs/03_Parallelism/04_TensorParallelism.md"
+        "learn_docs/08_Parallelism/TensorParallelism.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/05_SequenceParallelism.md",
@@ -421,10 +421,10 @@
       "plan": "保留，分术语与实现",
       "scope": "Megatron SP 与其他 sequence 切分的区别；先跟 TP 相邻层",
       "current": [
-        "learn_docs/03_Parallelism/05_SequenceParallelism.md"
+        "learn_docs/08_Parallelism/SequenceParallelism.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/06_PipelineParallelism.md",
@@ -433,10 +433,10 @@
       "plan": "保留，补手画 microbatch 时序",
       "scope": "GPipe/1F1B、activation 生命周期与 bubble；Zero Bubble 二读",
       "current": [
-        "learn_docs/03_Parallelism/06_PipelineParallelism.md"
+        "learn_docs/08_Parallelism/PipelineParallelism.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/07_ContextParallelism.md",
@@ -445,10 +445,10 @@
       "plan": "保留，分入门与长序列专项",
       "scope": "理解切序列、交换 KV 和负载不均；具体算法与大规模实测后读",
       "current": [
-        "learn_docs/03_Parallelism/07_ContextParallelism.md"
+        "learn_docs/08_Parallelism/ContextParallelism.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/08_ExpertParallelism.md",
@@ -457,10 +457,10 @@
       "plan": "保留，分入门与 MoE 专项",
       "scope": "expert/token/rank 映射及 A2A 先学；ETP/folding 后读",
       "current": [
-        "learn_docs/03_Parallelism/08_ExpertParallelism.md"
+        "learn_docs/08_Parallelism/ExpertParallelism.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
@@ -469,10 +469,10 @@
       "plan": "保留，接 RL 数值正确性",
       "scope": "分布式 logits/logsumexp、词表切分与全局 token loss",
       "current": [
-        "learn_docs/03_Parallelism/09_Embedding与词表并行.md"
+        "learn_docs/08_Parallelism/Embedding与词表并行.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
@@ -481,10 +481,10 @@
       "plan": "保留，补小网格再放大",
       "scope": "先画 2×2 rank group，再看大配置；勿以缩写乘积替代布局",
       "current": [
-        "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md"
+        "learn_docs/08_Parallelism/多维并行与DeviceMesh.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/11_训练并行方案设计.md",
@@ -493,10 +493,10 @@
       "plan": "保留，改为配置实战入口",
       "scope": "根据容量、batch 语义和拓扑推配置，形成可核对账本",
       "current": [
-        "learn_docs/03_Parallelism/11_训练并行方案设计.md"
+        "learn_docs/09_Training_Systems/训练并行方案设计.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/12_推理并行方案设计.md",
@@ -505,10 +505,10 @@
       "plan": "保留，配 TP/副本对比",
       "scope": "并行对容量、吞吐、延迟与 KV 的不同影响",
       "current": [
-        "learn_docs/03_Parallelism/12_推理并行方案设计.md"
+        "learn_docs/10_Inference_Serving/推理并行方案设计.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/13_RL角色级并行.md",
@@ -517,10 +517,10 @@
       "plan": "保留，前后两遍",
       "scope": "A0 看角色与两层并行；A5 深读共置、分离、异步与 freshness",
       "current": [
-        "learn_docs/03_Parallelism/13_RL角色级并行.md"
+        "learn_docs/11_RL_Systems/RL角色级并行.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
@@ -529,10 +529,10 @@
       "plan": "保留",
       "scope": "理解代价模型和搜索约束，作为调度设计拓展",
       "current": [
-        "learn_docs/03_Parallelism/14_自动并行与代价模型.md"
+        "learn_docs/08_Parallelism/自动并行与代价模型.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
@@ -541,10 +541,10 @@
       "plan": "保留",
       "scope": "PP/EP 基础完成后对照 DualPipe；不直接照抄配置",
       "current": [
-        "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md"
+        "learn_docs/08_Parallelism/案例_DeepSeek与DualPipe.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/03_Parallelism/16_实验与配置工作表.md",
@@ -553,10 +553,10 @@
       "plan": "保留，接统一实验索引",
       "scope": "所有并行实验统一填布局、状态、通信、batch 与实际拓扑",
       "current": [
-        "learn_docs/03_Parallelism/16_实验与配置工作表.md"
+        "learn_docs/08_Parallelism/实验与配置工作表.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/04_Profiling_Performence_Analysis/00_专题总览.md",
@@ -769,10 +769,15 @@
       "plan": "保留，按架构索引",
       "scope": "用于查模型差异和资料来源；具体型号/能力单独核对版本",
       "current": [
-        "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md"
+        "learn_docs/02_Model_Architecture/architecture_cases/模型路线与条件计算.md",
+        "learn_docs/02_Model_Architecture/architecture_cases/KV压缩与稀疏访问.md",
+        "learn_docs/02_Model_Architecture/architecture_cases/线性状态与混合架构.md",
+        "learn_docs/02_Model_Architecture/architecture_cases/残差与深度方向.md",
+        "learn_docs/02_Model_Architecture/architecture_cases/数值优化器与预测.md",
+        "learn_docs/02_Model_Architecture/architecture_cases/系统综合与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/MLA.md",
@@ -781,10 +786,14 @@
       "plan": "保留长文，增加短入口",
       "scope": "先读 MHA/GQA/MLA 的 KV 形状与容量影响；推导与实现二读",
       "current": [
-        "learn_docs/model_arc/MLA.md"
+        "learn_docs/02_Model_Architecture/mla/基础与KV表示.md",
+        "learn_docs/02_Model_Architecture/mla/低秩投影与矩阵吸收.md",
+        "learn_docs/02_Model_Architecture/mla/执行模式与容量.md",
+        "learn_docs/02_Model_Architecture/mla/内核并行与运行时.md",
+        "learn_docs/02_Model_Architecture/mla/边界验证与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/MoE-Infra.md",
@@ -793,10 +802,16 @@
       "plan": "保留长文，按问题分段导航",
       "scope": "首读 router→dispatch→GEMM→combine；通信/调优/模型案例专项回读",
       "current": [
-        "learn_docs/model_arc/MoE-Infra.md"
+        "learn_docs/02_Model_Architecture/moe/条件计算与数据流.md",
+        "learn_docs/02_Model_Architecture/moe/路由与负载均衡.md",
+        "learn_docs/02_Model_Architecture/moe/专家并行与通信.md",
+        "learn_docs/02_Model_Architecture/moe/专家算子与调度.md",
+        "learn_docs/02_Model_Architecture/moe/训练状态与重叠.md",
+        "learn_docs/02_Model_Architecture/moe/推理部署与模型案例.md",
+        "learn_docs/02_Model_Architecture/moe/成本验证与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/Sparse-Attention.md",
@@ -805,10 +820,13 @@
       "plan": "保留",
       "scope": "先学标准 attention 与 KV；再看稀疏结构对访问和负载的影响",
       "current": [
-        "learn_docs/model_arc/Sparse-Attention.md"
+        "learn_docs/02_Model_Architecture/sparse_attention/访问集合与稀疏模式.md",
+        "learn_docs/02_Model_Architecture/sparse_attention/索引器与Kernel数据流.md",
+        "learn_docs/02_Model_Architecture/sparse_attention/方法比较与成本边界.md",
+        "learn_docs/02_Model_Architecture/sparse_attention/参考实现验证与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/Linear-Attention.md",
@@ -817,10 +835,15 @@
       "plan": "保留",
       "scope": "递归状态与 KV 的差别、混合模型资源特征；数学长推导后读",
       "current": [
-        "learn_docs/model_arc/Linear-Attention.md"
+        "learn_docs/02_Model_Architecture/linear_attention/基本定义与状态记忆.md",
+        "learn_docs/02_Model_Architecture/linear_attention/递推结构与演进.md",
+        "learn_docs/02_Model_Architecture/linear_attention/并行执行与反向传播.md",
+        "learn_docs/02_Model_Architecture/linear_attention/检索边界与混合模型.md",
+        "learn_docs/02_Model_Architecture/linear_attention/运行时并行与数值.md",
+        "learn_docs/02_Model_Architecture/linear_attention/验证算例与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "learn_docs/model_arc/Residual-Evolution.md",
@@ -829,10 +852,15 @@
       "plan": "保留",
       "scope": "训练稳定性、结构与执行依赖的专题参考，不作为并行入门前置",
       "current": [
-        "learn_docs/model_arc/Residual-Evolution.md"
+        "learn_docs/02_Model_Architecture/residual/残差与归一化基础.md",
+        "learn_docs/02_Model_Architecture/residual/初始化与深度稳定性.md",
+        "learn_docs/02_Model_Architecture/residual/多流连接与状态变换.md",
+        "learn_docs/02_Model_Architecture/residual/深度注意力与分块.md",
+        "learn_docs/02_Model_Architecture/residual/模型案例与设计分支.md",
+        "learn_docs/02_Model_Architecture/residual/系统成本验证与资料.md"
       ],
       "kind": "主文档",
-      "source_status": "present"
+      "source_status": "removed"
     },
     {
       "source": "docs/code_walkthrough/README.md",
@@ -1281,9 +1309,9 @@
       "plan": "保留全文，抽取为入门教材来源",
       "scope": "首读 §1–14 GPU 与性能直觉；A4 读 §15–21 KV/分页；§26 高级硬件后读",
       "current": [
-        "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
-        "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
-        "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md"
+        "learn_docs/03_Hardware_Systems/GPU执行与内存基础.md",
+        "learn_docs/10_Inference_Serving/Transformer执行与KV基础.md",
+        "learn_docs/03_Hardware_Systems/Hopper异步硬件专题.md"
       ],
       "kind": "已合并并删除旧页",
       "source_status": "removed"
@@ -1957,6 +1985,71 @@
     "docs/sglang_code_walkthrough/05_production_engineering/README.md",
     "docs/sglang_code_walkthrough/06_diffusion/README.md",
     "docs/sglang_code_walkthrough/07_reference/README.md",
-    "learn_docs/RL_Infra_文档映射清单.md"
+    "learn_docs/RL_Infra_文档映射清单.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/00_专题总览.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/01_CUDA执行模型与调度.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/02_GPU内存编程与数据搬运.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/03_GEMM与高性能Kernel模式.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/04_CUDA算子库_CUTLASS与CuTe.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/05_Triton_TileLang_CUDA-Tile与Helion.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/06_PyTorch编译栈.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/07_IR_PTX_SASS与编译模式.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/08_案例_FlashAttention与GroupedGEMM.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/09_实验与排查手册.md",
+    "learn_docs/02_Distributed_Communication_Memory/00_专题总览.md",
+    "learn_docs/02_Distributed_Communication_Memory/01_进程设备与地址空间.md",
+    "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
+    "learn_docs/02_Distributed_Communication_Memory/03_通信原语与Collective.md",
+    "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
+    "learn_docs/02_Distributed_Communication_Memory/05_节点内GPU互联.md",
+    "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
+    "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
+    "learn_docs/02_Distributed_Communication_Memory/08_通信性能模型.md",
+    "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
+    "learn_docs/02_Distributed_Communication_Memory/10_训练显存优化.md",
+    "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
+    "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
+    "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
+    "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
+    "learn_docs/02_Distributed_Communication_Memory/15_实验与排查手册.md",
+    "learn_docs/03_Parallelism/00_专题总览.md",
+    "learn_docs/03_Parallelism/01_统一切分语言.md",
+    "learn_docs/03_Parallelism/02_DP与DDP.md",
+    "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
+    "learn_docs/03_Parallelism/04_TensorParallelism.md",
+    "learn_docs/03_Parallelism/05_SequenceParallelism.md",
+    "learn_docs/03_Parallelism/06_PipelineParallelism.md",
+    "learn_docs/03_Parallelism/07_ContextParallelism.md",
+    "learn_docs/03_Parallelism/08_ExpertParallelism.md",
+    "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
+    "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
+    "learn_docs/03_Parallelism/11_训练并行方案设计.md",
+    "learn_docs/03_Parallelism/12_推理并行方案设计.md",
+    "learn_docs/03_Parallelism/13_RL角色级并行.md",
+    "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
+    "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
+    "learn_docs/03_Parallelism/16_实验与配置工作表.md",
+    "learn_docs/model_arc/AI_Infra_Model_Architecture_Evolution_DeepSeek_Kimi_Qwen_GLM_2024_2026.md",
+    "learn_docs/model_arc/MLA.md",
+    "learn_docs/model_arc/MoE-Infra.md",
+    "learn_docs/model_arc/Sparse-Attention.md",
+    "learn_docs/model_arc/Linear-Attention.md",
+    "learn_docs/model_arc/Residual-Evolution.md",
+    "learn_docs/00_Foundations/01_Linux与运行环境.md",
+    "learn_docs/00_Foundations/03_进程线程与四种异步.md",
+    "learn_docs/00_Foundations/04_GPU执行与内存基础.md",
+    "learn_docs/00_Foundations/02_PyTorch张量与自动微分.md",
+    "learn_docs/00_Foundations/05_Transformer执行与KV基础.md",
+    "learn_docs/00_Foundations/06_两卡通信与torchrun.md",
+    "learn_docs/00_Foundations/00_课程与系统地图.md",
+    "learn_docs/00_Foundations/07_Ray与队列调度.md",
+    "learn_docs/00_Foundations/08_RL数据与数值正确性.md",
+    "learn_docs/00_Foundations/09_第一个TritonKernel.md",
+    "learn_docs/00_Foundations/README.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/10_CUDA_Stream与依赖.md",
+    "learn_docs/01_Kernel_GPU_Programming_Compiler/11_Hopper异步硬件专题.md",
+    "learn_docs/reference/GPU架构演进与历史资料.md",
+    "learn_docs/学习清单.md",
+    "learn_docs/model_arc/README.md"
   ]
 }

@@ -36,9 +36,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A8 · 参考。
-> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：SGLang 主线后对照 Runtime 分层，具体能力与性能条件按版本核验。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：TensorRT-LLM 是 NVIDIA 面向大语言模型的高性能推理与 runtime（运行时）技术栈，项目名不强行字母展开；LLM = **Large Language Model（大语言模型）**；API = **Application Programming Interface（应用程序编程接口）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；IFB = **In-Flight Batching（在途批处理，即运行中动态更新 batch）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；MoE = **Mixture of Experts（混合专家模型）**；PP = **Pipeline Parallelism（流水线并行）**；EP = **Expert Parallelism（专家并行）**；HTTP = **Hypertext Transfer Protocol（超文本传输协议）**。本文中的 **scheduler** 是请求调度器，**executor/worker** 是实际组织或执行模型计算的组件，**backend** 是某类算子/执行能力的后端实现。 另外：CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；FP16/BF16/FP8 分别是 **16 位浮点、bfloat16 与 8 位浮点格式**；INT8/INT4 分别是 **8 位/4 位整数格式**；FP4 = **4-bit Floating Point（4 位浮点格式）**；AI = **Artificial Intelligence（人工智能）**。

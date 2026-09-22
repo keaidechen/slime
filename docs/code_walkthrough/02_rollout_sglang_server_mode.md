@@ -15,9 +15,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5 · 必修。
-> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：读服务拓扑、生成循环、并发限制与 abort；前置 SGLang 请求基础。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 对应综述（`00_rl_infra_survey.md`）§2.2「Rollout 架构：Engine 模式 vs Server 模式」。

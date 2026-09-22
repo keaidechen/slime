@@ -22,9 +22,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A1/A6/A7 · 分层必修。
-> **前置**：[基础课程](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[基础课程](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：按首次使用取章节；先 nvidia-smi/Profiler/Perfetto/nsys，后 DCGM/ncu。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 本章写给第一次使用性能工具的人。你不需要一次安装所有软件。先根据问题选择一个工具，完成“检查安装 → 采集最小数据 → 打开结果 → 回答一个问题”这四步。

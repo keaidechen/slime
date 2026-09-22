@@ -22,9 +22,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4→A8 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：模型注册、加载、fallback 契约先读；多模态分支专项。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 “SGLang 支持这个模型吗”不是一个布尔问题。至少要分别回答：配置能否识别、最终选择哪个实现、权重能否映射、forward 是否适配 runtime、任务输出是否正确，以及高级优化是否兼容。本章沿着这些决策点阅读代码。

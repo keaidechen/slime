@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5/A6/A8 · 分层必修。
-> **前置**：[Ray、队列与前置系统](<../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：RL 角色时间线、queue/lag 与状态先读；MoE/长序列随专项回读。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 Mixture of Experts（MoE，混合专家）、长上下文与 Reinforcement Learning（RL，强化学习）三类 workload 的共同点是“工作量动态”：同一个 step/request 的 token 数、通信量、角色状态或 kernel shape 可能不同。只看平均 operator 时间会丢掉根因。
@@ -110,5 +110,5 @@ parallel_group, bytes, start, duration
 
 - [Megatron Core MoE Guide](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/features/moe.html)
 - [verl Performance Tuning](https://verl.readthedocs.io/en/latest/perf/perf_tuning.html)
-- [并行专题：RL 角色级并行](../../learn_docs/03_Parallelism/13_RL角色级并行.md)
-- [通信专题：MoE All-to-All 案例](../../learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md)
+- [并行专题：RL 角色级并行](../../learn_docs/11_RL_Systems/RL角色级并行.md)
+- [通信专题：MoE All-to-All 案例](../../learn_docs/07_Communication/案例_MoE-AllToAll.md)

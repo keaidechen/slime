@@ -1,94 +1,94 @@
 [
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/02_GPU内存组成与显存核算.md",
+    "path": "learn_docs/04_Memory_Storage/GPU内存组成与显存核算.md",
     "example": "用 1B 模型建立一张显存账本"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/04_Collective通信算法.md",
+    "path": "learn_docs/07_Communication/Collective通信算法.md",
     "example": "先画两阶段，再记通信算法名称"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/06_跨节点网络.md",
+    "path": "learn_docs/07_Communication/跨节点网络.md",
     "example": "逐段看一次跨节点 tensor 传输"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/07_NCCL软件栈.md",
+    "path": "learn_docs/07_Communication/NCCL软件栈.md",
     "example": "把初始化、传输与等待分开"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/09_通信计算重叠.md",
+    "path": "learn_docs/07_Communication/通信计算重叠.md",
     "example": "一条依赖决定能否重叠"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/11_推理内存系统.md",
+    "path": "learn_docs/10_Inference_Serving/推理内存系统.md",
     "example": "为四条请求计算 KV，再观察释放"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/12_分布式Checkpoint与恢复.md",
+    "path": "learn_docs/09_Training_Systems/分布式Checkpoint与恢复.md",
     "example": "用中断前后两张状态表定义恢复"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/13_案例_MoE-AllToAll.md",
+    "path": "learn_docs/07_Communication/案例_MoE-AllToAll.md",
     "example": "四个 token、两个 expert 的路由账"
   },
   {
-    "path": "learn_docs/02_Distributed_Communication_Memory/14_案例_Prefill-Decode分离.md",
+    "path": "learn_docs/10_Inference_Serving/案例_Prefill-Decode分离.md",
     "example": "一次 PD 交接要转移什么"
   },
   {
-    "path": "learn_docs/03_Parallelism/01_统一切分语言.md",
+    "path": "learn_docs/08_Parallelism/统一切分语言.md",
     "example": "先用两个数区分 shard 与 partial"
   },
   {
-    "path": "learn_docs/03_Parallelism/02_DP与DDP.md",
+    "path": "learn_docs/08_Parallelism/DP与DDP.md",
     "example": "两卡梯度平均的成立条件"
   },
   {
-    "path": "learn_docs/03_Parallelism/03_ZeRO与FSDP.md",
+    "path": "learn_docs/08_Parallelism/ZeRO与FSDP.md",
     "example": "用八个参数画出全分片生命周期"
   },
   {
-    "path": "learn_docs/03_Parallelism/05_SequenceParallelism.md",
+    "path": "learn_docs/08_Parallelism/SequenceParallelism.md",
     "example": "从 TP 两侧的激活看 Sequence Parallel"
   },
   {
-    "path": "learn_docs/03_Parallelism/06_PipelineParallelism.md",
+    "path": "learn_docs/08_Parallelism/PipelineParallelism.md",
     "example": "两个 stage、四个 microbatch 的生命周期"
   },
   {
-    "path": "learn_docs/03_Parallelism/07_ContextParallelism.md",
+    "path": "learn_docs/08_Parallelism/ContextParallelism.md",
     "example": "切分序列后，attention 还需要远端历史"
   },
   {
-    "path": "learn_docs/03_Parallelism/08_ExpertParallelism.md",
+    "path": "learn_docs/08_Parallelism/ExpertParallelism.md",
     "example": "EP 的卡数不能脱离其他并行维度理解"
   },
   {
-    "path": "learn_docs/03_Parallelism/09_Embedding与词表并行.md",
+    "path": "learn_docs/08_Parallelism/Embedding与词表并行.md",
     "example": "不聚合大 logits，也能求全局归一化"
   },
   {
-    "path": "learn_docs/03_Parallelism/10_多维并行与DeviceMesh.md",
+    "path": "learn_docs/08_Parallelism/多维并行与DeviceMesh.md",
     "example": "先画 2×2，再画大集群"
   },
   {
-    "path": "learn_docs/03_Parallelism/11_训练并行方案设计.md",
+    "path": "learn_docs/09_Training_Systems/训练并行方案设计.md",
     "example": "从约束推配置，而不是先挑最大并行度"
   },
   {
-    "path": "learn_docs/03_Parallelism/12_推理并行方案设计.md",
+    "path": "learn_docs/10_Inference_Serving/推理并行方案设计.md",
     "example": "TP 与多个副本优化的是不同目标"
   },
   {
-    "path": "learn_docs/03_Parallelism/13_RL角色级并行.md",
+    "path": "learn_docs/11_RL_Systems/RL角色级并行.md",
     "example": "一轮 RL 的三条时间线"
   },
   {
-    "path": "learn_docs/03_Parallelism/14_自动并行与代价模型.md",
+    "path": "learn_docs/08_Parallelism/自动并行与代价模型.md",
     "example": "给自动规划器一张代价表"
   },
   {
-    "path": "learn_docs/03_Parallelism/15_案例_DeepSeek与DualPipe.md",
+    "path": "learn_docs/08_Parallelism/案例_DeepSeek与DualPipe.md",
     "example": "读复杂流水线前先验证依赖"
   },
   {

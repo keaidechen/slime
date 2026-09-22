@@ -2,9 +2,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A5/A7 · 必修。
-> **前置**：[Ray、队列与前置系统](<../../../learn_docs/00_Foundations/07_Ray与队列调度.md>)。
+> **前置**：[Ray、队列与前置系统](<../../../learn_docs/11_RL_Systems/Ray与队列调度.md>)。
 > **首读/二读**：admission、超时/取消、资源回收与故障注入。
-> **进度与实验**：[学习清单](<../../../learn_docs/学习清单.md>) · [总入口](<../../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 <a id="beginner-example"></a>

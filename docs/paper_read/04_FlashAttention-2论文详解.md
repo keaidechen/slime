@@ -36,9 +36,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A8 · 专项。
-> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Foundations/README.md>)。
+> **前置**：[GPU、tensor 与通信基础](<../../learn_docs/00_Physical_Foundations/README.md>)。
 > **首读/二读**：FA1 基础后读非 matmul 开销、warp 分工与并行粒度。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：FA1/FA2 分别指 **FlashAttention-1 / FlashAttention-2**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出，这里主要指显存数据搬运）**；GPU = **Graphics Processing Unit（图形处理器）**；SM = **Streaming Multiprocessor（流式多处理器）**；CTA = **Cooperative Thread Array（协作线程阵列，通常对应 CUDA thread block）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；FLOP = **Floating-Point Operation（浮点运算）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级矩阵乘加）**；FP8 = **8-bit Floating Point（8 位浮点格式）**。本文中的 **warp** 是 GPU 线程束，**work partitioning（工作划分：决定任务如何分给 thread/warp/CTA）** 指把一项计算工作拆给不同线程/warp/CTA 的方式。 另外：Q/K/V = **Query/Key/Value（查询/键/值向量）**，QKᵀ 表示 Query 与 Key 的矩阵乘，PV 表示注意力概率矩阵与 Value 的矩阵乘；AI = **Artificial Intelligence（人工智能）**。 另外：LLM = **Large Language Model（大语言模型）**。会议缩写：ICLR = **International Conference on Learning Representations（国际学习表征会议）**；NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
@@ -46,7 +46,7 @@
 > 论文：Tri Dao, **FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning**，2023，后发表于 ICLR 2024。
 >
 > 推荐前置：
-> - [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)
+> - [GPU 执行与内存基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)
 > - `01_FlashAttention论文详解.md`
 >
 > 本文重点不是重复 FlashAttention-1，而是回答：**FA1 已经把 Attention 从 IO 角度优化得很漂亮了，为什么仍只能利用 GPU 峰值算力的一部分？FA2 到底把剩下的性能浪费在哪里找了回来？**

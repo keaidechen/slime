@@ -30,9 +30,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A4 · 分层必修。
-> **前置**：[Transformer 与 KV](<../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md>)。
+> **前置**：[Transformer 与 KV](<../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md>)。
 > **首读/二读**：静态 batch→iteration-level；区分论文设计与当前引擎实现。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**。**Static batching（静态批处理）**是整批请求绑定到一起直到全部完成；**iteration-level scheduling（迭代级调度）**是在每一轮生成迭代重新决定 batch；**continuous batching（连续批处理）**允许运行过程中动态加入、移出请求；**selective batching（选择性批处理）**是 Orca 对不同算子采用不同 batching 方式的设计。 另外：MLP = **Multi-Layer Perceptron（多层感知机）**；AI = **Artificial Intelligence（人工智能）**。
@@ -41,7 +41,7 @@
 >
 > 这一篇在历史上非常重要：现代 LLM serving 里随处可见的 **continuous batching / in-flight batching（在途批处理：运行过程中动态加入/移出请求） / iteration-level scheduling**，都可以沿着这条思想线理解。
 >
-> 推荐前置：[Transformer 与 KV 基础](../../learn_docs/00_Foundations/05_Transformer执行与KV基础.md)中的 Prefill / Decode、KV Cache、batch，以及 [GPU 执行与内存基础](../../learn_docs/00_Foundations/04_GPU执行与内存基础.md)中的显存部分。
+> 推荐前置：[Transformer 与 KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)中的 Prefill / Decode、KV Cache、batch，以及 [GPU 执行与内存基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)中的显存部分。
 
 ---
 

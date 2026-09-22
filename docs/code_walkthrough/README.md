@@ -1,6 +1,6 @@
 # 从 0 系统学习 RL Infra：slime 代码走读系列
 
-> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/学习清单.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Foundations/README.md>)中补齐。引擎机制统一在对应的完整源码章节中维护。
+> 全库学习入口：[总目录](<../../learn_docs/README.md>)；[分阶段清单](<../../learn_docs/guides/16周实践路线.md>)。本系列负责框架实现，公共基础在[基础课](<../../learn_docs/00_Physical_Foundations/README.md>)中补齐。引擎机制统一在对应的完整源码章节中维护。
 
 本系列面向零基础读者，以本仓库（THUDM/slime）为教材系统学习 RL 基础设施。**00-09 是 slime 主线，10 是数据平面对比专题，13 讲解 slime 自己的 HF↔Megatron 转换实现**。每篇尽量遵循“问题 → 调用链 → 源码符号 → 例子 → 边界条件”的结构。
 
@@ -57,7 +57,7 @@
 
 - PyTorch 基础与张量并行（TP）的直觉即可起步；流水线（PP）、专家并行（EP）、上下文并行（CP）在各篇用到处均有解释；
 - 了解 PPO/GRPO 的算法概念有助于读第 05 篇，但篇内从公式到代码都有展开；
-- 初次接触 Infra，先完成[进程与异步](../../learn_docs/00_Foundations/03_进程线程与四种异步.md)和 [Ray 与队列调度](../../learn_docs/00_Foundations/07_Ray与队列调度.md)的小实验，再读 01 篇的资源编排。
+- 初次接触 Infra，先完成[进程与异步](../../learn_docs/03_Hardware_Systems/进程线程与四种异步.md)和 [Ray 与队列调度](../../learn_docs/11_RL_Systems/Ray与队列调度.md)的小实验，再读 01 篇的资源编排。
 
 ## 约定
 

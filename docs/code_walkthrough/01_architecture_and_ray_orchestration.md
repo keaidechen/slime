@@ -16,9 +16,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A0→A5 · 分层必修。
-> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **前置**：[系统概览](<../../learn_docs/11_RL_Systems/RL系统全景.md>)。
 > **首读/二读**：先读角色与同步主循环；placement/rank/rendezvous 在 A2、Ray 基础后读。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > 对应综述（`00_rl_infra_survey.md`）§2.1「编排与资源管理」。

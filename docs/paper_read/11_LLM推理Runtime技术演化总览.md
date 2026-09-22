@@ -36,9 +36,9 @@
 
 <!-- learning-position -->
 > **学习定位**：A0/A4 · 导航。
-> **前置**：[系统概览](<../../learn_docs/00_Foundations/00_课程与系统地图.md>)。
+> **前置**：[系统概览](<../../learn_docs/11_RL_Systems/RL系统全景.md>)。
 > **首读/二读**：先看调度、KV、Kernel 三条线；不作为全部论文读完的要求。
-> **进度与实验**：[学习清单](<../../learn_docs/学习清单.md>) · [总入口](<../../learn_docs/README.md>)。
+> **进度与实验**：[学习清单](<../../learn_docs/guides/16周实践路线.md>) · [总入口](<../../learn_docs/README.md>)。
 <!-- /learning-position -->
 
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；GPU = **Graphics Processing Unit（图形处理器）**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出，本文主要指数据搬运）**；TMA = **Tensor Memory Accelerator（张量内存加速器）**；WGMMA = **Warpgroup Matrix Multiply-Accumulate（warp group 级矩阵乘加）**；JIT = **Just-In-Time（即时编译）**；NCCL = **NVIDIA Collective Communications Library（NVIDIA 集合通信库）**；NVSHMEM 是 NVIDIA 的 GPU 对称共享内存通信库；IB = **InfiniBand（高带宽低延迟集群网络）**；IPC = **Inter-Process Communication（进程间通信）**；SLO = **Service Level Objective（服务等级目标）**；NIXL = **NVIDIA Inference Xfer Library（NVIDIA 推理数据传输库）**；RDMA = **Remote Direct Memory Access（远程直接内存访问）**；EAGLE = **Extrapolation Algorithm for Greater Language-model Efficiency（推测解码方法族）**；MTP = **Multi-Token Prediction（多 Token 预测）**；EPLB = **Expert Parallelism Load Balancer（专家并行负载均衡器）**。本文中的 **runtime** 是运行时系统，**kernel** 是 GPU 核函数，**scheduler** 是调度器，**router** 是请求路由层，**disaggregation** 指阶段/资源池解耦。 另外：KV Cache = **Key-Value Cache（键值缓存）**；FP8 = **8-bit Floating Point（8 位浮点格式）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；OS = **Operating System（操作系统）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；CTA = **Cooperative Thread Array（协作线程阵列）**；SM = **Streaming Multiprocessor（流式多处理器）**；PD = **Prefill-Decode（预填充-解码）**；CPU = **Central Processing Unit（中央处理器）**；FA1/FA2/FA3 = **FlashAttention-1/2/3**。 另外：AI = **Artificial Intelligence（人工智能）**；MoE = **Mixture of Experts（混合专家模型）**。

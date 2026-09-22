@@ -1,0 +1,498 @@
+{
+  "format_version": 1,
+  "evidence_kind": "source-inspection-only",
+  "captured_at_utc": "2026-09-22T11:20:59.958551+00:00",
+  "repositories": {
+    ".": "fd3d2e3307160fa16561c89f9ec119219adf1382",
+    "sglang": "f5155d960286db25952217f343ee0d3c358f7f77",
+    "Megatron-LM": "21fe0fe1597932421f1bb0efd93f469376a7a255"
+  },
+  "files": [
+    {
+      "path": "train.py",
+      "repo": ".",
+      "sha256": "d29b5b892e17e6d27f0a643b04e6cd41ba3fe7d0397f5928d860776316e00749",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "train",
+          "line": 9,
+          "end_line": 96,
+          "sha256": "6a91314b671e01a3faf6024c1068e32cd054b4d8816ff9352f445c140d308906"
+        }
+      ]
+    },
+    {
+      "path": "slime/ray/rollout.py",
+      "repo": ".",
+      "sha256": "8cf97c67b265439adc37ddb4f6d0e9fc1aae0fdff97221624dbc2ea347aa99a0",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "RolloutManager._post_process_rewards",
+          "line": 321,
+          "end_line": 346,
+          "sha256": "12de85158434008dadf92aab246e8afa3f47e2579c33e09f190b8e6e3a08edaf"
+        },
+        {
+          "name": "RolloutManager._convert_samples_to_train_data",
+          "line": 348,
+          "end_line": 508,
+          "sha256": "b0f17eda48da16795bd3682d2ad3a93ac3f51263de53a18dd0707ee00bb7afc7"
+        }
+      ]
+    },
+    {
+      "path": "slime/observability/train_data_utils.py",
+      "repo": ".",
+      "sha256": "69d4356fad6b0f8ff77aba31a97e7e7654fdc480a5b68f8aa83a719a8014b39b",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "_build_dump_payload",
+          "line": 112,
+          "end_line": 188,
+          "sha256": "494d67c9b83362be6f3ffdcde649c5fc6b0da87eef569be88b340b6d3b391ab0"
+        },
+        {
+          "name": "save_debug_train_data",
+          "line": 191,
+          "end_line": 242,
+          "sha256": "729fc15910cdc602c1348ac859fd3a0c96b0f847180b9e330f7a32dce902aac9"
+        }
+      ]
+    },
+    {
+      "path": "slime/observability/rollout_data_utils.py",
+      "repo": ".",
+      "sha256": "55e9f579b686f85d995a60c38be13e1914a6af9f5fd96b3e7641b0190e9d8166",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "load_debug_rollout_data",
+          "line": 110,
+          "end_line": 123,
+          "sha256": "912ca96221b49e11045031708c33a0734e68d1713055a39f0db190ac0f64d6bd"
+        },
+        {
+          "name": "save_debug_rollout_data",
+          "line": 126,
+          "end_line": 139,
+          "sha256": "56ce0af8e34a600d4cab629912a0005c2013a2005f3c1338b33edd6832a0639e"
+        }
+      ]
+    },
+    {
+      "path": "slime/rollout/sglang_rollout.py",
+      "repo": ".",
+      "sha256": "b09d9aea3c5d105d816bc9028de9e7f9ed00f15832b12e72f6ef79b5b7ee3459",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "generate_and_rm_group",
+          "line": 329,
+          "end_line": 368,
+          "sha256": "d1db6be194680740e28dbb4ec1006edbcf4f9a804d98af4cb3abc428c4d6cc61"
+        }
+      ]
+    },
+    {
+      "path": "slime/utils/ppo_utils.py",
+      "repo": ".",
+      "sha256": "55eaca48c869f189e0580c5baeb98acd6b22abb103ba1f84474303d642c8d0da",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "compute_policy_loss",
+          "line": 125,
+          "end_line": 148,
+          "sha256": "dbdb7377ec8b0b814bd665dbab51a27da0065239e6d80e376bd8b09a77557eb9"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/data.py",
+      "repo": ".",
+      "sha256": "581ed42c5bd2dcfe0af5b262cce8d5fee1719bf30da4ca3ec9bb1de73806abef",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "get_batch",
+          "line": 14,
+          "end_line": 149,
+          "sha256": "06784d906266b9c0e5c54bd44ee566e6c18680bf102d26b3f9a94e4e1d0a9c13"
+        }
+      ]
+    },
+    {
+      "path": "slime/observability/profile_utils.py",
+      "repo": ".",
+      "sha256": "069c0979de79d3ca209fabff2700e3503d869a673cc12283cd954d79821a4bb6",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "TrainProfiler.step",
+          "line": 31,
+          "end_line": 40,
+          "sha256": "d5a1b26b54e787324c885660ccc940f0b57e5fa76330c5c31ba8e7b4a6430874"
+        },
+        {
+          "name": "_create_torch_profiler",
+          "line": 43,
+          "end_line": 66,
+          "sha256": "5ec997112dddfa406b20c53eabae79d454b7ea165a1a36f1efa9df0e8a11fb29"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/actor.py",
+      "repo": ".",
+      "sha256": "6c25c72c7e8d8b9368f59d95884a0b161571dce9d15b203748c1c28db8b22860",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "MegatronTrainRayActor.train_actor",
+          "line": 436,
+          "end_line": 584,
+          "sha256": "e783df23a2e8161ff6149962907edfbf8fd761d3ed670e0f331f9e6596bf20ee"
+        },
+        {
+          "name": "MegatronTrainRayActor.save_model",
+          "line": 587,
+          "end_line": 609,
+          "sha256": "c15719062ad66641880e1c5aab6b8bb7141fb310e1ba7d85533be94725368435"
+        },
+        {
+          "name": "MegatronTrainRayActor.update_weights",
+          "line": 612,
+          "end_line": 662,
+          "sha256": "1c10329dc0969329d6cae48fc30eadf5a6ffddf22510fa7b4b32a4b52dbb7fba"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/loss.py",
+      "repo": ".",
+      "sha256": "b63b3beec3e6bc1557a21037c697640c04afab7d7584a2c61522e1142e006b47",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "get_log_probs_and_entropy",
+          "line": 513,
+          "end_line": 604,
+          "sha256": "03a8a41ac1e4539bc05870d03eaf1a213f570cdbda07d51170b3610c27f876eb"
+        },
+        {
+          "name": "policy_loss_function",
+          "line": 933,
+          "end_line": 1172,
+          "sha256": "e7d6b5e7e23ab22e866150ec2237f07037b442010476dc7542bd04b47da55635"
+        },
+        {
+          "name": "loss_function",
+          "line": 1282,
+          "end_line": 1382,
+          "sha256": "420c6e702225809c548691b4f8682851bec91e6e4320dd05111ec648c3f8ac6f"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/cp_utils.py",
+      "repo": ".",
+      "sha256": "01cc3c6cfa3574d233908af0d808099178a9c7f3319661a712bd88641925b80a",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "get_sum_of_sample_mean",
+          "line": 47,
+          "end_line": 124,
+          "sha256": "114dece7ad1e1476107b54c0363df2937d343f3b7e2c5d8284d2c072634a1315"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/model.py",
+      "repo": ".",
+      "sha256": "2d9c16dfe1759c43955c9763e4e446aed708fe305aa01ea1b049da4e7f38a5fa",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "train_one_step",
+          "line": 512,
+          "end_line": 702,
+          "sha256": "9f748173a58c2256f5a2f1fc2b3943af1c066ebc59c4f519f7a5e22525c2c13f"
+        },
+        {
+          "name": "train",
+          "line": 710,
+          "end_line": 943,
+          "sha256": "436ee05ec8383136bc1c85e4e280e682313bf0d3659586bf6261859eff24b14c"
+        },
+        {
+          "name": "save",
+          "line": 946,
+          "end_line": 974,
+          "sha256": "623e6233001ecfdb20afe43071c7e4f7e8c66ebf27f83b560a96f1cbc5feda91"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/checkpoint.py",
+      "repo": ".",
+      "sha256": "cc40c07c0726e8fa3e71e71a212dbac6a14b426648abdc1e9628bdbbae5aff1b",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "load_checkpoint",
+          "line": 95,
+          "end_line": 118,
+          "sha256": "435d823cba3c4e05d3e6e70c1705d86340b50a0c4eef70caa9af4fdfa27506a6"
+        },
+        {
+          "name": "_load_checkpoint_hf",
+          "line": 127,
+          "end_line": 142,
+          "sha256": "ebbda252f9658e24e07aba1ff19a09b2e22335a4c3e3c49b1d00b6d817793055"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/update_weight/update_weight_from_distributed.py",
+      "repo": ".",
+      "sha256": "64e4b31241a795ecd1361a4d0feeb37cd9d46491747bddb24c7309f95328cabd",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "UpdateWeightFromDistributed.update_weights",
+          "line": 102,
+          "end_line": 133,
+          "sha256": "1257f37665de5566105519a3b4bc1c946eb249fd8300a8dfc28e8a561ec8ae78"
+        },
+        {
+          "name": "UpdateWeightFromDistributed._send_weights",
+          "line": 135,
+          "end_line": 145,
+          "sha256": "06d34665f24f6e2b77a95f2687b07d747877784b0cade551e51ef41515d9c834"
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/sglang_utils/sglang_engine.py",
+      "repo": ".",
+      "sha256": "bca020ccc5f54be9dd61bab7ddb34a71067718cbe90420f62c2c95cae586c16e",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "SGLangEngine.flush_cache",
+          "line": 270,
+          "end_line": 289,
+          "sha256": "5ecaa11fe40fc6a3b71192893f3d0224c52404c36626af4abe1e4cc0209cc6fa"
+        },
+        {
+          "name": "SGLangEngine.pause_generation",
+          "line": 423,
+          "end_line": 428,
+          "sha256": "9c590de83c510d1ce5a5acc3130838a87e0294e58b934df30f67a9205a1b9002"
+        },
+        {
+          "name": "SGLangEngine.continue_generation",
+          "line": 430,
+          "end_line": 435,
+          "sha256": "93dca17193b7fb9e448e38d78ff3a221208ed9326efd477114cb9220a6db0552"
+        }
+      ]
+    },
+    {
+      "path": "slime/rollout/data_source.py",
+      "repo": ".",
+      "sha256": "25b7377f5fc41272bb390ac421b71180cc3b645f5088bd5505594ca6603d32f7",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "DataSource.save",
+          "line": 31,
+          "end_line": 34,
+          "sha256": "a569eb287eabdeecb32cc905ebf5eceeea2dd63a50169ee0bb79ac5b46866681"
+        },
+        {
+          "name": "DataSource.load",
+          "line": 37,
+          "end_line": 40,
+          "sha256": "2d12b9c8af7a78de89da8aa60ef4d76b81b4381913ab6f287a391bd638229321"
+        },
+        {
+          "name": "RolloutDataSource.save",
+          "line": 123,
+          "end_line": 136,
+          "sha256": "dab4677f372fab18c87341112673363fa8302ea08d48eeaca617e38972116c4a"
+        },
+        {
+          "name": "RolloutDataSource.load",
+          "line": 138,
+          "end_line": 160,
+          "sha256": "a022337985f6443f992ebcf81efde30f55d82fa753f3f8e50d540cdba7054a62"
+        }
+      ]
+    },
+    {
+      "path": "sglang/python/sglang/srt/managers/tokenizer_manager.py",
+      "repo": "sglang",
+      "sha256": "dc926f223abdf04e6dc6634418d83502eae09a81842ca9abc36acd6a8b5a4c7d",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "TokenizerManager.generate_request",
+          "line": 630,
+          "end_line": 687,
+          "sha256": "390527b6081a00f2b30330a4781d9405e4b34a477bd0bd201a1afaf918721fa6"
+        },
+        {
+          "name": "TokenizerManager.pause_generation",
+          "line": 1736,
+          "end_line": 1749,
+          "sha256": "f614eaca4d104fd08f5185a079db201a2f87355161f40bc1a77bd9c5e7221044"
+        }
+      ]
+    },
+    {
+      "path": "sglang/python/sglang/srt/managers/scheduler.py",
+      "repo": "sglang",
+      "sha256": "b9003630dd2677fae3331d563d8af426b6f3445defa4222c031f0ead6bf67700",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "Scheduler.event_loop_normal",
+          "line": 1552,
+          "end_line": 1583,
+          "sha256": "9de9174855d28ca98871703985dcd956e0f11d03d9fe9b6a19b02041b2ac1020"
+        },
+        {
+          "name": "Scheduler.event_loop_overlap",
+          "line": 1586,
+          "end_line": 1657,
+          "sha256": "690db33a72bd9cf6085aa6c467b7261b19b5e74a9fc33db4f90941ba7cbd9170"
+        },
+        {
+          "name": "Scheduler.flush_cache",
+          "line": 3932,
+          "end_line": 3960,
+          "sha256": "329b21dd4c3abcf5a4bf27470356dd5097dc7f91d219ecf198f019c1b421280b"
+        },
+        {
+          "name": "Scheduler.abort_request",
+          "line": 4118,
+          "end_line": 4248,
+          "sha256": "06c06ee32ab8876094ef9e6459185a46478ead9a36e5e33530538d249e842caf"
+        },
+        {
+          "name": "Scheduler.pause_generation",
+          "line": 4253,
+          "end_line": 4340,
+          "sha256": "d3c14a7df269b51a0be6913c0d94a74cc299f718e7069dc21aa1e1b50bfc6d22"
+        }
+      ]
+    },
+    {
+      "path": "sglang/python/sglang/srt/managers/scheduler_components/batch_result_processor.py",
+      "repo": "sglang",
+      "sha256": "006c88fc11890eb62ded439e01c1e57a3b4632b44b45d5158efb0acbd6a55308",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "SchedulerBatchResultProcessor.process_batch_result_prefill",
+          "line": 181,
+          "end_line": 350,
+          "sha256": "072d6646c4f563bd7a08434fa938d10c09de333aef995d1b74732acdb1c78a6c"
+        },
+        {
+          "name": "SchedulerBatchResultProcessor.process_batch_result_decode",
+          "line": 724,
+          "end_line": 834,
+          "sha256": "d2e3347f9e38c567e3512f123df10a0de9492745089084dbfa165df23587b0c9"
+        }
+      ]
+    },
+    {
+      "path": "sglang/python/sglang/srt/managers/io_struct.py",
+      "repo": "sglang",
+      "sha256": "627b4d3a2881b8eee2bebacef2270c092e9ef488d3c47e8d18fbaef943acda53",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "PauseGenerationReqInput",
+          "line": 1490,
+          "end_line": 1509,
+          "sha256": "279ef5785808fdc53fbf173ea94c20b59910d1f65b65ef9f73c87086b49d293f"
+        }
+      ]
+    },
+    {
+      "path": "sglang/python/sglang/srt/mem_cache/common.py",
+      "repo": "sglang",
+      "sha256": "f355cc5a9374d39be7ace586a0f5199e3942383f54fb17ab63f89c9c2e5695c6",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "release_kv_cache",
+          "line": 132,
+          "end_line": 175,
+          "sha256": "0fb7e224c74412125ffd786c6851f0e2bf097268a976aafdbf9265b3a6f25656"
+        }
+      ]
+    },
+    {
+      "path": "Megatron-LM/megatron/core/distributed/param_and_grad_buffer.py",
+      "repo": "Megatron-LM",
+      "sha256": "3326773f5c611d9d1b45df91b61f8e7351f717405c12bc99e32553c36f0bea9f",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "_ParamAndGradBucketGroup.start_grad_sync",
+          "line": 577,
+          "end_line": 757,
+          "sha256": "39ae0517a164c8a8b1b3b93a5f539712db41f108f8004f7d85c8543bca8e1efc"
+        },
+        {
+          "name": "_ParamAndGradBucketGroup.finish_grad_sync",
+          "line": 759,
+          "end_line": 804,
+          "sha256": "caa9a2e7f33849c5266d61018aef27edf718a637a104bcfe9b46fac6609118bc"
+        },
+        {
+          "name": "_ParamAndGradBucketGroup.register_grad_ready",
+          "line": 835,
+          "end_line": 857,
+          "sha256": "b0544c1dd312900717d2852e62444fa97af6c967bb72cd1936bdc867508d0356"
+        }
+      ]
+    },
+    {
+      "path": "Megatron-LM/megatron/core/distributed/finalize_model_grads.py",
+      "repo": "Megatron-LM",
+      "sha256": "168ae0f2463e77bb43f54b6fbab4c3d542834a73f57b6dcf2ecdcbafec2fc1c9",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "finalize_model_grads",
+          "line": 494,
+          "end_line": 614,
+          "sha256": "f4496aa03759c6dc315a6d47ef6fced0d01846126be041c6dba27bd17b06faba"
+        }
+      ]
+    },
+    {
+      "path": "Megatron-LM/megatron/training/checkpointing.py",
+      "repo": "Megatron-LM",
+      "sha256": "a6f99bcb5ec9018fb2ee5db5b7a2eb8beb2b595f2e0d83704821cc7b917e15d9",
+      "matches_head_blob": true,
+      "symbols": [
+        {
+          "name": "save_checkpoint",
+          "line": 497,
+          "end_line": 948,
+          "sha256": "5fb90427fc77ace4ae06f5b4aaddee2d027e044d8d254eb086076ab65e8e5a9d"
+        }
+      ]
+    }
+  ]
+}
