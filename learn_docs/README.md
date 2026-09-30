@@ -47,7 +47,7 @@ flowchart TD
 - **专题综述**串起问题、方法、代价和后续分支，区分可以组合与互相竞争的方案。
 - **实现与案例**对应具体代码或历史模型版本，不能把特定实现当成普遍定义。
 
-训练、推理和 RL 的通用原理在百科维护；[Megatron](../docs/megatron_code_walkthrough/README.md)、[SGLang](../docs/sglang_code_walkthrough/README.md)、[slime](../docs/code_walkthrough/README.md)负责实现走读。[论文详解](../docs/paper_read/README.md)负责原始方案的深入分析，[性能指南](../docs/performance_analysis_guide/README.md)负责工具操作、实验和报告。
+训练、推理和 RL 的通用原理在百科维护；[Megatron](../docs/megatron_code_walkthrough/README.md)、[SGLang](../docs/sglang_code_walkthrough/README.md)、[slime](../docs/code_walkthrough/README.md)负责实现走读。[FlashAttention](../docs/flash_attention_code_walkthrough/README.md)从零 CUDA 基础出发，用手算、CPU 实验和实际 kernel 串起论文与源码；[论文详解](../docs/paper_read/README.md)负责原始方案的深入分析，[性能指南](../docs/performance_analysis_guide/README.md)负责工具操作、实验和报告。
 
 ## 演进的阅读方法
 
@@ -57,6 +57,7 @@ flowchart TD
 
 ## 实践与维护
 
+- [从零开始写 CUDA](../docs/cuda_tutorial/README.md)：把 GPU 硬件与 CUDA 执行连起来，再从基础 kernel、Softmax、在线 Attention 走到 Tensor Core/CuTe、异步流水与 FA2 前向；附 CPU 推演和 CUDA 实验。
 - [文档补充 TODO](文档补充TODO.md)：按编号逐项补充的优先级、具体内容、依赖和验收标准。
 - [按目标阅读](guides/按目标阅读.md)：若需要连续理解，选择一条跨领域路径。
 - [16 周实践路线](guides/16周实践路线.md)：保留原有可选实验安排，不再决定百科结构。

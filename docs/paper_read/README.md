@@ -14,4 +14,6 @@
 
 随 SGLang 主线先读 PagedAttention、Orca、RadixAttention 的首读部分；FA1 建立 IO 直觉，其余按瓶颈深入。[技术演化总览](11_LLM推理Runtime技术演化总览.md)作为地图。
 
+FlashAttention 官方源码已固定为本仓库子模块。零 CUDA 基础可按“线程与内存 → 手算与 CPU 实验 → FA2 前向 → 布局和流水 → 反向/推理 → Hopper/CuTe”阅读 [FlashAttention 论文与源码走读](../flash_attention_code_walkthrough/README.md)。
+
 配套：[GPU 基础](../../learn_docs/03_Hardware_Systems/GPU执行与内存基础.md)、[KV 基础](../../learn_docs/10_Inference_Serving/Transformer执行与KV基础.md)、[SGLang 概念](../sglang_code_walkthrough/01_foundations/00_runtime_concepts.md)、[Runtime 对比](../runtime_comparisons/README.md)。论文结论按原工作负载理解；当前实现以本仓库代码为准。

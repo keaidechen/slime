@@ -3,6 +3,10 @@
 We recommend new contributors start from writing documentation, which helps you quickly understand slime codebase.
 Most documentation files are located under the `docs/` folder.
 
+## Learning Guides
+
+- [从零开始写 CUDA](cuda_tutorial/README.md): a Chinese course connecting GPU hardware to CUDA execution, then progressing through basic kernels, Softmax, online attention, Tensor Core/CuTe, asynchronous pipelines, and a fixed FA2 forward path, with CPU and CUDA exercises.
+
 ## Docs Workflow
 
 ### Install Dependency
