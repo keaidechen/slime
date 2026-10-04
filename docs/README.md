@@ -5,7 +5,7 @@ Most documentation files are located under the `docs/` folder.
 
 ## Learning Guides
 
-- [从零开始写 CUDA](cuda_tutorial/README.md): a Chinese course connecting GPU hardware to CUDA execution, then progressing through basic kernels, Softmax, online attention, Tensor Core/CuTe, asynchronous pipelines, and a fixed FA2 forward path, with CPU and CUDA exercises.
+- [AI Infra 深入解析](ai_infra/README.md): a unified Chinese blog series connecting principles, model architectures, performance analysis, and source-level explanations of slime, Megatron, SGLang, and FlashAttention.
 
 ## Docs Workflow
 

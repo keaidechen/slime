@@ -64,6 +64,8 @@ Useful engineering docs:
 
 ## Blogs
 
+- [AI Infra In Depth](docs/ai_infra/README.md): a Chinese series on principles, CUDA kernels, model architecture, performance, and source code.
+
 - Our vision: [slime: An SGLang-Native Post-Training Framework for RL Scaling](https://lmsys.org/blog/2025-07-09-slime/).
 - Our ideas on agentic training: [Agent-Oriented Design: An Asynchronous and Decoupled Framework for Agentic RL](https://www.notion.so/Agent-Oriented-Design-An-Asynchronous-and-Decoupled-Framework-for-Agentic-RL-2278e692d081802cbdd5d37cef76a547)
 - v0.1.0 release note: [v0.1.0: Redefining High-Performance RL Training Frameworks](https://thudm.github.io/slime/blogs/release_v0.1.0.html)

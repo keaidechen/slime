@@ -64,6 +64,8 @@ slime 被当作 RL 基础设施来开发，因为“脚本能跑起来”远远�
 
 ## 博文
 
+- [AI Infra 深入解析](docs/ai_infra/README.md)：原理、模型架构、CUDA、性能分析与源码走读的统一入口。
+
 - 我们的愿景：[slime：为 RL Scaling 设计的 SGLang-Native 后训练框架](https://thudm.github.io/slime/zh/blogs/introducing_slime.html)
 - 关于纯异步 agentic 训练的一些想法：[Agent-Oriented Design: An Asynchronous and Decoupled Framework for Agentic RL](https://www.notion.so/Agent-Oriented-Design-An-Asynchronous-and-Decoupled-Framework-for-Agentic-RL-2278e692d081802cbdd5d37cef76a547)
 - v0.1.0 日志：[slime v0.1.0: 重新定义高性能 RL 训练框架](https://zhuanlan.zhihu.com/p/1945237948166547268)

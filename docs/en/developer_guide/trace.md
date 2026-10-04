@@ -115,4 +115,4 @@ with trace_span(sample, "sglang_generate") as span:
 
 - Save a small number of rollouts first; the viewer is easiest to read when each dump contains a manageable number of samples.
 - The viewer is built from the saved `.pt` dump, so traces can be inspected offline on another machine.
-- For GPU/kernel-level SGLang profiling traces, see [Profiling](./profiling.md).
+- For GPU/kernel-level SGLang profiling traces, see [Profiling](profiling.md).
