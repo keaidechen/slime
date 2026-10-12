@@ -12,6 +12,9 @@
 | [采样与推测解码](采样与推测解码.md) | 采样、自回归依赖与推测解码 |
 | [推理并行方案设计](推理并行方案设计.md) | 推理并行方案设计：延迟、吞吐与 KV 的三角形 |
 | [案例_Prefill-Decode分离](案例_Prefill-Decode分离.md) | 案例：Prefill–Decode 分离与 KV Cache 传输 |
+| [量化推理与缓存精度](量化推理与缓存精度.md) | 权重、激活与 KV 精度的容量、执行和质量边界 |
+| [执行优化与功能组合](执行优化与功能组合.md) | CUDA Graph、编译、CPU/GPU overlap、长上下文与组合约束 |
+| [结构化生成与多模型服务](结构化生成与多模型服务.md) | Grammar、Multi-LoRA、多模态、adapter 与缓存身份 |
 
 ## 完整推演与历史主线
 
@@ -37,3 +40,17 @@
 ## 贯穿到当前实现
 
 [请求、执行与KV生命周期](../12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md)。
+
+## 原理、源码与性能的对应入口
+
+| 系统问题 | 通用正文 | 实现走读 | 性能或案例 |
+|---|---|---|---|
+| 请求、调度与 KV 生命周期 | [KV](推理内存系统.md)、[调度](批处理排队与调度演进.md) | [SGLang 固定版本](../13_Source_Analysis/sglang/README.md) | [生成与 KV 案例](../12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md) |
+| 执行、量化与功能组合 | [执行优化](执行优化与功能组合.md)、[量化](量化推理与缓存精度.md) | [跨引擎 runtime](../runtime/README.md) | [推理性能](../12_Performance_Reliability/05_inference.md) |
+| Grammar、adapter 与媒体状态 | [高级服务功能](结构化生成与多模型服务.md) | [SGLang 固定版本](../13_Source_Analysis/sglang/README.md) | [功能组合算例](../12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md#功能组合算例前缀复用与-adapter-身份) |
+| 长上下文与阶段交接 | [并行](推理并行方案设计.md)、[PD](案例_Prefill-Decode分离.md) | [runtime 对比](../runtime/README.md) | [PD 容量推演](案例_Prefill-Decode分离.md) |
+
+
+## 内容深化与验证
+
+[排队、长尾与容量规划](排队长尾与容量规划.md)：服务时间分布、调度时间线、开闭环压测和扩缩容。

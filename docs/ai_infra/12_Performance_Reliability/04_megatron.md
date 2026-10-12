@@ -30,6 +30,8 @@
 Megatron 的难点不是 kernel 更多，而是同一个 step 同时包含多种并行通信和流水线调度。分析目标是把 step time 拆成可行动的部分，并找到最慢 rank 的关键路径。
 
 
+优化器可能改变每步成本和达标所需 token。比较 AdamW/Muon 时，分别核对 NS 与参数同步的暴露时间、持久状态/峰值工作区、质量门槛及总 GPU 时间；不要用持久矩状态减少比例推断整体速度。数学反例见[Muon 成本比较](../09_Training_Systems/Muon与矩阵优化.md#用相同质量目标比较完整成本)，实际分支见[Megatron 优化器执行](../13_Source_Analysis/megatron/03_state_and_memory/04_adam_muon_execution.md)。
+
 ## 1. 先用最少概念理解五种并行
 
 | 并行 | 切分什么 | 典型通信 | 常见性能问题 |

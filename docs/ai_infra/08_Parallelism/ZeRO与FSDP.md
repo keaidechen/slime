@@ -5,6 +5,10 @@
 > 相关基础：[基础概念](../09_Training_Systems/训练步与优化器.md)。关联：[机制与演进](并行设计空间与演进.md)。
 
 
+先与上一章 TP 对照：TP 中每张卡只算一个矩阵乘的一部分；本篇的全分片数据并行在计算某层时可以临时拿到完整参数，仍处理自己的数据批次。**分开保存**不等于**拆开这个算子的计算**。
+
+Materialize/unshard 表示收集分片、形成当前计算可用的完整参数；reshard 表示恢复只持有分片的状态；prefetch 是在真正需要前提前取来参数；offload 是把状态迁到 CPU 等其他存储层。Owner 是负责某片状态更新的 rank。
+
 ## 入门例子：用八个参数画出全分片生命周期
 
 两个 rank 各持有四个参数 shard。某层 forward 前，按需 AllGather 得到该层完整参数；算完后可释放临时完整副本。backward 可能再次需要完整参数，梯度规约后仅由 owner 消费对应 shard。
@@ -57,11 +61,15 @@ sequenceDiagram
 
 ## FSDP wrapping unit 很关键
 
+Wrapping unit（封装单元）是一组一起展开、释放和管理参数的模块。它决定一次临时出现多大参数，而不只是代码怎样分文件。
+
 若整个模型只包一个 FSDP unit，可能在 forward 前一次性 gather 全模型，失去 layer-wise 峰值优势；若每个很小 module 都独立 unit，collective 过碎。Transformer 通常按 block wrap，再对 root embedding/head 做专门处理。
 
 FSDP2 不再依赖 FSDP1 的 `FlatParameter` 中心设计，而让 sharded parameter 以 DTensor（分布式张量）表达，更容易与 Tensor Parallelism 和 DeviceMesh 组合。FSDP1/FSDP2 API、state dict 与 hook 行为不同，升级必须按框架版本验证。
 
 ## Hybrid Sharding
+
+以下组合布局是进阶选读；初读可先完成后面的八参数数值例子，再回看二维分组。
 
 Hybrid Sharded Data Parallel（HSDP，混合分片数据并行）只在节点内或一个高速 subgroup 分片，再跨 subgroup 复制并同步。它在以下矛盾间折中：
 

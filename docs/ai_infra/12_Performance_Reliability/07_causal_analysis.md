@@ -2,12 +2,15 @@
 
 从一个矩阵乘到一轮 RL，分析尺度会变，推理方法却相通：明确实际工作与时间边界，找出决定完成时间的依赖，再判断某种改变是否作用于这条依赖。下面沿六个层次展开，不将某次测试的数字当成普遍结果。
 
+本篇包含两种材料：机制推理可以直接阅读；CUDA/PyTorch 代码需要配置相应软件和 NVIDIA GPU 才能运行。没有 GPU 时，可在读完后运行[可复现实验中的 CPU 路线](可复现实验_数值性能与恢复.md)，练习计时、对照和恢复；它不替代 GPU 或多卡实测。
+
 ## 一、矩阵乘的 CPU 时间为何可能很短
 
 `torch.mm(x,y)` 返回时，GPU 工作可能只是入队。CPU 的 `time.perf_counter()` 差值因此可能主要是提交开销。若在开始前排空旧工作、结束后等待目标完成，计时窗口才包括本次 GPU 执行，但也包括主机相关开销。CUDA Event 则在设备时间线上定义另一种边界。
 
 ```python
 # 示意同一调用的两种时间边界；并非一组实测结果。
+# 假设已 import time、torch，且 x、y 为预热后的 CUDA 张量。
 t0 = time.perf_counter()
 torch.mm(x, y)
 enqueue_time = time.perf_counter() - t0
@@ -23,7 +26,7 @@ completion_time = time.perf_counter() - t0
 
 ## 二、一行 Python 为什么对应多个名字
 
-对 `(relu(x @ w).sum()).backward()`，Python 表达式、ATen 的 `matmul/mm`、ReLU、reduction、反向算子和 GPU kernel 分别属于不同层。`record_function` 提供业务语义，`record_shapes`、`profile_memory`、`with_stack` 提供形状、分配和调用来源；self CUDA time 与包含子调用的 total time 不能重复相加。
+对 `(relu(x @ w).sum()).backward()`，Python 表达式、ATen 的 `matmul/mm`、ReLU、reduction、反向算子和 GPU kernel 分别属于不同层。`record_function` 提供业务语义，`record_shapes`、`profile_memory`、`with_stack` 提供形状、分配和调用来源；self CUDA time 是归到该项自身的时间，total time 还包括其子调用；两者不能重复相加。
 
 
 下面的代码把这个表达式放到一个明确的语义区间中。五轮预热用于隔离初始化；每轮清空 `x.grad/w.grad`，避免把梯度累积状态混进参考。CPU/CUDA activity、shape、memory 与 stack 各自增加一种观测维度，也各自增加采集开销。
@@ -57,7 +60,7 @@ prof.export_chrome_trace("/tmp/forward_backward_trace.json")
 
 表格将 self CUDA time 排序，trace 则保留算子、launch 和设备执行的关系。`row_limit=20` 只是展示上限，不代表只有二十个事件。这个片段说明证据如何产生，本文没有据此写入 GPU 实测数据。
 
-CPU、CUDA、Autograd、Autocast 的 dispatcher key 不必指向同一实现。内部接口 `torch._C._dispatch_dump_table("aten::mm")` 可以展示注册关系，但语法和输出依 PyTorch 版本变化。[执行与内存篇](02_pytorch.md)进一步解释这种映射。
+进阶选读：dispatcher 根据设备、自动微分、自动混合精度等分派条件选择实现；Autocast 指自动选择运算精度的机制。CPU、CUDA、Autograd、Autocast 的 dispatcher key 不必指向同一实现。内部接口 `torch._C._dispatch_dump_table("aten::mm")` 可以展示注册关系，但语法和输出依 PyTorch 版本变化。[执行与内存篇](02_pytorch.md)进一步解释这种映射。
 
 同样，`memory_allocated()`、`memory_reserved()` 和 `max_memory_allocated()` 分别是当前张量占用、缓存分配器保留与窗口峰值。矩阵尺寸增大后，这三个数字不同并不自动意味着泄漏。Profiler 能找到哪个算子占时间，单凭算子表却不能解释 kernel 内部的 stall。
 
@@ -65,7 +68,7 @@ CPU、CUDA、Autograd、Autocast 的 dispatcher key 不必指向同一实现。�
 
 如果 GPU 在两个 kernel 之间长期空闲，根因可能在 CPU、数据供给或依赖；如果 kernel 连续执行，才进一步讨论计算、内存和指令限制。累计耗时最高的 kernel 可能调用很多次，单次最慢的 kernel 则可能不在关键路径，两者都需要上下文。
 
-Nsight Systems 的 `cuda,nvtx,osrt` 轨道连接主机、设备与语义区间。Nsight Compute 的 kernel-name 过滤和 launch-count 限定分析对象，basic/full 等采集集合影响成本。完整训练的所有 kernel 都做 replay，会改变被分析系统并产生大量数据。
+Warp stall 指 Warp 因依赖或资源问题不能发射；轨道是在同一时间轴上展示一类事件的行。Nsight Systems 的 `cuda,nvtx,osrt`（CUDA、语义标记、操作系统运行时）轨道连接主机、设备与语义区间。Nsight Compute 的 kernel-name 过滤和 launch-count 限定分析对象，basic/full 等采集集合影响成本。完整训练的所有 kernel 都做 replay，会改变被分析系统并产生大量数据。
 
 DRAM 与 SM/compute throughput、occupancy、warp stall、算术强度一起限定解释。低 occupancy 可能仍足以饱和带宽，不能单独判错。shape 或 dtype 改变后，系统总时长与对应资源信号是否按假设变化，决定该解释是否成立。详见[时间线与底层算子](03_cuda_kernels.md)。
 
@@ -89,7 +92,7 @@ microbatch、activation recomputation 和 overlap 分别改变调度粒度、计
 
 RL 还有奖励、工具、环境、过滤、优势计算、权重转换、传输、加载和角色等待。`--debug-rollout-only` 的数据保存与 `--debug-train-only` 的回放可以定义角色独立路径，但全链路的资源争用和同步边界仍然存在。
 
-一种教学假设是：`wait_time_ratio` 中位数为 0.42，最长样本的非生成阶段占 rollout 的 35%，对应窗口 GPU 空闲。这支持远程 reward/tool 长尾的候选解释，尚不能证明 decode kernel 有问题；这些数字不是本仓库实测。sample 时间线和角色依赖决定下一轮训练到底在等谁。
+等待比例必须先定义分子分母；假设本例以一轮总时间为分母、训练端等待样本的时间为分子。一组教学观测为：`wait_time_ratio` 中位数 0.42，最长样本的非生成阶段占 rollout 的 35%，对应窗口 GPU 空闲。这支持远程 reward/tool 长尾的候选解释，尚不能证明 decode kernel 有问题；这些数字不是本仓库实测。sample 时间线和角色依赖决定下一轮训练到底在等谁。
 
 增加 rollout GPU、并发、reward concurrency、microbatch 或改变并行配置，作用于不同限制。max response length、update frequency 还可能改变任务语义、样本年龄和质量，因此不能只比较吞吐。有效 tokens/s、samples/hour、step p50/p95、wait ratio、GPU-hours、reward、KL、长度和错误率需要一起解释。
 

@@ -75,45 +75,11 @@ PyTorch Distributed Checkpoint（DCP，分布式检查点）支持多 rank 并�
 Silent Data Corruption（SDC，静默数据损坏）不会总以进程 crash 呈现。ECC、checksum、梯度/权重统计、loss anomaly、冗余验证与 checkpoint lineage 共同构成防线。NCCL RAS 能诊断部分 hardware/communicator 状态，但不验证模型 tensor 数值正确性。
 
 
-## 数据到恢复：Packing的目标、游标与Checkpoint提交
+## 数据游标与Checkpoint提交
 
-> 范围：两个独立文本样本的训练数据语义，以及一个显式设计的恢复协议。不是某个后端的默认实现。前置：[数据管线](数据管线与训练演进.md)、[分布式Checkpoint](分布式Checkpoint与恢复.md)。
+> 范围：一个按完整更新提交数据进度的教学恢复协议，不是某个后端的默认实现。前置：[数据管线](数据管线与训练演进.md)、[分布式Checkpoint](分布式Checkpoint与恢复.md)。
 
-### 先明确打包前到底优化哪些预测
-
-样本A为[BOS,a,b,EOS]，样本B为[BOS,c,EOS]。先考虑各样本内部的next-token预训练目标：A有3个预测，B有2个预测，不跨样本预测下一个BOS。
-
-将它们拼成7个输入位置，logits位置i用于预测i后面的目标：
-
-| logits位置 | 输入token | 标签 | 预训练loss mask | 样本内position |
-|---|---|---|---:|---:|
-| 0 | A:BOS | a | 1 | 0 |
-| 1 | a | b | 1 | 1 |
-| 2 | b | EOS | 1 | 2 |
-| 3 | A:EOS | ignore | 0 | 3 |
-| 4 | B:BOS | c | 1 | 0 |
-| 5 | c | EOS | 1 | 1 |
-| 6 | B:EOS | ignore | 0 | 2 |
-
-“没有目标的位置”不是词表里的一个真实ignore token；实现可以用忽略标签或显式mask，但必须保证无效标签不被非法gather访问。
-
-### Attention边界与loss边界是两件事
-
-正确的独立样本causal可见集合为：位置0可见{0}，1可见{0,1}，2可见{0,1,2}，3可见{0,1,2,3}；位置4只能见{4}，5见{4,5}，6见{4,5,6}。
-
-只重置position ids不足以隔离A与B；只屏蔽A末尾loss也不足以阻止B关注A。实现需要block causal mask或能够表达等价序列边界的varlen元数据。反过来，若训练目标本来就是把文档连接为连续语料流，允许跨边界就是不同且可能有意的目标，本页不混用两者。
-
-Packing改变物理布局；要保持目标不变，还需保持样本身份、标签、mask、位置规则和有效token计数。不能把总输入长度7当成有效预测数5。
-
-### 把分母算清楚
-
-假设A的三个有效loss为[0.1,0.2,0.4]，B的两个为[0.6,0.8]。按有效token平均的全局loss为(0.7+1.4)/5=0.42。
-
-若两个DP rank分别处理A、B，各自mean后再平均，结果是(0.7/3+1.4/2)/2≈0.466667。这是按样本均值平均，改变了权重。正确的反向缩放见[DDP推演](<../08_Parallelism/DP与DDP.md#数值展开-ddp不等长数据梯度累积与-bucket-时间线>)。
-
-再改成SFT目标：A的prompt是[BOS,a]，只训练[b,EOS]；B的prompt是[BOS]，训练[c,EOS]。此时位置0的mask改成0，其余有效位置为1、2、4、5，分母变成4，相应loss=(0.2+0.4+0.6+0.8)/4=0.5。
-
-真实场景还可能屏蔽工具返回或被截断片段。应先决定哪些输出是要优化的动作，再让packing搬运这些定义。
+标签、attention 边界与有效分母先按[数据管线的 Packing 推演](<数据管线与训练演进.md#packing的目标边界与有效分母>)确定。本节接着追踪已经构造好的 batch 如何与更新和恢复状态共同提交。
 
 ### 数据管线提前读取，不等于训练已经消费
 
@@ -156,7 +122,7 @@ Packing改变物理布局；要保持目标不变，还需保持样本身份、�
 
 ## 完整推演
 
-[数据游标与Checkpoint提交推演](<分布式Checkpoint与恢复.md#数据到恢复packing的目标游标与checkpoint提交>)：预取、部分分片、完整提交和重放边界。
+[数据游标与Checkpoint提交推演](<分布式Checkpoint与恢复.md#数据游标与checkpoint提交>)：预取、部分分片、完整提交和重放边界。
 
 
 ---

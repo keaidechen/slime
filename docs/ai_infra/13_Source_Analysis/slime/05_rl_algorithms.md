@@ -194,7 +194,9 @@ MiniMax-M1 的做法：比率 clamp 后 **stop-gradient** 当权重，梯度从 
 
 ## 5. TIS：训推数值不一致的修正
 
-问题：FP8 rollout、推理引擎 kernel 差异 → `rollout_log_probs`（行为策略）≠ 训练侧同参数下的 logprob（目标策略），严格说已 off-policy。TIS（truncated importance sampling）用比值修正：
+推理精度、kernel、采样处理和权重陈旧度都可能使 rollout 评分与训练评分不同。下列代码对记录的评分比率做截断加权；它是否对应严格的行为重要性比率，要核对两个字段的概率语义及支持集合，不能只凭“同参数”或字段名判断。通用定义与适用条件见[四份概率与行为校正](../../11_RL_Systems/行为概率与异步校正.md)。
+
+本篇代码块保留走读时的行号。2026-10-12 核对当前工作区：`policy_loss_function` 为 TIS 优先取缓存 `batch["log_probs"]`，缺失时取当前评分的 detached 值；PPO 分母还受 `use_rollout_logprobs` 控制。因此当前 detached 评分不应被一律称作冻结 old。请按符号追踪调用链，区分快照说明与当前路径。
 
 ```840:852:slime/backends/megatron_utils/loss.py
     rollout_log_probs = torch.cat(rollout_log_probs, dim=0)
@@ -207,7 +209,7 @@ MiniMax-M1 的做法：比率 clamp 后 **stop-gradient** 当权重，梯度从 
     pg_loss = pg_loss * tis_weights
 ```
 
-`icepop_function`（loss.py:855-878）是变体：超出 `[tis_clip_low, tis_clip]` 的 token 权重直接置 0（拒绝而非截断）。配套观测指标：`tis / tis_clipfrac / tis_abs / ois`（loss.py:1093-1100），以及长期健康指标 `train_rollout_logprob_abs_diff`（loss.py:1073-1077）——这个值缓慢爬升通常意味着训推某一侧出了数值问题。`--custom-tis-function-path` 可替换自定义修正策略（loss.py:1011-1014）。
+`icepop_function`（loss.py:855-878）是变体：超出 `[tis_clip_low, tis_clip]` 的 token 权重直接置 0（拒绝而非截断）。配套观测指标：`tis / tis_clipfrac / tis_abs / ois`（loss.py:1093-1100），以及长期健康指标 `train_rollout_logprob_abs_diff`（loss.py:1073-1077）——这个值爬升需要结合采样处理、版本差和跨引擎同权重评分对照定位。`--custom-tis-function-path` 可替换自定义修正策略（loss.py:1011-1014）。
 
 ---
 

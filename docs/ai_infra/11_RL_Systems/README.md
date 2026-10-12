@@ -12,6 +12,9 @@
 | [Ray与队列调度](Ray与队列调度.md) | Ray、队列与背压：从远程调用走到 RL 调度 |
 | [权重样本与异步一致性](权重样本与异步一致性.md) | 权重、样本与异步系统的一致性 |
 | [RL角色级并行](RL角色级并行.md) | RL 角色级并行：模型内部之外还有数据流 |
+| [行为概率与异步校正](行为概率与异步校正.md) | μ、old、current、reference 与校正适用条件 |
+| [多轮轨迹与环境执行](多轮轨迹与环境执行.md) | Tool/agent、环境状态、mask、终止、重试与资源生命周期 |
+| [奖励评估与质量闭环](奖励评估与质量闭环.md) | Reward、过滤、独立评估、有效样本率与 time-to-quality |
 
 ## 完整推演与历史主线
 
@@ -38,3 +41,13 @@
 [Rollout到真实训练接口](../12_Performance_Reliability/贯穿案例_从Rollout到参数更新.md)。
 
 [换权失败与恢复](../12_Performance_Reliability/贯穿案例_换权失败与训练恢复.md)。
+
+## 原理、源码与性能的对应入口
+
+| 系统问题 | 通用正文 | 固定源码走读 | 性能或案例 |
+|---|---|---|---|
+| 目标与概率字段 | [算法接口](RL算法与系统接口.md)、[行为校正](行为概率与异步校正.md) | [slime 算法](../13_Source_Analysis/slime/05_rl_algorithms.md) | [样本到更新](../12_Performance_Reliability/贯穿案例_从Rollout到参数更新.md) |
+| 多轮环境与奖励 | [轨迹执行](多轮轨迹与环境执行.md)、[奖励评估](奖励评估与质量闭环.md) | [slime 总览](../13_Source_Analysis/slime/README.md) | [RL 性能](../12_Performance_Reliability/06_slime.md) |
+| 角色、版本与恢复 | [角色并行](RL角色级并行.md)、[异步一致性](权重样本与异步一致性.md) | [slime 总览](../13_Source_Analysis/slime/README.md) | [换权与恢复](../12_Performance_Reliability/贯穿案例_换权失败与训练恢复.md) |
+
+通用篇定义契约；源码篇核对字段和分支；性能篇声明负载、指标与证据边界。

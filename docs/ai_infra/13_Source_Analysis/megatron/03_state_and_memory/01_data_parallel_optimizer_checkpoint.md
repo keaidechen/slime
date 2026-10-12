@@ -3,6 +3,8 @@
 相关基础：[通信与 tensor 基础](<../../../07_Communication/两卡通信与torchrun.md>)。
 
 
+优化器公式与矩阵耦合见[AdamW](../../../09_Training_Systems/优化器原理与AdamW.md)、[Muon](../../../09_Training_Systems/Muon与矩阵优化.md)；本快照的 Adam/AdamW 后端选择、Muon 参数路由与 LayerWise owner 见[优化器执行走读](04_adam_muon_execution.md)。
+
 ## 1. Megatron DDP 不只是 PyTorch DDP 包装
 
 `DistributedDataParallel` 位于 `megatron/core/distributed/distributed_data_parallel.py:22`。它把参数 gradient 映射到连续 grad buffer，并用 bucket 控制通信。目标是：

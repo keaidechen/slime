@@ -15,8 +15,8 @@
 - [10. TensorRT-LLM 为什么高度强调 Quantization？](#10-tensorrt-llm-为什么高度强调-quantization)
 - [11. 为什么 Paged Attention、IFB、Scheduler 是一组功能？](#11-为什么-paged-attentionifbscheduler-是一组功能)
 - [12. Chunked Context / Chunked Prefill 在这里做什么？](#12-chunked-context--chunked-prefill-在这里做什么)
-- [13. TensorRT-LLM 当前为何同时存在“编译引擎”和 PyTorch workflow 的概念？](#13-tensorrt-llm-当前为何同时存在编译引擎和-pytorch-workflow-的概念)
-- [14. TensorRT-LLM 与 vLLM 最大的气质差异是什么？](#14-tensorrt-llm-与-vllm-最大的气质差异是什么)
+- [13. 从 TensorRT engine 到 PyTorch 执行后端](#13-从-tensorrt-engine-到-pytorch-执行后端)
+- [14. 如何用相同负载比较 TensorRT-LLM 与 vLLM](#14-如何用相同负载比较-tensorrt-llm-与-vllm)
 - [15. TensorRT-LLM 与 FlashAttention / FlashInfer 的关系](#15-tensorrt-llm-与-flashattention--flashinfer-的关系)
 - [16. TensorRT-LLM 与 DistServe / P-D 分离的关系](#16-tensorrt-llm-与-distserve--p-d-分离的关系)
 - [17. 一个请求在 TensorRT-LLM 中的概念路径](#17-一个请求在-tensorrt-llm-中的概念路径)
@@ -26,7 +26,7 @@
 
 > **标题缩写与首次术语说明**：TensorRT-LLM 是 NVIDIA 面向大语言模型的高性能推理与 runtime（运行时）技术栈，项目名不强行字母展开；LLM = **Large Language Model（大语言模型）**；API = **Application Programming Interface（应用程序编程接口）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；IFB = **In-Flight Batching（在途批处理，即运行中动态更新 batch）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；MoE = **Mixture of Experts（混合专家模型）**；PP = **Pipeline Parallelism（流水线并行）**；EP = **Expert Parallelism（专家并行）**；HTTP = **Hypertext Transfer Protocol（超文本传输协议）**。本文中的 **scheduler** 是请求调度器，**executor/worker** 是实际组织或执行模型计算的组件，**backend** 是某类算子/执行能力的后端实现。 另外：CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；FP16/BF16/FP8 分别是 **16 位浮点、bfloat16 与 8 位浮点格式**；INT8/INT4 分别是 **8 位/4 位整数格式**；FP4 = **4-bit Floating Point（4 位浮点格式）**；AI = **Artificial Intelligence（人工智能）**。
 
-> 本文不是一篇单独论文摘要，而是截至 2026-08 的 **TensorRT-LLM runtime 架构学习笔记**。
+> 本文主体是截至 2026-08 的 **TensorRT-LLM runtime 架构学习笔记**；第 13–14 节于 2026-10-12 核对执行后端迁移和功能组合边界。历史组件说明不能直接充当当前部署指南。
 >
 > 目标：理解一个请求从 API 进入，到 scheduler、KV Cache、GPU worker、kernel、distributed execution 的完整路径，并把它和 Orca、PagedAttention、FlashAttention、DistServe 串起来。
 
@@ -102,7 +102,7 @@ Transformer / LLM / MoE / multimodal generation
 
 更上层的 serving server，可以托管不同 backend/model。
 
-今天 TensorRT-LLM 本身也提供：
+本篇 2026-08 架构整理中，TensorRT-LLM 的服务路径还包括：
 
 ```text
 trtllm-serve
@@ -446,90 +446,29 @@ Chunking：
 ---
 
 
-## 13. TensorRT-LLM 当前为何同时存在“编译引擎”和 PyTorch workflow 的概念？
+## 13. 从 TensorRT engine 到 PyTorch 执行后端
 
-TensorRT-LLM 历史上很强调：
+旧版 TensorRT-LLM 先构建 TensorRT engine，再由相应 runtime 执行。因此旧教程中的 Builder、ModelRunner、engine 文件和 `trtllm-build` 都有历史背景。
 
-```text
-把模型转换/构建成高度优化的 TensorRT engine
-```
+2026-10-12 核对官方 [TensorRT backend removal](https://nvidia.github.io/TensorRT-LLM/latest/legacy/tensorrt-backend-removal.html)：TensorRT engine backend 已移除，PyTorch 是当前唯一执行后端；旧构建、refit/prune 和相关参数不再是当前工作流。官方迁移说明改用 PyTorch 路径和 `TorchLlmArgs`。PyTorch 后端仍会调用优化 kernel，不能据此推断执行没有编译或图捕获。
 
-然后由 runtime 执行。
+阅读旧文章时应分开记录三件事：请求与 KV 的稳定系统问题、特定版本的组件名称、该版本实际支持的加载和执行路径。本篇此前的概念图属于 2026-08 架构整理，本节只更新执行后端迁移边界，并不宣称所有类名和参数已按最新源码逐项审计。
 
-随着项目演化，又提供越来越完整的 PyTorch-oriented workflow / LLM API。
+## 14. 如何用相同负载比较 TensorRT-LLM 与 vLLM
 
-因此阅读不同年代文档时可能看到：
+比较时先固定模型、硬件、精度、输入/输出长度、并发、采样处理与质量门槛，再分别记录：
 
-```text
-Builder / Engine
-ModelRunner
-Executor
-PyTorch workflow
-LLM API
-```
+| 维度 | 需要核对的证据 |
+|---|---|
+| 执行路径 | 加载方式、kernel、graph bucket、编译或 warmup 成本 |
+| 调度与缓存 | Token budget、prefix 命中、KV 容量、chunk、取消与尾延迟 |
+| 功能组合 | 量化 + TP、LoRA + prefix、grammar + speculative、PD + cache 的支持组合 |
+| 扩展与服务 | Worker 边界、路由、准入、传输与故障恢复责任 |
+| 测量结果 | 相同质量约束下的 TTFT、TPOT、吞吐、显存与失败率 |
 
-这些属于项目不同层次和演化阶段。
+功能清单中分别出现两个功能，不证明它们能在任意 backend、模型和硬件上同时启用。TensorRT-LLM 的[官方组合矩阵](https://nvidia.github.io/TensorRT-LLM/latest/features/feature-combination-matrix.html)区分支持、不支持与未测试；对比应绑定所测版本，不能把未测试填成支持。
 
-学习时不要把某个旧版本类名当作永恒架构。
-
-稳定概念是：
-
-```text
-Request scheduling
-KV cache management
-Model execution
-Optimized kernels
-Distributed parallelism
-Serving API
-```
-
----
-
-
-## 14. TensorRT-LLM 与 vLLM 最大的气质差异是什么？
-
-粗略理解：
-
-
-### TensorRT-LLM
-
-更强烈地围绕：
-
-```text
-NVIDIA GPU architecture
-TensorRT / CUDA kernel specialization
-quantization
-latest hardware features
-```
-
-做纵向深度优化。
-
-
-### vLLM
-
-历史上以：
-
-```text
-PagedAttention
-easy model serving
-flexible open-source engine
-scheduler / memory manager
-```
-
-迅速形成广泛生态。
-
-今天两者都已经覆盖大量重叠能力，因此不能简单说：
-
-```text
-一个只有 kernel
-一个只有 scheduler
-```
-
-那已经过时。
-
-更准确的是：
-
-> **两者都是完整 LLM inference runtime，只是历史基因、硬件适配策略和生态侧重点不同。**
+通用机制见[执行优化与功能组合](../10_Inference_Serving/执行优化与功能组合.md)，测量口径见[推理性能](../12_Performance_Reliability/05_inference.md)。
 
 ---
 

@@ -1,0 +1,7 @@
+{"name": "forward_backward_adam", "ph": "X", "ts": 36341.625, "dur": 1304.375, "pid": 74712, "tid": 0, "args": {"step": 1}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 38705.541, "dur": 1051.75, "pid": 74712, "tid": 0, "args": {"step": 2}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 40882.916, "dur": 729.334, "pid": 74712, "tid": 0, "args": {"step": 3}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 36846.708, "dur": 378.083, "pid": 74714, "tid": 0, "args": {"step": 3}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 37974.625, "dur": 306.0, "pid": 74714, "tid": 0, "args": {"step": 4}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 38855.916, "dur": 459.167, "pid": 74714, "tid": 0, "args": {"step": 5}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 39879.458, "dur": 322.833, "pid": 74714, "tid": 0, "args": {"step": 6}}

@@ -3,6 +3,8 @@
 读完本篇的数学与 bucket 原理，再看 [Megatron DDP 执行链](../13_Source_Analysis/megatron/03_state_and_memory/01_data_parallel_optimizer_checkpoint.md)中的 hook → ready → start/finish → optimizer。各类并行的出发点、收益和代价见[八类阅读主线](八类并行阅读主线.md)。
 
 
+本文的全局 batch 是一次更新中所有 rank 的有效数据总和；local batch 是某个 rank 的部分；replica 是模型副本。Bucket（桶）把若干参数的梯度合成一条通信消息；hook 是框架在指定执行点调用的回调。先算清目标梯度，再读后半篇的通信重叠。
+
 ## 入门例子：两卡梯度平均的成立条件
 
 单个参数 w=1，样本目标 a=[0,2,8]，每 token loss 为 (w−a)^2/2。全局 token mean 的梯度是 ((1−0)+(1−2)+(1−8))/3=−7/3。若前两枚给 rank 0、后一枚给 rank 1，平均两个 local mean 梯度会得到 (0−7)/2=−3.5，目标已经改变。
@@ -53,7 +55,7 @@ Autograd（自动微分）按反向依赖逐步产生 gradient。DDP 将 paramet
 
 - bucket 太大：启动晚，exposed communication tail 增大；
 - bucket 太小：collective latency 与 kernel launch 过多；
-- 参数注册顺序若与 backward ready 顺序相反，可能长期等最后一个 gradient。
+- bucket 的组织若与实际 backward 就绪顺序不匹配，可能长期等待其中最后一个 gradient；框架可能按观测到的顺序重建 bucket，需核对实际时间线。
 
 `gradient_as_bucket_view` 可减少 gradient 与 bucket 间复制，但会改变 gradient storage 语义。
 
@@ -62,6 +64,7 @@ Autograd（自动微分）按反向依赖逐步产生 gradient。DDP 将 paramet
 若累积 $A$ 个 micro-batch，只在最后一次同步：
 
 ```python
+optimizer.zero_grad()
 for i, batch in enumerate(micro_batches):
     ctx = model.no_sync() if i < A - 1 else nullcontext()
     with ctx:
@@ -69,13 +72,13 @@ for i, batch in enumerate(micro_batches):
 optimizer.step()
 ```
 
-这样把 $A$ 次 AllReduce 降为 1 次，但 gradient 在本地累积。loss scaling 要与 global batch 定义一致；automatic mixed precision 的 overflow 也需要跨 rank 一致处理。
+这样把每个 bucket 原本每 microbatch 一次的同步，降为每次累积更新一次，但 gradient 在本地累积。loss scaling 要与 global batch 定义一致；automatic mixed precision 的 overflow 也需要跨 rank 一致处理。
 
 ## Uneven input 与数据语义
 
-某些 rank 提前耗尽数据会导致其他 rank 等待 collective。PyTorch Join context 能处理部分 uneven-input 场景，但语言模型训练更常通过 DistributedSampler、drop_last、packing 或 dummy batch 保持 step 对齐。
+某些 rank 提前耗尽数据会导致其他 rank 等待 collective。Join context 是帮助仍活跃的 rank 与已结束 rank 匹配通信的上下文机制，能处理部分不等长输入场景，但语言模型训练更常通过 DistributedSampler（分布式数据采样器）、drop_last（丢弃不足整批的尾部）、packing（打包）或 dummy batch（零贡献占位批）保持 step 对齐。
 
-Token-level loss 下，即使每 rank sequence 数相同，有效 token 数也可能不同。正确 global token mean 可先求 local loss sum 与 token count，再分别 AllReduce，最后相除；不能平均“每 rank 的平均 loss”。
+Token-level loss 下，即使每 rank sequence 数相同，有效 token 数也可能不同。日志中的 global token mean 可先求各 rank 的 loss sum 与 token count，再分别求和，最后相除；不能平均“每 rank 的平均 loss”。这只是统计口径：普通日志规约不自动建立正确的反向图，训练梯度应按下面的 D/N 缩放推导处理。
 
 
 ## 数值展开 DDP：不等长数据、梯度累积与 Bucket 时间线

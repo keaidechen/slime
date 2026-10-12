@@ -3,6 +3,10 @@
 本篇讲切层与调度原理；具体的 warmup、VPP lookup table、激活队列与 P2P 见 [Megatron PP 走读](../13_Source_Analysis/megatron/02_parallelism/02_pipeline_parallel.md)。运行与预期结果见[并行验收](../13_Source_Analysis/megatron/05_design_and_failures/03_parallelism_validation.md)。
 
 
+Stage 是流水阶段，保存并计算一段模型层；F/B 分别表示前向/反向，bubble（气泡）表示设备因依赖未满足而空闲的时段。Warmup/fill 是把工作填入流水线的启动阶段，drain 是最后一批工作离开的排空阶段，flush 表示本轮全部工作结束后再按同步规则更新。
+
+本篇先比较 GPipe 与同步 1F1B 的激活生命周期。虚拟流水段、异步版本和 Zero Bubble 是扩展阅读，理解两阶段手算表后再进入即可。
+
 ## 入门例子：两个 stage、四个 microbatch 的生命周期
 
 PP 将不同层放到不同 stage。microbatch m 在 stage 0 forward 后，activation 发给 stage 1；stage 1 backward 后，把对输入 activation 的梯度发回 stage 0。参数更新需要本次更新包含的梯度都满足同步条件。
@@ -79,6 +83,8 @@ Megatron Core 支持 custom pipeline layout，可表达不均匀 layer 分配和
 
 ### 依赖先于调度
 
+公式 $F_{s,i}$ 的两个下标分别是 stage 编号和 microbatch 编号。后面表格已经用列区分 stage，所以表内 F0/F1 表示 microbatch 0/1 的前向，B0/B1 同理。
+
 对microbatch i：$F_{0,i}\to F_{1,i}\to B_{1,i}\to B_{0,i}$。每次F保存一份简化激活，每次同stage的B结束后释放。整个更新使用相同参数版本，累计四份梯度后再更新。
 
 ### GPipe：先前向，后反向
@@ -121,7 +127,7 @@ stage 0在F1后执行B0，说明“一前一后”通常属于不同microbatch�
 
 设边界激活shape=[2,4]、BF16，每次前向payload16 B；若反向边界梯度也BF16，每次返回16 B，四个microbatch总共128 B跨边界传输。参数量没有进入这个payload公式。
 
-如果F1耗时变为2个单位，或P2P与计算竞争资源，就不能继续使用上面的等时槽表。应把任务展开为实际区间，加入“发送完成后才能消费”的依赖。更多microbatch主要摊薄fill/drain，不会消除最慢stage的持续瓶颈。
+如果 stage 1 的每次前向耗时变为2个单位，或P2P与计算竞争资源，就不能继续使用上面的等时槽表。应把任务展开为实际区间，加入“发送完成后才能消费”的依赖。更多microbatch主要摊薄fill/drain，不会消除最慢stage的持续瓶颈。
 
 ### 更新语义与后续方法
 

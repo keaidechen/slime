@@ -1,0 +1,76 @@
+{
+  "scope": "CPU Python arithmetic, application cache, process crash; no GPU or power-loss test",
+  "environment": {
+    "python": "3.9.6 (default, Jan  9 2026, 11:03:41) \n[Clang 17.0.0 (clang-1700.6.4.2)]",
+    "platform": "macOS-26.3-arm64-arm-64bit"
+  },
+  "source_sha256": {
+    "cpu_evidence.py": "ce167764c7c9d6d2c31ce3edbbd4723560fd7025b6042129fd6f8e49693da98e",
+    "mini_transformer.py": "19185d781525b3d3296b7be074d90311d8eb60d4792e549a7d3bf770bec05cde"
+  },
+  "fixture": {
+    "rows": 512,
+    "tokens_per_row": 32,
+    "bytes": 76059,
+    "sha256": "6205a324019aa66401a9666bdd6471f7608e51d3013bcd0f750975e777e92fd6",
+    "checksum": 769584
+  },
+  "cache_setup_ms": 1.041125,
+  "raw_ms": {
+    "parse_each_pass": [
+      1.022083,
+      0.999125,
+      1.021083,
+      0.979917,
+      1.024375,
+      1.12,
+      1.146583
+    ],
+    "reuse_decoded": [
+      0.076708,
+      0.079917,
+      0.072083,
+      0.072709,
+      0.078375,
+      0.075,
+      0.070792
+    ]
+  },
+  "median_ms": {
+    "parse_each_pass": 1.022083,
+    "reuse_decoded": 0.075
+  },
+  "cache_state": "OS cache uncontrolled; application cache built once; first pair excluded",
+  "gradient_check": {
+    "weighted_gradient_max_error": 6.340600960941245e-11,
+    "unweighted_negative_control_error": 0.1623129717335594
+  },
+  "recovery": {
+    "before": {
+      "exit_code": 23,
+      "resumed_from_step": 2,
+      "parameters_optimizer_cursor_history_exact_match": true
+    },
+    "after": {
+      "exit_code": 23,
+      "resumed_from_step": 3,
+      "parameters_optimizer_cursor_history_exact_match": true
+    }
+  },
+  "optimizer_reset_negative_control_detected": true,
+  "continuous_losses": [
+    1.573422078500586,
+    1.9513357987891762,
+    1.505745790322029,
+    1.8992287476601117,
+    1.4476983156545837,
+    1.8472969434996938
+  ],
+  "trace_events": 39,
+  "artifacts": [
+    "fixture.jsonl",
+    "trace.json",
+    "*/checkpoint.json",
+    "*/final.json"
+  ]
+}

@@ -4,6 +4,8 @@
 
 Tensor Parallelism（TP，张量并行）把一个 layer 的参数和计算分到多张 GPU。它解决“单层太大/单卡算不下”，但每层通常都要通信，因此优先放在 NVLink/NVSwitch 高速域内。
 
+本篇始终采用 $X[M,H_{in}]W[H_{in},H_{out}]$：M 为输入向量个数，$H_{in}$、$H_{out}$ 为输入、输出特征宽度，p 为 TP 组大小。Feature shard 是按特征维切出的一片；replicated 是完整复制，partial 是尚未合并的部分贡献。列/行始终指这里定义的 W，不指某个框架的存储方向。
+
 ## Column Parallel Linear
 
 设 $Y=XW$，$W\in\mathbb{R}^{H_{in}\times H_{out}}$。沿输出维切列：
@@ -62,7 +64,7 @@ $$X=\begin{bmatrix}1&2\\3&4\end{bmatrix},\quad
 W_1=\begin{bmatrix}1&0&1&2\\0&1&1&0\end{bmatrix},\quad
 W_2=\begin{bmatrix}1&0\\0&1\\1&1\\2&-1\end{bmatrix}.$$
 
-计算 $A=\operatorname{ReLU}(XW_1)$、$Y=AW_2$，loss 为 Y 的全部元素之和。这里所有激活都大于0，所以 ReLU 的局部导数为1，避免零点约定干扰推演。
+计算 $A=\operatorname{ReLU}(XW_1)$、$Y=AW_2$，loss 为 Y 的全部元素之和。ReLU 是逐元素取 $\max(0,x)$ 的非线性函数。这里所有激活都大于0，所以 ReLU 的局部导数为1，避免零点约定干扰推演。
 
 ### 第一层沿输出列切分
 
@@ -105,7 +107,7 @@ loss=38。这里是 SUM，不是数据并行的平均；除以2会把模型输�
 
 ### 通信负载账本
 
-本例每个合并位置有4个元素，假设FP32，逻辑 payload=16 B。它不是所有链路的累计字节。两rank ring AllReduce 模型中每rank发送总量为 $2(D-1)M/D=M=16$ B，接收同量；真实小消息主要受固定开销影响。
+本例每个合并位置有4个元素，假设FP32，逻辑 payload=16 B。它不是所有链路的累计字节。在组大小 p=2、消息大小 n=16 B 的 Ring AllReduce 模型中，每 rank 发送总量为 $2(p-1)n/p=n=16$ B，接收同量；真实小消息主要受固定开销影响。
 
 ### Attention 如何对应同一种布局
 
@@ -146,7 +148,7 @@ Column parallel forward 产生 output shard；其 backward 对 input gradient �
 
 ## PyTorch 的表达
 
-PyTorch `torch.distributed.tensor.parallel` 用 `ColwiseParallel`、`RowwiseParallel`、`SequenceParallel` 等 ParallelStyle 描述 module plan，并基于 DeviceMesh/DTensor 传播 layout。API 仍标注 experimental，复杂自定义 module 要验证 input/output layout。
+PyTorch `torch.distributed.tensor.parallel` 用 `ColwiseParallel`、`RowwiseParallel`、`SequenceParallel` 等 ParallelStyle 描述 module plan，并基于 DeviceMesh/DTensor 传播 layout。DeviceMesh 表达设备分组网格，DTensor 表达张量在该网格上的分片/复制布局；这些框架接口需按版本核对，复杂自定义 module 要验证 input/output layout。
 
 
 ## 概念辨析
@@ -270,7 +272,7 @@ V ≈ L × C × (B × S × H × bytes) × 2(TP−1)/TP
 
 - 分析通信时要同时区分三件事：逻辑 tensor 大小、collective 算法导致的实际链路字节数、以及真正暴露在 critical path 上的通信时间。
 
-这也正好引出下一节：为什么大模型训练网络会从 PCIe，逐步发展出 NVLink / NVSwitch，并在跨机侧依赖 InfiniBand HCA 与 GPUDirect RDMA。
+若要继续追踪这些字节走哪条物理路径，可选读[通信信号与链路](../00_Physical_Foundations/通信信号与链路.md)。主线下一篇转向另一种减少显存的方法：分片保存训练状态。
 
 
 

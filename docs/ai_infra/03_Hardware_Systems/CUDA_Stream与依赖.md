@@ -3,7 +3,39 @@
 > 前置：GPU 执行模型。目标：区分 host 提交、Stream 操作顺序、Block 驻留和 Warp 发射。
 
 
+## 从“提交一次计算”到“拿到结果”
+
+上一章的 Kernel 是 GPU 要做的工作。CPU 端称为 **Host（主机端）**，GPU 端称为 **Device（设备端）**。CPU 发起 Kernel Launch（启动/提交）后，通常可以继续执行下一行代码，此时 GPU 可能还没开始，也可能正在计算。这叫相对于 Host 的**异步执行**：函数返回不代表结果已就绪。
+
+**Stream（流）**表达一系列 GPU 操作的先后顺序。操作既包括 Kernel，也包括 Memcpy（内存复制）与 Event（事件标记）。最简单的同流流程是：
+
+```text
+复制输入到 GPU → Kernel 计算 → 复制输出到 CPU → CPU 等待完成 → 读取输出
+```
+
+同一个 Stream 里的常规操作按序执行；CPU 要读取异步复制的结果，必须先确认对应操作已经完成。Host 缓冲区是否使用 pinned memory（页锁定内存，复制期间保持物理页稳定）等条件会影响复制能否真正异步，不能仅凭接口名判断性能。
+
+## 两条 Stream 怎样表达依赖？
+
+假设 A 写入张量 X，B 要读取 X，C 与两者独立。把 A、B 放入不同 Stream 并不会自动建立依赖；应该先在 A 后记录事件 E，再让 B 所在的 Stream 等待 E：
+
+```text
+Stream 0：A 写 X（3 ms）→ 记录事件 E
+Stream 1：等待事件 E → B 读 X（2 ms）
+Stream 2：C（4 ms）
+```
+
+这里“记录事件”是在队列中放一个完成标记，不是让 CPU 等到 A 完成；“Stream 等事件”约束该 Stream 后续操作，也不要求 CPU 阻塞。CPU 的 synchronize（同步等待）则用于确实需要读取结果的地方。[CUDA 异步执行文档](https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/asynchronous-execution.html)给出了这几种机制的接口。
+
+依赖链 A→B 至少要 5 ms；若资源足够且忽略提交开销，C 可在这 5 ms 内完成。三者总耗时的理想下界为 $\max(3+2,4)=5$ ms，而不是把 B 提前执行得到错误结果。若 A 与 C 争用同一资源，实际时间会更长。
+
+**正确性还包括数据的生命周期**：在 GPU 完成读取前，不得覆盖或回收其输入缓冲区。跨 Stream 传递张量时，需要同时保证生产者先完成和内存仍然有效，框架可能提供额外的内存管理接口。
+
 ## 概念辨析
+
+LSU 是内存读写单元，TMA 是部分 GPU 的张量搬运加速器；Runtime/Driver 指负责提交工作的运行时软件和驱动。
+
+下面把同一次工作继续向硬件内部展开。首次阅读只需掌握“操作依赖 → Block 驻留 → Warp 发射”三层；Ready/Eligible 表示具备发射条件，Issue 表示向执行单元发出指令，Resident 表示已经驻留。
 
 
 ### CUDA Stream、Block 调度与 Warp Scheduler：三个“调度”为什么看起来相似，却完全不是一层？
@@ -44,7 +76,7 @@ CUDA Core / Tensor Core / LSU / TMA / ...
 
 #### 第一层｜CUDA Stream：软件可见的 GPU 工作队列
 
-CUDA Stream 可以理解为一条**有序的 GPU operation 队列**。进入同一个 Stream 的操作具有顺序语义；不同 Stream 中、彼此没有显式依赖的工作，则有机会在 GPU 上重叠。
+CUDA Stream 可以理解为一条**有序的 GPU operation 队列**。进入同一个 Stream 的操作具有顺序语义；不同 Stream 中、彼此没有显式依赖、也没有默认 Stream 等隐式依赖的工作，则有机会在 GPU 上重叠。
 
 ```text
 Stream 0:
@@ -67,7 +99,7 @@ A → B → C
 D → E
 ```
 
-但 `A/B/C` 与 `D/E` 之间如果没有 event / dependency，就可能重叠。
+但 `A/B/C` 与 `D/E` 之间在没有显式和隐式依赖、且资源允许时，就可能重叠。
 
 **注意：Multi-stream ≠ 一定并行。** Stream 只是告诉运行时与 GPU：“这些工作在依赖关系上可以并发。”如果 Kernel A 已经吃满 SM、Register、Shared Memory、Tensor Core 等关键资源，Kernel D 即使在另一条 Stream 中，也可能无法真正 concurrent execution。
 
@@ -201,7 +233,7 @@ Issue Instruction
 └─ TMA / other pipelines
 ```
 
-> **记忆：Stream 管 Kernel；CTA Scheduler 管 Block→SM；Warp Scheduler 管 SM 内 Warp→Instruction。**
+> **记忆：Stream 管操作依赖；CTA Scheduler 管 Block→SM；Warp Scheduler 管 SM 内 Warp→Instruction。**
 
 ---
 

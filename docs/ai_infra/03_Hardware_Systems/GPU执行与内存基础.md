@@ -2,6 +2,10 @@
 
 > 相关基础：[基础概念](../00_Physical_Foundations/局部性与数据移动.md)。关联：[机制与演进](../05_Kernels/算子优化的问题演进.md)。
 
+前面三篇回答了“算什么、怎样求梯度”，本篇回答“这些计算交给谁执行、数据放在哪里”。CPU（中央处理器）负责运行主程序、准备和提交工作；GPU（图形处理器）擅长并行处理大量相似计算。LLM 是 Large Language Model，即大语言模型；AI Infra 指支撑模型训练和服务的计算、存储、通信与软件系统。
+
+本篇采用 NVIDIA CUDA 的术语。CUDA 是其 GPU 编程平台；**Kernel** 是一次提交到 GPU 执行的函数，**Thread** 是执行该函数的逻辑线程，**SM** 是容纳一组线程并提供计算与存储资源的硬件单元。先有这三个印象，再读下面的层级图。图中的 Cache 是自动保留近期数据的缓存，DRAM 是主存；PCIe、NVLink-C2C 是连接处理器的互联，第一次阅读不必记住具体规格。
+
 <details>
 <summary>文章导航</summary>
 
@@ -50,7 +54,7 @@ GPU
 └── HBM（GPU 显存）
 ```
 
-对于这组论文，最重要的不是某一代 GPU 有多少个核心，而是理解三个层次：
+学习模型系统时，最重要的不是某一代 GPU 有多少个核心，而是理解三个层次：
 
 1. **计算单元**：Tensor Core、CUDA Core；
 2. **执行组织**：thread、warp、thread block/CTA、SM；
@@ -60,7 +64,7 @@ GPU
 
 > **让数据尽可能待在更靠近计算单元的地方，并尽量少在慢层级之间搬来搬去。**
 
-这条原则就是 FlashAttention、FlashInfer 等工作的硬件出发点。
+后面读到的 Attention 优化也遵循这条原则：尽量在片上完成计算，减少往返显存。
 
 ---
 
@@ -113,7 +117,7 @@ $$
 ## 什么是 HBM？为什么论文天天讨论 HBM？
 
 
-HBM = **High Bandwidth Memory（高带宽内存）**。
+HBM = **High Bandwidth Memory（高带宽内存）**。许多 AI 加速卡用它作大容量显存；也有 GPU 使用 GDDR，因此“显存”不等于“HBM”。下文以 HBM 型 GPU 为例。activation 是上一篇的激活，KV Cache 是保存历史 token 的 Key/Value 的缓存。
 
 你可以把它近似理解为：
 
@@ -194,6 +198,8 @@ sum += a * b
 
 
 #### 2 Shared Memory / SRAM
+
+SRAM 是一种存储电路类型；Shared Memory 是程序可显式管理的片上共享存储空间，两者不是同义词。L1 Cache 也在片上，但数据缓存主要由硬件管理。
 
 Shared Memory 是一个 thread block 内线程可以共享的片上存储。
 
@@ -363,7 +369,7 @@ SM2
 ...
 ```
 
-CUDA runtime 会把 thread blocks 调度到不同 SM 上执行。
+CUDA 运行时负责提交工作，GPU 的硬件调度机制把可执行的 thread blocks 分配到资源足够的 SM 上。
 
 如果一些 block 工作很快结束，而另一些特别慢，就会出现：
 
@@ -487,7 +493,7 @@ read B
 
 因此 kernel fusion 往往不是为了减少数学计算，而是为了：
 
-> **减少 HBM traffic 和 kernel launch overhead。**
+> **减少 HBM traffic（显存读写流量）和 kernel launch overhead（提交、启动计算的开销）。**
 
 FlashAttention 把多个 Attention 操作融合进一个 kernel，就是经典案例。
 
@@ -658,6 +664,12 @@ Roofline Model 可以帮助判断一个 workload 应该优化什么。
 ---
 
 
+### 用数字判断瓶颈
+
+假设某设备的有效计算上限为 20 TFLOP/s（每秒 $20×10^{12}$ 次浮点运算），显存带宽为 1 TB/s（每秒 $10^{12}$ 字节）。一次工作需 100 GFLOP、搬运 10 GB，则计算至少需 5 ms，搬运至少需 10 ms。理想重叠下，总时间下界是两者的较大值 10 ms；实际还可能受依赖、启动和访存效率影响。
+
+此时计算量减半，搬运仍需 10 ms；把搬运量减半，理想下界才可能降到 5 ms。算术强度为 $100/10=10$ FLOP/byte，设备转折点为 $20/1=20$ FLOP/byte，因而该例位于带宽受限一侧。这里全部是教学假设，不能当作某张 GPU 的实测。
+
 ## Occupancy 是什么？
 
 
@@ -679,7 +691,7 @@ warp D
 
 所以通常希望 SM 上同时有足够多 active warps。
 
-这种资源占用程度常被称为 **occupancy**。
+**Occupancy（驻留率）**是一个 SM 上驻留的 warp 数与其支持的最大驻留 warp 数之比。例如上限 64 个、当前驻留 32 个，就是 50%。驻留 warp 可能还在等待数据，因此 100% occupancy 不等于计算单元利用率 100%；提高它也不保证提速。
 
 但 occupancy 受到：
 
@@ -707,44 +719,16 @@ warp D
 ## 四篇论文分别在硬件/系统哪一层？
 
 
-可以用下面这张图记住：
+本节是后续专题的索引，首次阅读可以跳到词表。它们研究不同问题，并不是必须依次安装的一套软件。
 
-```text
-Transformer Attention 数学
-        │
-        ▼
-FlashAttention
-减少 HBM IO，优化单次 Attention kernel
-        │
-        ▼
-PagedAttention / vLLM
-把动态 KV Cache 做成 paged memory
-        │
-        ▼
-RadixAttention / SGLang
-在 paged KV 之上管理跨请求 prefix reuse
-        │
-        ▼
-FlashInfer
-把越来越多不规则 KV layout / Attention pattern
-统一成可编译、可动态调度的 inference kernel/runtime
-```
+| 工作 | 要解决的问题 | 所在层次 |
+|---|---|---|
+| FlashAttention | 计算 Attention 时少读写大中间张量 | 单次 Kernel 的分块与融合 |
+| PagedAttention / vLLM | 长度持续变化的历史 KV 怎样分配显存 | 按固定大小块管理 KV |
+| RadixAttention / SGLang | 多个请求有相同输入开头，怎样复用计算 | 跨请求前缀缓存管理 |
+| FlashInfer | 不同 KV 布局与 Attention 计算怎样高效执行 | GPU Kernel 库及其调用接口 |
 
-注意：
-
-这并不是“后者淘汰前者”。
-
-它们经常可以叠加：
-
-```text
-SGLang
-  ↓ runtime / cache policy
-Paged KV Cache
-  ↓ physical storage
-FlashInfer / FlashAttention-like kernels
-  ↓ GPU execution
-GPU HBM / SM / Tensor Core
-```
+前缀是输入序列相同的开头部分；请求是一次模型生成任务。理解这些工作需要的推理知识会在主线第 16–19 篇补齐，现在只需分清“计算效率”“空间分配”“跨请求复用”是三个问题。
 
 ---
 
@@ -768,7 +752,7 @@ GPU HBM / SM / Tensor Core
 | Compute-bound | 算力先到上限 |
 | Memory-bound | 内存搬运先到上限 |
 | Arithmetic Intensity | 每搬 1 Byte 数据做多少计算 |
-| Occupancy | SM 上能维持多少活跃线程/warp 的程度 |
+| Occupancy | SM 上驻留 warp 数占硬件上限的比例 |
 | KV Cache | 自回归推理缓存历史 token 的 K/V |
 | Page / Block | 固定粒度的内存分配单位 |
 | Block Table | logical block → physical block 的映射 |
@@ -782,11 +766,13 @@ GPU HBM / SM / Tensor Core
 
 ### 为什么“一百多个 SM”却能有上万个 CUDA Core？
 
-因为 CUDA Core 是 SM 内部的执行资源，不是 SM 本身。以 H100 SXM 为例，132 个 SM，每个 SM 中包含大量标量执行单元以及 Tensor Core 等资源，因此整卡会呈现上万级别的 CUDA Core 数量。真正做 CUDA 性能分析时，比“总 CUDA Core 数”更重要的是：有多少 SM、有多少 Warp 能持续处于可发射状态、执行管线是否被喂饱。
+因为 CUDA Core 是 SM 内部的执行资源，不是 SM 本身。每个 SM 中包含多个标量执行单元以及 Tensor Core 等资源，因此整卡的 CUDA Core 数量可以远大于 SM 数量。真正做 CUDA 性能分析时，比“总 CUDA Core 数”更重要的是：有多少 SM、有多少 Warp 能持续处于可发射状态、执行管线是否被喂饱。
 
 <a id="gpu-hierarchy"></a>
 
 ### 硬件层级与软件层级不要画成同一棵“父子树”
+
+以下是选读细节。LSU 是读写数据的执行单元，SFU 是特殊函数单元，TMA 是部分架构提供的 Tensor Memory Accelerator（张量内存搬运加速器）；不需要先掌握这些缩写才能继续主线。
 
 GPU → GPC（Graphics Processing Cluster）→ TPC（Texture Processing Cluster）→ SM 是一种物理组织视角，精确层次取决于芯片；程序不能直接指定某个 block 必须进入哪个 GPC/TPC。SM 内包含 warp scheduler、寄存器、shared/L1、Load/Store Unit、SFU、CUDA Core 和 Tensor Core 等资源，Hopper 还引入 TMA。Warp Group 与 producer/consumer 是协作粒度或程序角色，不是与这些执行单元同级的独立硬件。
 
@@ -828,6 +814,8 @@ flowchart TB
 
 
 ## 主要参考资料
+
+- [CUDA Best Practices：Occupancy](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy)
 
 - Dao et al., *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness*, NeurIPS 2022, arXiv:2205.14135.
 - Dao, *FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning*, 2023/ICLR 2024, arXiv:2307.08691.

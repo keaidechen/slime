@@ -11,6 +11,7 @@
 - [6. 成本模型的适用范围](#6-成本模型的适用范围)
 - [7. 症状到工具的第一棵决策树](#7-症状到工具的第一棵决策树)
 - [8. 性能目标决定证据的粒度](#8-性能目标决定证据的粒度)
+- [9. 跨层定位：八个系统问题](#9-跨层定位八个系统问题)
 - [参考资料](#参考资料)
 
 </details>
@@ -18,7 +19,7 @@
 相关基础：[必要基础](<../00_Physical_Foundations/README.md>)。
 
 
-本章不使用 profiler。目标是先建立一套不会混淆的语言。你需要知道“测什么”“为什么慢”和“下一步该看哪里”。
+Profiler 是记录程序执行时间或资源行为的性能分析工具；trace 是包含事件、时间与依赖的执行记录。本章先不操作这些工具。目标是先建立一套不会混淆的语言。你需要知道“测什么”“为什么慢”和“下一步该看哪里”。
 
 
 ## 1. 性能分析不是找最大的数字
@@ -39,6 +40,12 @@
 3. 缩短它会让后续工作更早开始吗？
 
 
+### 手算一条关键路径
+
+假设 A 耗时 4 ms，随后 B（6 ms）和 C（3 ms）可并行，D（2 ms）必须等 B、C 都结束。忽略资源争用，总时间为 $4+\max(6,3)+2=12$ ms，关键路径是 A→B→D。
+
+将 C 减半为 1.5 ms，总时间仍是 12 ms；将 B 减半为 3 ms，总时间变成 9 ms；把 B 继续减至 1 ms，则 C 成为限制，总时间仍需 9 ms。瓶颈会转移，这就是局部加速无法无限叠加的原因。
+
 ## 2. 六个基础概念
 
 ### 2.1 延迟 latency
@@ -47,7 +54,7 @@
 
 - 训练：一次 iteration/step 的秒数。
 - 推理：一次请求的端到端时间。
-- kernel：一次 launch 从开始到结束的微秒数。
+- kernel：设备实际执行该 kernel 的微秒数；主机 launch 调用耗时是另一种计时口径。
 
 延迟要报告分布，而不只是平均值：`p50` 是中位数，`p95` 表示 95% 样本不超过该值，`p99` 用来观察长尾。
 
@@ -76,7 +83,7 @@
 
 ### 2.4 饱和 saturation
 
-继续增加负载后，吞吐不再明显上升，但延迟和排队快速上升，此时系统达到容量拐点。推理服务一定要通过并发/RPS sweep 找到该点。
+继续增加负载后，吞吐不再明显上升，但延迟和排队快速上升，此时系统达到容量拐点。推理服务一定要通过并发或 RPS（Requests Per Second，每秒到达请求数）逐档扫描测试找到该点。
 
 ### 2.5 瓶颈 bottleneck
 
@@ -89,6 +96,8 @@
 
 
 ## 3. 从 Python 到 GPU 的层次
+
+先把图中的名字按职责分组：ATen 是 PyTorch 的基础张量算子层；cuBLAS/cuDNN 是计算库；Triton 是编写与编译 GPU 计算的工具，Inductor 是 PyTorch 的编译后端；PTX 是虚拟指令表示，SASS 是设备机器指令表示。Nsight 是 NVIDIA 的分析工具系列。初读只需知道它们分别属于哪一层，不必掌握各工具用法。
 
 以后看到“算子”一词，需要先问它指哪一层：
 
@@ -170,7 +179,7 @@ NVIDIA 的 GPU 性能背景指南用算术强度和并行度来区分延迟、�
 - allocated/reserved/峰值显存；
 - 正确性护栏：loss、grad norm、样本/token 数。
 
-MFU（Model FLOPs Utilization）只有在 FLOPs 公式、精度峰值和统计范围一致时才可比较。不同文章中的 MFU 不能直接横比。
+MFU（Model FLOPs Utilization，模型浮点运算利用率）用模型有效计算速率与选定精度的硬件峰值比较，只有在 FLOPs 公式、精度峰值和统计范围一致时才可比较。不同文章中的 MFU 不能直接横比。
 
 ### 5.2 推理
 
@@ -208,7 +217,7 @@ RL 是训练和在线推理组成的流水线，还要测：
 | 模型 | 回答的问题 | 容易遗漏的因素 |
 |---|---|---|
 | Roofline | 计算与某层数据流量决定怎样的吞吐上界？ | 小任务、依赖与并行度 |
-| $\alpha+n/\beta$ | 启动延迟与消息大小怎样影响传输时间？ | 拥塞、拓扑与到达偏斜 |
+| $\alpha+n\beta$，其中 $\beta=1/BW$ | 启动延迟与消息大小怎样影响传输时间？ | 拥塞、拓扑与到达偏斜 |
 | Amdahl | 局部加速能缩短多少端到端时间？ | 工作量变化与新瓶颈 |
 
 若可优化部分占 30%，局部加速 2 倍，工作量不变时理想整体加速为 $1/(0.7+0.3/2)\approx1.176$。同样，计算 8 ms、通信 5 ms 只有在依赖允许、资源能够充分重叠时，才可能接近 8 ms；通信若消费计算结果，或二者争用带宽，就不能直接取最大值。
@@ -216,6 +225,8 @@ RL 是训练和在线推理组成的流水线，还要测：
 模型给出假设下的约束，观测判断执行是否满足这些假设。环境、工作量、计时与预热、控制变量和正确性如何限定结论，在[证据与因果](证据与因果.md)中集中解释。
 
 ## 7. 症状到工具的第一棵决策树
+
+此图供遇到问题时查阅，不是安装清单。py-spy 看 Python 执行，pidstat/iostat 看进程与存储活动；PyTorch Profiler 连接框架算子和设备，Nsight Systems 看系统时间线，Nsight Compute 看单个 Kernel；Memory Snapshot 与 Memray 分别帮助分析设备分配器和主机内存。
 
 ```text
 端到端变慢
@@ -242,6 +253,30 @@ RL 是训练和在线推理组成的流水线，还要测：
 如果目标是用户首 token 延迟，端到端请求、排队和 Prefill 才是直接对象；如果目标是训练 tokens/s/GPU，工作量、整步关键路径和资源预算需要固定。局部算子的 TFLOP/s 是中间解释，不能替代前两种目标。
 
 明确 workload、当前基线和候选层次之后，才知道最小证据是长期指标、系统 trace 还是单 kernel 计数器。没有目标指标，“变快”就缺少可判断的对象。
+
+## 9. 跨层定位：八个系统问题
+
+本节供深入 Kernel 或编译器时回看。DSL 是领域专用语言，codegen 是生成代码，ISA 是指令集架构，cubin 是 GPU 二进制文件；这里新增的工具名表示实现选项，不是完成这条主线前必须另学的课程。
+
+### 从 workload 到通信路径
+
+1. 这是 **workload / 算子抽象** 问题，还是具体 Kernel 实现问题？例如 GEMM / Grouped GEMM 是“要算什么”，cuBLASLt / CUTLASS / Triton 是“怎么实现”。
+
+2. 这是 **代码/编译** 问题，还是 **运行时/调度** 问题？例如 nvcc / Triton compiler / TileLang codegen 与 CUDA Runtime / Driver 不属于同一层。
+
+3. 当前看到的是哪种编译产物？CUDA C++ / Triton DSL 最终可能经历 PTX → cubin/SASS；不要把 CUDA Runtime 当成 GPU ISA。
+
+4. 当前工作粒度是什么？Operation / Kernel / Grid / Block(CTA) / Warp / Thread / Tile 中的哪一层？
+
+5. “谁在调度谁”？Stream 管 operation 的顺序与并发机会；GPU CTA scheduler 管 Block→SM；Warp Scheduler 管 SM 内 Warp→instruction issue。
+
+6. 资源属于谁？Register 属于线程执行状态但物理驻留于 SM；Shared Memory 属于 Block 协作；L2 属于整 GPU；HBM 是设备全局显存；Hopper/Blackwell 还引入 TMA/TMEM 等新数据通路与存储层级。
+
+7. 当前瓶颈是 Tensor Core compute、HBM/片上数据搬运、launch/scheduling、expert load imbalance，还是 GPU 间通信？Grouped GEMM 要特别看每个 Expert 的 `M_i` 分布，而不是只看总 FLOPs。
+
+8. 如果已经跨 GPU / 节点：数据沿 PCIe / NVLink / NVSwitch / HCA / InfiniBand 中的哪条路径走？Collective 的 latency 与 bandwidth 成本分别是什么，能否与 GEMM/Attention overlap？
+
+先看“模型产生了什么 workload”，再看“由哪个 library / DSL / compiler 实现”，然后看“Kernel 如何进入 Stream、Block 如何进入 SM、Warp 如何被 issue”，最后沿着 Register/Shared Memory/HBM/NVLink/IB 追踪数据流。绝大多数 CUDA、FlashAttention、MoE、Megatron、NCCL 与推理 Runtime 问题，都可以挂到 **Workload → Compilation → Scheduling → Resource → Data Movement → Communication** 这六个维度上。
 
 ## 参考资料
 

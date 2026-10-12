@@ -1,0 +1,6 @@
+{"name": "forward_backward_adam", "ph": "X", "ts": 25169.083, "dur": 393.792, "pid": 74718, "tid": 0, "args": {"step": 1}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 26118.125, "dur": 234.041, "pid": 74718, "tid": 0, "args": {"step": 2}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 26802.0, "dur": 402.166, "pid": 74718, "tid": 0, "args": {"step": 3}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 25983.541, "dur": 205.375, "pid": 74719, "tid": 0, "args": {"step": 4}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 26841.666, "dur": 374.084, "pid": 74719, "tid": 0, "args": {"step": 5}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 27681.958, "dur": 227.333, "pid": 74719, "tid": 0, "args": {"step": 6}}

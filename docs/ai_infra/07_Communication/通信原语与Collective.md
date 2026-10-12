@@ -2,11 +2,27 @@
 
 > 相关基础：[基础概念](DMA与RDMA完成语义.md)。关联：[机制与演进](Collective通信算法.md)。
 
-Collective Communication（集合通信）是 communicator 中一组 rank 共同参与的数据变换。理解它们最有效的方法不是背名字，而是画出**输入分布 → 输出分布**。
+单卡显存不足或希望多卡共同工作时，进程之间必须交换数据。**Rank** 是参与进程在一组通信中的编号；**communicator（通信器）**描述这组参与者及通信上下文，组大小常称为 world size。一个 rank 常管理一张 GPU，但 rank 不是 GPU 的物理编号。
+
+**Shard** 是一份数据切分后的一片；**root** 是某次操作指定的汇集或广播起点。NCCL（NVIDIA Collective Communications Library）是实现 GPU 通信的库；Collective Communication（集合通信）是 communicator 中一组 rank 共同参与的数据变换。理解它们最有效的方法不是背名字，而是画出**输入分布 → 输出分布**。
+
+## 先用两个向量分清“求和”和“拼接”
+
+假设 rank 0 有 `[1,2]`，rank 1 有 `[10,20]`，归约运算选择逐元素求和：
+
+| 操作 | rank 0 的结果 | rank 1 的结果 |
+|---|---|---|
+| AllReduce | `[11,22]` | `[11,22]` |
+| Reduce 到 root 0 | `[11,22]` | 不要求保存结果 |
+| AllGather | `[1,2,10,20]` | `[1,2,10,20]` |
+| ReduceScatter，均分两片 | `[11]` | `[22]` |
+| Broadcast，从 root 0 广播 | `[1,2]` | `[1,2]` |
+
+归约（reduction）用指定规则合并对应位置，例如求和、最大值；拼接（gather）保留各段数据。**AllReduce 的求和不自动等于平均**，需要调用方或框架定义除数。对上例的 ReduceScatter 结果再做 AllGather，才得到与 AllReduce 相同的 `[11,22]`。
 
 ## 核心原语
 
-假设 4 个 rank，每个 rank 上 `Xi` 大小均为 $N$ bytes：
+假设有 $p=4$ 个 rank，每个 rank 上 `Xi` 大小均为 $N$ bytes。下表的用途是后续并行章节的预览：DP/DDP 分数据，TP 分张量计算，FSDP/ZeRO 分模型状态，CP/SP 分序列相关数据，MoE 将 token 分给不同专家。第一次阅读重点看输出语义：
 
 | 原语 | 输出语义 | 大模型中的典型用途 |
 |---|---|---|
@@ -28,7 +44,7 @@ NCCL 的 communicator 需要所有相关 rank 以匹配的顺序调用 collectiv
 ```mermaid
 flowchart LR
     I["每 rank：完整输入"] --> RS["ReduceScatter：规约并分片"]
-    RS --> S["每 rank：1/N 规约 shard"]
+    RS --> S["每 rank：1/p 规约 shard"]
     S --> AG["AllGather：收集全部 shard"]
     AG --> O["每 rank：完整规约结果"]
 ```
@@ -49,6 +65,8 @@ MoE 中目标由 router 动态决定，所以发送量可能不均匀。即使�
 
 ## one-sided 与 two-sided
 
+本节与后面的通信历史是进阶选读，不是学习下一篇成本模型的前提。
+
 传统 send/recv 和 collective 通常是 two-sided：发送与接收双方都参与匹配。Remote Memory Access（RMA，远程内存访问）允许一方对已注册远端窗口执行 put/get，并用 signal/wait 同步。one-sided 能简化不规则通信，但内存注册、可见性、ordering 和生命周期责任更显式。
 
 PyTorch 2.14 的实验性 `nccl2` backend 引入 one-sided window 能力；这属于快速演进接口，不能把 release blog 当稳定 API 文档。
@@ -63,6 +81,8 @@ PyTorch 2.14 的实验性 `nccl2` backend 引入 one-sided window 能力；这�
 
 
 ## 概念辨析
+
+本节中的缩写可先按功能理解：OS 是操作系统，IPC 是进程间通信，MPI 是消息传递接口标准，HPC 是高性能计算；DMA 是直接内存访问，RDMA 是远程直接内存访问；NIC/HCA 是网络适配器，InfiniBand 与 RoCE 是常见的 RDMA 网络技术。Socket 是通信端点，handle 是可传递的资源句柄，descriptor 是描述搬运任务的结构。这些机制细节可以在需要排查通信路径时再读。
 
 
 ### 从操作系统 IPC 到 GPU 通信原语：今天 NCCL / RDMA 的思想是怎么演化出来的？

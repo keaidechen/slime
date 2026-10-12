@@ -1,53 +1,70 @@
 # Transformer 与 Attention：从 token 到一层完整计算
 
-> 相关基础：[张量形状](../01_Math_Numerics/张量形状与复杂度.md)、[数值精度](../01_Math_Numerics/浮点数与低精度.md)。以下以 decoder-only、Pre-Norm 的示意结构说明，其他模型可能改变顺序和算子。
+上一篇解释了数组的形状和存储。本篇把数组接成一个能根据前文预测后续 token 的模型。先看前向计算，即“给定输入和当前参数，计算输出”；下一篇再解释参数怎样学习。[数值精度](../01_Math_Numerics/浮点数与低精度.md)可按需补读。
 
 ## 输入与参数分别是什么
 
-Tokenizer 把输入映射为 token ID；Embedding 用 ID 查找向量。对 batch B、长度 S、hidden size H，hidden state 可表示为 $X\in\mathbb R^{B\times S\times H}$。参数在训练时更新；hidden state 随本次输入变化。
+Tokenizer（分词／编码器）把文本映射为词表中的 token ID。词表是模型可识别的离散单位集合，ID 是编号，不表示大小关系。Embedding（嵌入）是一张可学习的表，每个 ID 对应一行向量。
 
-Attention 混合序列位置的信息，FFN 对每个位置做通道变换。残差保留并更新 hidden state，归一化控制数值尺度。这些组成部分共同决定模型功能和执行成本。
+例如 `[2,5]` 两个 ID 查表后得到两个四维向量，形状为 `[2,4]`。一次处理 B 条样本、每条 S 个位置、每位置 H 个特征时，整体形状为 `[B,S,H]`，记作 $X\in\mathbb R^{B\times S\times H}$。ℝ 表示实数；hidden size 是特征宽度 H，hidden state 是随输入变化的中间表示。参数是查找表和后续矩阵中的可学习数值，同一组参数可以处理很多次不同输入。
+
+Attention 混合不同位置的信息；FFN（Feed-Forward Network，前馈网络）分别变换每个位置的特征。多层模型反复执行这两类计算，位置数通常不变，向量内容逐渐改变。
 
 ## Q、K、V 与可见性
 
-投影得到 Q、K、V。对单个 head，$Q\in\mathbb R^{S_q\times d}$，$K\in\mathbb R^{S_k\times d}$，$V\in\mathbb R^{S_k\times d_v}$：
+先只看一条序列。输入 X 分别乘三个参数矩阵，得到 Q=XWq、K=XWk、V=XWv，这种线性变换也叫投影。Q（Query，查询）表示当前位置用什么特征寻找信息；K（Key，键）用来和查询比较；V（Value，值）是被混合的信息。它们都是向量，不是数据库里的字符串键值。
 
+一套这样的投影称为一个 head（注意力头）。设查询位置有 S_q 个、可访问位置有 S_k 个，Q/K 的向量宽度为 d、V 的宽度为 d_v，则：
+
+$$Q\in\mathbb R^{S_q\times d},\quad K\in\mathbb R^{S_k\times d},\quad V\in\mathbb R^{S_k\times d_v},$$
 $$P=\operatorname{softmax}(QK^T/\sqrt d+M),\qquad O=PV.$$
 
-M 表示 mask。Causal mask 禁止访问未来位置；padding mask 排除填充；packed 样本需要隔离边界。mask 改变允许使用的信息，属于模型计算语义。
+上标 T 表示转置。QKᵀ 的形状为 `[S_q,S_k]`，每个元素比较一个查询和一个键；除以 √d 用于调节分数尺度。Softmax 将每行分数 z 转为非负、和为 1 的权重：$p_j=\exp(z_j)/\sum_k\exp(z_k)$。exp(z) 表示 $e^z$，e≈2.718；先取指数使数值为正，再除以总和。输入分数常称 logits；此处是注意力分数，还不是输出词表的预测分数。O 的每一行是按 P 加权求和的 Value，形状为 `[S_q,d_v]`。
 
-例如 Q=[1,0]，两个 Key 分别 [1,0] 与 [0,1]，Value 为 [2,0] 与 [0,4]。缩放后 logits 约 [0.707,0]，概率约 [0.670,0.330]，输出约 [1.340,1.321]。若第二个位置被 mask，则概率为 [1,0]，输出变成 [2,0]。
+M 是 mask（访问限制）。假设训练输入是 `[我,喜欢,猫]`，第一个位置只能看“我”，第二个能看“我、喜欢”。这种 causal（因果）限制防止预测下一个 token 时偷看答案。在加法 mask 公式里，允许项加 0、禁止项加负无穷，使后者的 softmax 权重为 0。短序列补齐到共同长度称为 padding，补齐位置应按规则排除；独立样本合装称为 packing，还需隔离跨样本访问。
+
+一个可以手算的例子：Q=[1,0]，两个 Key 为 [1,0]、[0,1]，Value 为 [2,0]、[0,4]。缩放后的分数约为 [0.707,0]，指数化后约为 [2.028,1]，归一化得到 [0.670,0.330]。加权输出约为 [1.340,1.321]。若第二个位置被禁止访问，权重变为 [1,0]，输出就是 [2,0]。
 
 ## 多头与 KV 表达
 
-多头让不同投影子空间同时参与信息混合。MHA 为各 query head 配备相应 K/V；MQA 共享一组 K/V；GQA 在若干 query heads 间共享 K/V。它们改变参数化和缓存大小，不能在任意已训练模型上随意切换而假设质量不变。
+多头让多套投影同时参与信息混合，通常再拼接各头输出并做一次输出投影。MHA（Multi-Head Attention，多头注意力）为各 query head 配备相应 K/V；MQA（Multi-Query Attention，多查询注意力）让多个 query heads 共享一组 K/V；GQA（Grouped-Query Attention，分组查询注意力）在若干 query heads 间共享 K/V。它们改变参数化，不能在任意已训练模型上随意切换而假设质量不变。
 
-标准 K/V 缓存字节数可按 $2LTS_{kv}d b$ 核算，其中 L 是层数、T 是驻留 token 总数、$S_{kv}$ 是 KV head 数、d 是每头维度、b 是每元素字节。这里的 T 已汇总 batch，不再额外乘 batch；特殊压缩结构另算。
+生成新 token 时，过去位置的 K/V 在适用条件下可以保留复用，这份历史状态称为 KV Cache。先记住缓存的对象，第 16–17 篇会完整解释写入、复用和释放。标准 KV 纯负载可按 $2LTn_{kv}db$ 核算：L 为层数，T 为所有请求驻留位置总数，n_kv 为 KV 头数，d 为每头宽度，b 为每元素字节数；2 来自 K、V 两份。T 已汇总 batch，不再额外乘 B。
 
-MLA 改变缓存表示，稀疏 Attention 改变访问集合，线性/递推结构改变历史状态组织。它们应在这些设计轴上比较，见[Attention 设计空间](Attention设计空间与演进.md)。
+更深入的 MLA（Multi-head Latent Attention，多头潜在注意力）压缩历史表示；稀疏 Attention 只访问选中的历史位置；线性／递推结构改变状态组织。这些是后续设计分支，可在[Attention 设计空间](Attention设计空间与演进.md)补读，不是理解当前计算的前提。
 
 ## FFN、归一化与残差
 
-普通 FFN 可写为 $\phi(XW_1)W_2$；门控 FFN 使用一条变换调制另一条，再投影回 H。中间宽度决定参数、激活和 GEMM 形状。MoE 将一部分 FFN 计算替换为条件选择的专家计算，并增加路由与数据交换。
+普通 FFN 可写为 $\phi(XW_1)W_2$。W₁ 把特征宽度从 H 扩到 F，φ 是逐元素非线性函数，W₂ 再把宽度变回 H。例如 H=4、F=8，每个位置经历 4→8→4 的变换，不同位置使用同一组参数。门控 FFN 用一条变换调制另一条；MoE（Mixture of Experts，混合专家）准备多个子网络，由路由器选择其中几个处理当前 token。主线先按普通 FFN 理解。
 
-一个示意 Pre-Norm block 为：
+一个示意 block（重复堆叠的层结构）为：
 
 $$U=X+\operatorname{Attention}(\operatorname{Norm}(X)),$$
 $$Y=U+\operatorname{FFN}(\operatorname{Norm}(U)).$$
 
-Norm 的归约维和精度必须说明。位置编码使模型获得顺序信息；RoPE 作用于特定 Q/K 分量，和简单把位置向量加到输入不是同一计算。
+残差就是这里的加法：把子层结果加回输入，所以形状必须相容。Norm（归一化）调整每个位置特征向量的数值尺度；例如 RMSNorm 按均方根缩放，LayerNorm 还涉及均值中心化。把 Norm 放在子层之前的顺序叫 Pre-Norm，具体推导见[残差基础](residual/残差与归一化基础.md)。
+
+位置编码使模型获得顺序信息。RoPE（Rotary Position Embedding，旋转位置编码）根据位置旋转特定 Q/K 分量，不等同于简单加一个位置向量。首次阅读只需知道位置还需要进入计算，无需先掌握旋转推导。
 
 ## 训练、Prefill、Decode
 
-训练通常并行计算多个位置并使用 causal mask，通过后续 token 的预测目标构造 loss。自回归生成需要前一步生成的 token，因此输出步骤之间有依赖。
+一层 Attention 的 O 不是最终文字。经过多层 block 后，词表投影把每个位置的 H 维向量变成 $V_{vocab}$ 个词表分数，$V_{vocab}$ 为词表大小（与 Attention 中的 Value 矩阵 V 区分）；对这些 logits 做 softmax，才得到下一个 token 的预测概率。
 
-Prefill 处理已知前缀；decode 对新 token 计算查询与新 K/V，并复用可保留的历史状态。Prefill 常具有较多矩阵并行工作，decode 的形状、批量和历史读取不同；不能无条件断言所有 prefill 都计算受限、所有 decode 都带宽受限。
+训练时，已知文本 `[我,喜欢,猫]` 可以用前两个位置分别预测“喜欢”和“猫”。正确目标概率若为 0.25，交叉熵损失为 −ln(0.25)≈1.386；ln 是自然对数，目标概率越高，损失越小。多个有效位置的损失按规定汇总，下一篇解释怎样利用它改变参数。
+
+生成时没有预先给出的“猫”，模型要根据预测分布选出 token，将其接回输入后才能继续，这种逐步依赖叫自回归。本篇采用这种只根据已知前文生成的 decoder-only 结构；decoder 是解码器，此处不需要另一套独立 encoder（编码器）提供输入表示。
+
+Prefill（前缀填充）一次处理已知前缀，得到历史 K/V 和首个待生成 token 的分数；decode（逐步解码）消费新 token、计算其 K/V，并复用历史。训练虽也做因果预测，却已知完整训练文本，所以多个位置的前向可以一起算。
+
+Prefill 常有更多矩阵并行工作，decode 常包含较多历史读取；实际是计算受限（算术能力限制速度）还是带宽受限（搬运能力限制速度），还取决于形状、batch 和硬件，第 4 篇再解释。
 
 ## 演进的核心问题
 
-Transformer 提供可并行的序列表示计算，但长序列 Attention、参数规模和自回归依赖带来不同瓶颈。IO 优化、KV 压缩、稀疏访问、条件计算和递推状态分别处理其中一部分，并引入新的质量或系统约束。
+现在可以沿一条路径走通：token ID → embedding → 多层 Attention/FFN → 词表 logits → 预测概率。训练额外比较正确目标得到 loss，生成则选取 token 继续执行。模型越大、序列越长，计算、存储和数据移动会以不同方式增长。
 
-相关：[KV 与执行阶段](../10_Inference_Serving/Transformer执行与KV基础.md)、[残差专题](residual/README.md)、[MoE 专题](moe/README.md)。
+自检：注意力 P 和词表预测概率相同吗？不同。前者决定从哪些位置混合信息，后者决定下一个 token 的分布。两者都可能使用 softmax，但对象和形状不同。
+
+相关：[KV 执行阶段](../10_Inference_Serving/Transformer执行与KV基础.md)、[MoE 专题](moe/README.md)。完成下一篇后，可用[微型 Transformer 完整推演](微型Transformer完整推演.md)把前向和梯度连起来。
 
 参考：[Attention Is All You Need](https://arxiv.org/abs/1706.03762)、[GQA](https://arxiv.org/abs/2305.13245)。
 

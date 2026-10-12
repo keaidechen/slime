@@ -3,6 +3,8 @@
 > 相关基础：[基础概念](../00_Physical_Foundations/计算电路与处理器.md)。关联：[机制与演进](算子优化的问题演进.md)。
 
 
+上一章解决多个工作怎样按依赖执行；本篇进入单个矩阵乘内部。首次阅读先掌握“输出分块 → 输入复用 → 沿 K 累加 → 尾处理”，后半篇的持久化、Stream-K 和 Warp 专职化是可回看的进阶模式。
+
 ## GEMM 为什么是 AI Infra 的“发动机”？
 
 GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**：
@@ -26,16 +28,20 @@ Transformer 中的 Q/K/V Projection、Attention 输出投影、MLP（Multi-Layer
 - 选择 Tensor Core 支持的数据类型与 Layout；
 - 隐藏 HBM → Shared Memory 的延迟；
 - 平衡 Tile 大小、Occupancy 与并行度；
-- 处理尾块、动态 Shape 和 Epilogue。
+- 处理尾块（维度不能整除分块时的边缘）、动态 Shape（运行时才确定的形状）和 Epilogue（结果写回前的尾处理）。
 
 
 ### 将模型形状写成 GEMM
 
-通用接口常写为 `C = α·A@B + β·C`。例如 `X[4096,4096] @ W[4096,14336]` 对应 `M=4096、K=4096、N=14336`；映射到硬件时需要同时安排 tile、HBM 到片上存储的搬运和 MMA 流水。下面从这些约束展开。
+通用接口常写为 `C = α·A@B + β·C`。其中 α、β 为标量系数，右侧 C 是原有输出，取 α=1、β=0 即普通乘法。把 B 个序列各 S 个位置合并成 M=B×S 行后，每行是 H 维向量。例如 `X[4096,4096] @ W[4096,14336]` 对应 `M=4096、K=4096、N=14336`；映射到硬件时需要同时安排 tile、HBM 到片上存储的搬运和 MMA（矩阵乘累加）流水。下面从这些约束展开。
 
 ## 从朴素实现到分层 Tiling
 
 朴素实现中，一个 Thread 计算一个 $C_{ij}$，每轮从 Global Memory 读取 $A_{ik}$ 和 $B_{kj}$。这会重复读取大量相同元素。
+
+先手算 `A[4,4] @ B[4,4]`。若每个输出独立计算，16 个输出各需读 4 个 A 元素和 4 个 B 元素，共 128 次输入元素读取。若一次合作计算一个 2×2 输出块，每个 k 只需读 A 的 2 个元素和 B 的 2 个元素，并在块内复用：每块读 4×4=16 个元素，4 个块共读 64 个。两种方法都按 $2MNK$ 计 128 FLOP，输出同样是 16 个元素。
+
+这是忽略硬件缓存的逻辑读取计数，不是 HBM 实测流量；它说明分块怎样让一次读取服务于多个输出。若 K 方向每轮取 2 个元素，则一轮需暂存 A、B 各一个 2×2 块，共 8 个 FP32 元素、32 字节；另有 4 个累加结果需要存储。块变大会增加复用，也增加片上存储需求。
 
 高性能 GEMM 通常有多层 Tile：
 
@@ -56,7 +62,7 @@ CTA Tile 决定一个 Block 负责的输出区域；Warp Tile 决定 Warp 或 Wa
 
 MMA = **Matrix Multiply-Accumulate（矩阵乘累加）**。Tensor Core 并不是替代整个 SM 的“独立 GPU”，而是 SM 内擅长固定形状矩阵乘累加的执行单元。
 
-不同架构的高性能协作粒度不断扩大：
+进阶选读：下面的架构名表示 GPU 代际，Warp Group 表示多个 Warp 协作，TMEM 是 Tensor Memory（专用张量存储），TCGen05 是一代 Tensor Core 指令接口。具体适用条件要查对应架构文档，首次阅读不必记忆。不同架构的高性能协作粒度不断扩大：
 
 ```text
 Volta/Ampere：Warp-level MMA
@@ -72,7 +78,7 @@ Blackwell：TCGen05、TMEM、2-CTA 等更大协作与专用状态存储
 一个 GEMM Kernel 可粗分为两段：
 
 1. Mainloop（主循环）：沿 K 维加载 A/B Tile 并不断 MMA。
-2. Epilogue（尾处理）：把 Accumulator 转换为输出，常融合 Bias、Activation、Scale、Quantize、Reduction 等操作。
+2. Epilogue（尾处理）：把 Accumulator（累加结果）转换为输出，常融合 Bias（加偏置）、Activation（非线性激活）、Scale（缩放）、Quantize（量化）或 Reduction（归约）等操作。
 
 例如：
 
@@ -99,10 +105,10 @@ $$
 Y_e=X_eW_e,\quad X_e\in \mathbb{R}^{T_e\times H}
 $$
 
-不同专家的 $T_e$ 不同，于是一批 Shape 为：
+设共有 E 个专家，每个权重 $W_e$ 形状为 $[H,I]$，I 是输出宽度。不同专家的 $T_e$ 不同，于是按 $(M,N,K)$ 顺序写出的一批 Shape 为：
 
 $$
-(T_0,H,I),(T_1,H,I),\ldots,(T_{E-1},H,I)
+(T_0,I,H),(T_1,I,H),\ldots,(T_{E-1},I,H)
 $$
 
 这不是规则 Batched GEMM，而是 Grouped GEMM。
@@ -148,22 +154,22 @@ flowchart LR
     C2 --> Q
 ```
 
-它能减少 Launch，并通过动态工作领取缓解不规则负载；但如果 Queue、Atomic 或调度策略设计不当，也会增加开销。Blackwell 的 Cluster Launch Control 与 CUTLASS 动态持久化调度，都是这一方向的硬件/软件协同。
+它让同一个 CTA 持续处理多个工作块，调度可以是静态的，也可以通过动态领取缓解不规则负载。普通 GEMM 和持久化 GEMM 都可以只有一次 Launch，因此“持久化”本身不保证减少启动次数。动态实现中的 Queue（工作队列）、Atomic（原子更新）或调度策略也可能引入开销。Blackwell 的 Cluster Launch Control 与 CUTLASS 动态持久化调度，都是这一方向的硬件/软件协同。
 
 
 ## Stream-K
 
-传统 GEMM 沿 M/N 划 Tile。当 M/N 很小或 Tile 数不能均匀覆盖 SM 时，部分 SM 会空闲。Stream-K 允许进一步切 K 维，把一个输出 Tile 的 K 工作分给多个 CTA，再归并部分和。
+这里的 Stream-K 是 GEMM 工作划分方法，不是上一章的 CUDA Stream。传统 GEMM 沿 M/N 划 Tile。当 M/N 很小或 Tile 数不能均匀覆盖 SM 时，部分 SM 会空闲。Stream-K 允许进一步切 K 维，把一个输出 Tile 的 K 工作分给多个 CTA，再归并部分和。
 
-收益是更好的负载均衡；代价是额外归并、同步或 Workspace。它体现了常见取舍：用额外通信/同步换更高并行度。
+收益是更好的负载均衡；代价是额外归并、同步或 Workspace（暂存部分结果的工作空间）。它体现了常见取舍：用额外通信/同步换更高并行度。
 
 
 ## Warp Specialization
 
 Warp Specialization（Warp 专职化）让不同 Warp 承担不同角色：
 
-- Producer：发起 TMA Load，准备下一个 Tile；
-- Consumer：执行 MMA；
+- Producer（生产者）：通过 TMA（张量内存搬运加速器）等机制加载数据，准备下一个 Tile；
+- Consumer（消费者）：执行 MMA；
 - Epilogue Warp：处理归一化、Scale 或 Store。
 
 Hopper/Blackwell 上硬件管线复杂，显式或编译器自动生成的 Warp Specialization 能提高延迟隐藏和专用单元利用率。Triton 2026 年公开的 AutoWS 设计，会做数据分区、软件流水调度和 Warp Partition。
@@ -176,7 +182,7 @@ Hopper/Blackwell 上硬件管线复杂，显式或编译器自动生成的 Warp 
 | 技术 | 核心目标 | 主要风险 |
 |---|---|---|
 | Fusion | 减少中间存储与 Launch 边界 | Register/SMEM 压力、代码复杂 |
-| Persistent Kernel | 减少反复 Launch、动态领取工作 | 调度与同步开销 |
+| Persistent Kernel | CTA 持续处理多个 Tile，可动态分配工作 | 调度与同步开销 |
 | Warp Specialization | 让搬运、计算、尾处理重叠 | 角色负载不均、编译复杂 |
 
 它们可以组合。例如 FlashAttention-4 可以既融合 Attention 流程，又使用 Warp/CTA 级流水，还根据架构选择专用实现。
@@ -184,7 +190,7 @@ Hopper/Blackwell 上硬件管线复杂，显式或编译器自动生成的 Warp 
 
 ## 选 Kernel 时真正该看什么？
 
-不要只看峰值 TFLOPS。至少记录：
+TFLOPS 是每秒万亿次浮点运算。不要只看峰值 TFLOPS；以下指标分别回答速度、数据流量和资源约束问题。Accumulation Precision 是累加精度，L2 Hit 是二级缓存命中情况，Tensor Core Active 是相关工具定义的矩阵计算单元活跃指标，Padding 是为对齐而补入的无效元素。至少记录：
 
 - $(M,N,K)$ 和 Batch/Group 分布；
 - Dtype（数据类型）与 Accumulation Precision；
@@ -199,6 +205,7 @@ Hopper/Blackwell 上硬件管线复杂，显式或编译器自动生成的 Warp 
 
 ## 资料
 
+- [CUTLASS Efficient GEMM](https://docs.nvidia.com/cutlass/latest/media/docs/cpp/efficient_gemm.html)
 - [CUTLASS Overview](https://docs.nvidia.com/cutlass/latest/overview.html)
 - [CUTLASS Changelog](https://docs.nvidia.com/cutlass/latest/CHANGELOG.html)
 - [Triton Warp Specialization](https://pytorch.org/blog/warp-specialization-in-triton-design-and-roadmap/)

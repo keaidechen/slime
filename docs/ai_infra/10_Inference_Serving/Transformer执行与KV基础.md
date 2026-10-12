@@ -2,6 +2,10 @@
 
 > 相关基础：[基础概念](../02_Model_Architecture/Transformer与Attention基础.md)。关联：[机制与演进](推理内存系统.md)。
 
+训练用梯度改参数；推理固定参数，根据输入预测输出。Serving（模型服务）还需要接收请求、排队、返回结果和回收资源。本篇先跟踪一条请求，下一篇再管理多条请求的共享显存。
+
+Prompt 是用户输入及系统模板形成的 token 序列；Prefill（预填充）计算输入序列，Decode（逐步解码）消费新 token 并继续预测。Dense Transformer 指这里每个 token 使用相同的稠密层，区别于选择部分专家的 MoE。
+
 <details>
 <summary>文章导航</summary>
 
@@ -42,7 +46,7 @@ Prompt: 1000 tokens
 
 #### Prefill
 
-一次性处理整个 prompt。
+计算整个 prompt；工程上也可分块执行。最后一个输入位置的 logits 可以直接用于采样首个输出 token，所以首 token 通常来自 prefill 的末尾，而不是必须额外做一次 decode。
 
 此时：
 
@@ -55,7 +59,7 @@ K/V length ≈ 1000
 
 #### Decode
 
-之后每一步只生成一个或少数 token：
+随后把刚采样的 token 作为下一次输入，补上它的 KV，再预测下一个 token。以下是不使用推测解码的单请求例子：
 
 ```text
 Q length = 1
@@ -75,7 +79,7 @@ K/V length = 1002
 
 > **memory-bandwidth-bound。**
 
-这也是为什么 KV Cache 管理会直接决定 serving throughput。
+Memory-bandwidth-bound 表示主要受显存带宽限制；大 batch、长上下文或不同模型也可能转成计算或通信受限，不能把这一判断当作所有 decode 的定律。Serving throughput 是单位时间服务完成的工作量。
 
 ---
 
@@ -180,7 +184,7 @@ used | hole | used | small hole | used
 
 这就是碎片问题。
 
-PagedAttention 的核心就是把这个问题类比成操作系统的 virtual memory / paging。
+vLLM 是一个模型推理引擎，PagedAttention 是其提出的分页 KV 管理与访问方法。它借鉴操作系统的 virtual memory（虚拟内存）与 paging（分页）思路。
 
 ---
 
@@ -314,11 +318,11 @@ You are a helpful assistant...
            A1     A2            Q1    Q2
 ```
 
-简单哈希表只能表达“整个 prefix 是否命中”。
+若只用完整 prompt 作为一个哈希键，难以直接查找最长可复用前缀；也可以设计按块哈希和前缀链来实现复用，并不是只有树才能做到。
 
-Radix Tree 可以表达：
+Radix Tree（基数树）将公共前缀合并为共享路径，因而自然表达：
 
-> **任意长度的最长公共前缀和树状共享关系。**
+> **最长公共前缀和树状共享关系。实际可复用粒度仍受 KV 块大小与实现约束。**
 
 这就是 RadixAttention 的核心数据结构基础。
 

@@ -1,0 +1,4 @@
+{"name": "forward_backward_adam", "ph": "X", "ts": 24114.166, "dur": 364.084, "pid": 74720, "tid": 0, "args": {"step": 3}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 25018.25, "dur": 230.916, "pid": 74720, "tid": 0, "args": {"step": 4}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 25692.166, "dur": 381.167, "pid": 74720, "tid": 0, "args": {"step": 5}}
+{"name": "forward_backward_adam", "ph": "X", "ts": 26465.458, "dur": 266.792, "pid": 74720, "tid": 0, "args": {"step": 6}}
