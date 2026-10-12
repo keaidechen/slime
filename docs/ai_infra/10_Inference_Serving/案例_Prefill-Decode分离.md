@@ -15,6 +15,8 @@ Prefill（预填充）一次处理整段 prompt，通常是大矩阵、compute-b
 
 Prefill–Decode disaggregation（预填充—解码分离）让两种 worker 独立扩缩，但产生一个新依赖：prefill 生成的 KV 必须传给 decode。
 
+本篇展开交接协议与局部算例；同一 8 卡预算下是否应选择 PD，见[完整推理方案比较](推理并行方案设计.md)。另一种切分是将每层 Attention 与 FFN 放到不同资源池，其逐层激活往返由[Attention–FFN 分离](Attention与FFN分离的边界.md)维护。
+
 ```mermaid
 sequenceDiagram
     participant R as Router

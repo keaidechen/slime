@@ -4,6 +4,10 @@
 
 | 程序 | 解释对象 | 依赖与证据边界 |
 |---|---|---|
+| [design_budget.py](design_budget.py) | 工作负载、相关驻留、突发、规模预算与生命周期成本 | Python 标准库；确定性事件与数学核对，无真实模型质量或性能 |
+| [design_cases.py](design_cases.py) | 同一模型的训练和推理候选比较与敏感性 | Python 标准库；容量和阶段时间模型，无 GPU 压测 |
+| [hardware_pooling.py](hardware_pooling.py) | 异构计算、远端 KV、Attention–FFN 往返 | Python 标准库；教学带宽、延迟与成本阈值 |
+| [environment_placement.py](environment_placement.py) | 环境生命周期、快照供给与端边云首播放 | Python 标准库；不启动沙箱、不执行网络或媒体模型 |
 | [parallel_runtime_walkthroughs.py](parallel_runtime_walkthroughs.py) | DDP/FSDP、TP、PP、SP/CP、专家网格、KV 与调度 | Python 标准库；矩阵、有限差分和离散状态模型 |
 | [omni_walkthroughs.py](omni_walkthroughs.py) | 音频帧/字节、播放缺口、块身份、取消与背压、损失梯度、迭代恢复及阶段容量 | Python 标准库；教学模拟；可选固定源码文件 hash 核对，不运行真实媒体模型 |
 | [etp_reference.py](etp_reference.py) | 专家内部 TP 与 EP×ETP 网格 | Python 标准库；固定路由概率，不覆盖 router 参数梯度 |

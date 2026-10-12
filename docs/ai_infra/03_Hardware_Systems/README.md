@@ -14,6 +14,7 @@
 | [CUDA_Stream与依赖](CUDA_Stream与依赖.md) | CUDA Stream、依赖与调度层次 |
 | [Hopper异步硬件专题](Hopper异步硬件专题.md) | Hopper 异步硬件：TMA、WGMMA 与流水线 |
 | [GPU架构演进与历史资料](GPU架构演进与历史资料.md) | GPU 架构演进与历史资料 |
+| [异构加速器的设计取舍](异构加速器的设计取舍.md) | GPU、矩阵阵列与统一内存的执行边界；负载和移植成本如何改变选择 |
 
 ## 读完本专题之后
 
