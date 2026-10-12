@@ -45,3 +45,9 @@
 
 
 新增[集群调度](../03_Hardware_Systems/集群调度与资源管理.md)、[多模态与扩散](../02_Model_Architecture/多模态与扩散计算.md)及[实验统计](../12_Performance_Reliability/实验统计与质量评估.md)的数字来自固定假设的可运行算例。平台文档查阅日期为 2026-10-12；未进行真实集群、生成图像质量或多模态 GPU 测量。
+
+## Omni 扩展的证据范围（2026-10-12）
+
+[八篇原理支线](../guides/Omni扩展阅读路线.md)使用统一教学参数串起语音回答与条件媒体生成；论文模型事实与假想帧率、时延分开。新增 [vLLM-Omni 走读](../runtime/vLLM-Omni.md)固定到 v0.14.0，commit `ed89c8b0436999e9210f11363f4eb512330a9dfa`，[清单](omni_source_manifest.json)记录 10 个文件的 hash 与符号位置。
+
+[omni_walkthroughs.py](../examples/omni_walkthroughs.py)只运行标准库数学和离散状态模拟；[运行报告](omni_checks_20261012.json)记录脚本 hash、七组核对结果和固定源码文件身份。未执行上游模型、依赖兼容测试、GPU 压测、声卡播放或人工质量评估。尤其不能把教学取消协议当作该版本扩散引擎已支持的能力；走读中单独记录了其 abort 未实现的边界。原有 CPU 实验与框架证据快照保持原样。

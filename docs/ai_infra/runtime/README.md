@@ -5,6 +5,7 @@
 - [vLLM V1](vLLM-V1.md)：token budget、KV manager、Engine Core 与 worker。
 - [TensorRT-LLM](TensorRT-LLM.md)：执行系统、backend 与服务组件的分工。
 - [SGLang](../13_Source_Analysis/sglang/README.md)：本仓库固定版本的请求与控制面实现。
+- [vLLM-Omni](vLLM-Omni.md)：v0.14.0 固定源码的多阶段交接、async chunk、输出与取消边界；与 [Omni 原理支线](../guides/Omni扩展阅读路线.md)配套。
 
 [技术演化](../papers/11_LLM推理Runtime技术演化总览.md)解释设计问题的变化，[推理性能](../12_Performance_Reliability/05_inference.md)限定负载和指标口径。文中的历史结构不等于每个框架当前版本的完整支持矩阵。
 

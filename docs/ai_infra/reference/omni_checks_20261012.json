@@ -1,0 +1,84 @@
+{
+  "evidence_kind": "CPU teaching arithmetic and state simulation",
+  "script_sha256": "ebb9f8351dfd7abb98bb6f8806c296975bb22459c8fd58b705b836c93eb0cab4",
+  "checks": {
+    "representations": {
+      "mel_frames": 998,
+      "encoder_frames": 250,
+      "feature_bytes": 512000,
+      "initial_kv_mib": 47.25,
+      "codec_indices": 4000,
+      "rvq_squared_error": 0.005000000000000003
+    },
+    "playback_timeline": {
+      "first_play_ms": 220,
+      "play_spans_ms": [
+        [
+          220,
+          420
+        ],
+        [
+          420,
+          620
+        ],
+        [
+          680,
+          880
+        ],
+        [
+          880,
+          1080
+        ]
+      ],
+      "gap_ms": 60,
+      "played_at_500_ms": 280
+    },
+    "chunk_identity": {
+      "ordered_blocks_before_cancel": 4,
+      "active_epoch": 8,
+      "late_output_dropped": true
+    },
+    "lifetime_and_backpressure": {
+      "premature_release_blocked": 2,
+      "queue_budget_bytes": 38400
+    },
+    "training_objectives": {
+      "pooled_loss": 1.8,
+      "balanced_loss": 1.5,
+      "balanced_gradient": 1,
+      "index_weighted_gradient": 2.2,
+      "encoder_gradient": 3,
+      "projector_gradient": 12
+    },
+    "media_iteration": {
+      "latent_bytes": 32768,
+      "patch_positions": 1024,
+      "flow_trajectory": [
+        -1.0,
+        -0.25,
+        0.5,
+        1.25,
+        2.0
+      ],
+      "restored_latent": 2.0,
+      "cancel_ms": 340,
+      "earliest_free_ms": 370
+    },
+    "capacity_and_metrics": {
+      "capacity_requests_per_second": [
+        10.0,
+        12.5,
+        20.0,
+        25.0
+      ],
+      "wer": 0.2,
+      "qualified_fraction_of_arrivals": 0.6,
+      "goodput_requests_per_second": 6
+    }
+  },
+  "source_identity": {
+    "expected_commit": "ed89c8b0436999e9210f11363f4eb512330a9dfa",
+    "matched_files": 10,
+    "scope": "file identity only; no upstream execution"
+  }
+}

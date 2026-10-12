@@ -5,6 +5,7 @@
 | 程序 | 解释对象 | 依赖与证据边界 |
 |---|---|---|
 | [parallel_runtime_walkthroughs.py](parallel_runtime_walkthroughs.py) | DDP/FSDP、TP、PP、SP/CP、专家网格、KV 与调度 | Python 标准库；矩阵、有限差分和离散状态模型 |
+| [omni_walkthroughs.py](omni_walkthroughs.py) | 音频帧/字节、播放缺口、块身份、取消与背压、损失梯度、迭代恢复及阶段容量 | Python 标准库；教学模拟；可选固定源码文件 hash 核对，不运行真实媒体模型 |
 | [etp_reference.py](etp_reference.py) | 专家内部 TP 与 EP×ETP 网格 | Python 标准库；固定路由概率，不覆盖 router 参数梯度 |
 | [optimizer_walkthroughs.py](optimizer_walkthroughs.py) | AdamW 两步历史、Muon 矩阵迭代与分片反例 | Python 标准库；解析答案与谱分解对照，不运行真实优化器后端 |
 | [training_rl_walkthroughs.py](training_rl_walkthroughs.py) | 更新、packing、checkpoint、PD、PPO/GAE 与异步队列 | Python 标准库；教学协议不等于仓库实现 |

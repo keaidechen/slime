@@ -1,0 +1,679 @@
+{
+  "repository": "https://github.com/vllm-project/vllm-omni",
+  "tag": "v0.14.0",
+  "commit": "ed89c8b0436999e9210f11363f4eb512330a9dfa",
+  "inspected_on": "2026-10-12",
+  "evidence_kind": "static source inspection; no upstream model or GPU execution",
+  "files": [
+    {
+      "path": "vllm_omni/entrypoints/omni.py",
+      "sha256": "f039f0a7a1b258eb3b69b0748b7e516a583eb6ee3d1cf9c9cde132b0908da039",
+      "symbols": [
+        {
+          "name": "_weak_close_cleanup",
+          "line": 50
+        },
+        {
+          "name": "_dummy_snapshot_download",
+          "line": 66
+        },
+        {
+          "name": "omni_snapshot_download",
+          "line": 70
+        },
+        {
+          "name": "OmniBase",
+          "line": 81
+        },
+        {
+          "name": "__init__",
+          "line": 103
+        },
+        {
+          "name": "_get_default_cache_config",
+          "line": 122
+        },
+        {
+          "name": "_normalize_cache_config",
+          "line": 141
+        },
+        {
+          "name": "_create_default_diffusion_stage_cfg",
+          "line": 152
+        },
+        {
+          "name": "_initialize_stages",
+          "line": 190
+        },
+        {
+          "name": "_build_stage",
+          "line": 252
+        },
+        {
+          "name": "_is_async_chunk_enable",
+          "line": 279
+        },
+        {
+          "name": "_start_stages",
+          "line": 284
+        },
+        {
+          "name": "_process_stage_ready",
+          "line": 329
+        },
+        {
+          "name": "_wait_for_stages_ready",
+          "line": 333
+        },
+        {
+          "name": "start_profile",
+          "line": 379
+        },
+        {
+          "name": "stop_profile",
+          "line": 414
+        },
+        {
+          "name": "close",
+          "line": 480
+        },
+        {
+          "name": "_name",
+          "line": 486
+        },
+        {
+          "name": "is_async",
+          "line": 490
+        },
+        {
+          "name": "Omni",
+          "line": 494
+        },
+        {
+          "name": "__init__",
+          "line": 521
+        },
+        {
+          "name": "generate",
+          "line": 534
+        },
+        {
+          "name": "generate",
+          "line": 543
+        },
+        {
+          "name": "generate",
+          "line": 551
+        },
+        {
+          "name": "_run_generation_with_generator",
+          "line": 605
+        },
+        {
+          "name": "_run_generation",
+          "line": 621
+        },
+        {
+          "name": "_name",
+          "line": 865
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/entrypoints/async_omni.py",
+      "sha256": "0d849a6fa234171badbbf2e29f923de574a8f409516e2a4e877425576f47f429",
+      "symbols": [
+        {
+          "name": "_weak_close_cleanup_async",
+          "line": 45
+        },
+        {
+          "name": "AsyncOmni",
+          "line": 64
+        },
+        {
+          "name": "__init__",
+          "line": 98
+        },
+        {
+          "name": "_create_default_diffusion_stage_cfg",
+          "line": 119
+        },
+        {
+          "name": "_process_stage_ready",
+          "line": 179
+        },
+        {
+          "name": "_wait_for_stages_ready",
+          "line": 192
+        },
+        {
+          "name": "shutdown",
+          "line": 230
+        },
+        {
+          "name": "generate",
+          "line": 239
+        },
+        {
+          "name": "_process_async_results",
+          "line": 364
+        },
+        {
+          "name": "_process_sequential_results",
+          "line": 409
+        },
+        {
+          "name": "_process_single_result",
+          "line": 474
+        },
+        {
+          "name": "_run_output_handler",
+          "line": 562
+        },
+        {
+          "name": "output_handler",
+          "line": 569
+        },
+        {
+          "name": "is_running",
+          "line": 617
+        },
+        {
+          "name": "is_stopped",
+          "line": 622
+        },
+        {
+          "name": "errored",
+          "line": 626
+        },
+        {
+          "name": "_name",
+          "line": 630
+        },
+        {
+          "name": "is_async",
+          "line": 634
+        },
+        {
+          "name": "dead_error",
+          "line": 638
+        },
+        {
+          "name": "abort",
+          "line": 641
+        },
+        {
+          "name": "get_vllm_config",
+          "line": 647
+        },
+        {
+          "name": "get_model_config",
+          "line": 655
+        },
+        {
+          "name": "get_input_preprocessor",
+          "line": 663
+        },
+        {
+          "name": "get_tokenizer",
+          "line": 666
+        },
+        {
+          "name": "is_tracing_enabled",
+          "line": 672
+        },
+        {
+          "name": "do_log_stats",
+          "line": 678
+        },
+        {
+          "name": "check_health",
+          "line": 681
+        },
+        {
+          "name": "reset_mm_cache",
+          "line": 684
+        },
+        {
+          "name": "reset_prefix_cache",
+          "line": 687
+        },
+        {
+          "name": "sleep",
+          "line": 690
+        },
+        {
+          "name": "wake_up",
+          "line": 693
+        },
+        {
+          "name": "is_sleeping",
+          "line": 696
+        },
+        {
+          "name": "add_lora",
+          "line": 700
+        },
+        {
+          "name": "encode",
+          "line": 704
+        },
+        {
+          "name": "start_profile",
+          "line": 712
+        },
+        {
+          "name": "stop_profile",
+          "line": 729
+        },
+        {
+          "name": "pause_generation",
+          "line": 746
+        },
+        {
+          "name": "resume_generation",
+          "line": 781
+        },
+        {
+          "name": "is_paused",
+          "line": 788
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/entrypoints/omni_stage.py",
+      "sha256": "adbc82680f91392afde1601def3c05e63c913c2377cbc01d5bc8081e8cc83d47",
+      "symbols": [
+        {
+          "name": "_resolve_worker_cls",
+          "line": 58
+        },
+        {
+          "name": "_build_od_config",
+          "line": 75
+        },
+        {
+          "name": "OmniStage",
+          "line": 87
+        },
+        {
+          "name": "__init__",
+          "line": 99
+        },
+        {
+          "name": "set_engine",
+          "line": 146
+        },
+        {
+          "name": "set_async_engine",
+          "line": 154
+        },
+        {
+          "name": "set_vllm_config",
+          "line": 162
+        },
+        {
+          "name": "set_tokenizer",
+          "line": 170
+        },
+        {
+          "name": "set_input_preprocessor",
+          "line": 178
+        },
+        {
+          "name": "set_is_tracing_enabled",
+          "line": 186
+        },
+        {
+          "name": "set_engine_outputs",
+          "line": 194
+        },
+        {
+          "name": "attach_queues",
+          "line": 203
+        },
+        {
+          "name": "stop_profile",
+          "line": 213
+        },
+        {
+          "name": "init_stage_worker",
+          "line": 245
+        },
+        {
+          "name": "stop_stage_worker",
+          "line": 356
+        },
+        {
+          "name": "submit",
+          "line": 383
+        },
+        {
+          "name": "_inject_global_id",
+          "line": 400
+        },
+        {
+          "name": "try_collect",
+          "line": 423
+        },
+        {
+          "name": "process_engine_inputs",
+          "line": 436
+        },
+        {
+          "name": "_stage_worker",
+          "line": 487
+        },
+        {
+          "name": "handle_profiler_task_local",
+          "line": 733
+        },
+        {
+          "name": "_stage_worker_async_entry",
+          "line": 1003
+        },
+        {
+          "name": "_stage_worker_async",
+          "line": 1013
+        },
+        {
+          "name": "_force_log",
+          "line": 1269
+        },
+        {
+          "name": "handle_profiler_task_async",
+          "line": 1286
+        },
+        {
+          "name": "generation_single_request",
+          "line": 1348
+        },
+        {
+          "name": "count_prompt_tokens_from_outputs",
+          "line": 1511
+        },
+        {
+          "name": "make_request_stats",
+          "line": 1524
+        },
+        {
+          "name": "make_stage_stats",
+          "line": 1552
+        },
+        {
+          "name": "output_strip",
+          "line": 1558
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/model_executor/stage_configs/qwen3_omni_moe.yaml",
+      "sha256": "ad582d13607cdbc0d6ca5e9e88770dfea48c75caa544b19afaee09d540c8b821",
+      "symbols": []
+    },
+    {
+      "path": "vllm_omni/model_executor/stage_configs/qwen3_omni_moe_async_chunk.yaml",
+      "sha256": "de09211264bb8cd8bd2597bde5521d19f0e12d140bf45f4896c6639cd61f487b",
+      "symbols": []
+    },
+    {
+      "path": "vllm_omni/model_executor/stage_input_processors/qwen3_omni.py",
+      "sha256": "d276dcc80c5032e769c7ac4f3013b5f8125f281af8c2590383c26014ca4f213f",
+      "symbols": [
+        {
+          "name": "_compute_talker_prompt_ids_length",
+          "line": 16
+        },
+        {
+          "name": "_ensure_list",
+          "line": 57
+        },
+        {
+          "name": "_validate_stage_inputs",
+          "line": 66
+        },
+        {
+          "name": "thinker2talker_async_chunk",
+          "line": 86
+        },
+        {
+          "name": "thinker2talker",
+          "line": 120
+        },
+        {
+          "name": "talker2code2wav_async_chunk",
+          "line": 184
+        },
+        {
+          "name": "talker2code2wav",
+          "line": 223
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/distributed/omni_connectors/adapter.py",
+      "sha256": "06a54d3fe3a7ed5ceb3fc98a4af0d4fc8a147c914c6de288318eb9a7d99abd37",
+      "symbols": [
+        {
+          "name": "try_send_via_connector",
+          "line": 24
+        },
+        {
+          "name": "try_recv_via_connector",
+          "line": 100
+        },
+        {
+          "name": "get_chunk",
+          "line": 182
+        },
+        {
+          "name": "get_through_connector",
+          "line": 230
+        },
+        {
+          "name": "get_chunk_for_generation",
+          "line": 254
+        },
+        {
+          "name": "put_chunk",
+          "line": 291
+        },
+        {
+          "name": "compute_talker_prompt_ids_length",
+          "line": 373
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/entrypoints/async_omni_diffusion.py",
+      "sha256": "1e1cb9bae2c3f1d5f5eef1ccb436e43771a84da7e42debcb22128844dbb415f3",
+      "symbols": [
+        {
+          "name": "AsyncOmniDiffusion",
+          "line": 30
+        },
+        {
+          "name": "__init__",
+          "line": 52
+        },
+        {
+          "name": "generate",
+          "line": 111
+        },
+        {
+          "name": "generate_stream",
+          "line": 167
+        },
+        {
+          "name": "close",
+          "line": 190
+        },
+        {
+          "name": "shutdown",
+          "line": 211
+        },
+        {
+          "name": "__del__",
+          "line": 215
+        },
+        {
+          "name": "abort",
+          "line": 222
+        },
+        {
+          "name": "is_running",
+          "line": 227
+        },
+        {
+          "name": "is_stopped",
+          "line": 232
+        },
+        {
+          "name": "remove_lora",
+          "line": 236
+        },
+        {
+          "name": "add_lora",
+          "line": 250
+        },
+        {
+          "name": "list_loras",
+          "line": 264
+        },
+        {
+          "name": "pin_lora",
+          "line": 284
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/diffusion/diffusion_engine.py",
+      "sha256": "1c9ea2d14c4806a5320c80e9c1ca75b4583c4a8e2d382fa7a68847ce34271104",
+      "symbols": [
+        {
+          "name": "supports_image_input",
+          "line": 26
+        },
+        {
+          "name": "image_color_format",
+          "line": 33
+        },
+        {
+          "name": "supports_audio_output",
+          "line": 38
+        },
+        {
+          "name": "DiffusionEngine",
+          "line": 45
+        },
+        {
+          "name": "__init__",
+          "line": 48
+        },
+        {
+          "name": "step",
+          "line": 69
+        },
+        {
+          "name": "make_engine",
+          "line": 183
+        },
+        {
+          "name": "add_req_and_wait_for_response",
+          "line": 194
+        },
+        {
+          "name": "start_profile",
+          "line": 197
+        },
+        {
+          "name": "stop_profile",
+          "line": 239
+        },
+        {
+          "name": "_dummy_run",
+          "line": 316
+        },
+        {
+          "name": "collective_rpc",
+          "line": 341
+        },
+        {
+          "name": "close",
+          "line": 370
+        },
+        {
+          "name": "abort",
+          "line": 374
+        }
+      ]
+    },
+    {
+      "path": "vllm_omni/outputs.py",
+      "sha256": "ae7b56e983ed9b35b877663b21e109bc63974d1b2be518bda03aab020c8aeefa",
+      "symbols": [
+        {
+          "name": "OmniModelRunnerOutput",
+          "line": 12
+        },
+        {
+          "name": "OmniRequestOutput",
+          "line": 30
+        },
+        {
+          "name": "from_pipeline",
+          "line": 65
+        },
+        {
+          "name": "from_diffusion",
+          "line": 90
+        },
+        {
+          "name": "num_images",
+          "line": 124
+        },
+        {
+          "name": "prompt_token_ids",
+          "line": 131
+        },
+        {
+          "name": "outputs",
+          "line": 142
+        },
+        {
+          "name": "encoder_prompt_token_ids",
+          "line": 153
+        },
+        {
+          "name": "prompt_logprobs",
+          "line": 160
+        },
+        {
+          "name": "num_cached_tokens",
+          "line": 167
+        },
+        {
+          "name": "kv_transfer_params",
+          "line": 174
+        },
+        {
+          "name": "is_diffusion_output",
+          "line": 181
+        },
+        {
+          "name": "is_pipeline_output",
+          "line": 186
+        },
+        {
+          "name": "to_dict",
+          "line": 190
+        },
+        {
+          "name": "__repr__",
+          "line": 216
+        }
+      ]
+    }
+  ]
+}
