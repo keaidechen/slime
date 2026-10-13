@@ -2,6 +2,8 @@
 
 围绕行为策略、样本、角色、权重版本和执行阶段组织系统知识。
 
+关注工具交互与长程任务时，沿 [Agent 训练与 Harness 阅读路线](../guides/Agent训练与Harness阅读路线.md)进入：先确定任务执行与上下文的责任，再看轨迹如何成为训练样本，最后核对 coding agent 的源码与评估边界。
+
 ## 主题地图
 
 | 条目 | 定位 |
@@ -13,7 +15,9 @@
 | [权重样本与异步一致性](权重样本与异步一致性.md) | 权重、样本与异步系统的一致性 |
 | [RL角色级并行](RL角色级并行.md) | RL 角色级并行：模型内部之外还有数据流 |
 | [行为概率与异步校正](行为概率与异步校正.md) | μ、old、current、reference 与校正适用条件 |
+| [Agent 系统与 Harness 边界](Agent系统与Harness边界.md) | 模型、上下文、工具、执行循环与训练器的职责；运行与训练的一致性 |
 | [多轮轨迹与环境执行](多轮轨迹与环境执行.md) | Tool/agent、环境状态、mask、终止、重试与资源生命周期 |
+| [Agent 训练的数据与反馈闭环](Agent训练的数据与反馈闭环.md) | 示范、筛选、在线 RL、信用分配、轨迹权重与模型/harness 对照 |
 | [Agent 环境容量与生命周期](Agent环境容量与生命周期.md) | CPU·秒、GiB·秒、创建率、快照和回收；四种策略的容量翻转 |
 | [奖励评估与质量闭环](奖励评估与质量闭环.md) | Reward、过滤、独立评估、有效样本率与 time-to-quality |
 
@@ -49,6 +53,7 @@
 |---|---|---|---|
 | 目标与概率字段 | [算法接口](RL算法与系统接口.md)、[行为校正](行为概率与异步校正.md) | [slime 算法](../13_Source_Analysis/slime/05_rl_algorithms.md) | [样本到更新](../12_Performance_Reliability/贯穿案例_从Rollout到参数更新.md) |
 | 多轮环境与奖励 | [轨迹执行](多轮轨迹与环境执行.md)、[奖励评估](奖励评估与质量闭环.md) | [slime 总览](../13_Source_Analysis/slime/README.md) | [RL 性能](../12_Performance_Reliability/06_slime.md) |
+| Harness 与 Agent 训练 | [运行边界](Agent系统与Harness边界.md)、[数据与反馈](Agent训练的数据与反馈闭环.md) | [slime Agentic RL](../13_Source_Analysis/slime/07_customization_and_agentic.md) | [Agent 任务到策略更新](../12_Performance_Reliability/贯穿案例_从Agent任务到策略更新.md) |
 | 角色、版本与恢复 | [角色并行](RL角色级并行.md)、[异步一致性](权重样本与异步一致性.md) | [slime 总览](../13_Source_Analysis/slime/README.md) | [换权与恢复](../12_Performance_Reliability/贯穿案例_换权失败与训练恢复.md) |
 
 通用篇定义契约；源码篇核对字段和分支；性能篇声明负载、指标与证据边界。

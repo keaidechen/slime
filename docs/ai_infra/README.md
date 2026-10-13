@@ -34,7 +34,7 @@
 |---|---|
 | 训练与微调 | [AdamW](09_Training_Systems/优化器原理与AdamW.md) / [Muon](09_Training_Systems/Muon与矩阵优化.md) → [数据目标与供给](09_Training_Systems/数据管线与训练演进.md) → [低精度与状态](09_Training_Systems/低精度训练与状态管理.md) → [SFT/LoRA/QLoRA/DPO/在线 RL](09_Training_Systems/预训练微调与后训练的系统边界.md) |
 | 推理功能与组合 | [量化与 KV 精度](10_Inference_Serving/量化推理与缓存精度.md) → [执行优化与功能组合](10_Inference_Serving/执行优化与功能组合.md) → [结构化生成、Multi-LoRA 与多模态](10_Inference_Serving/结构化生成与多模型服务.md) → [Runtime 对照](runtime/README.md) |
-| RL 与 agent | [四份概率与异步校正](11_RL_Systems/行为概率与异步校正.md) → [多轮环境执行](11_RL_Systems/多轮轨迹与环境执行.md) → [环境容量与生命周期](11_RL_Systems/Agent环境容量与生命周期.md) → [奖励与独立评估](11_RL_Systems/奖励评估与质量闭环.md) |
+| RL 与 agent | [Agent 训练与 Harness 路线](guides/Agent训练与Harness阅读路线.md)：运行边界 → 多轮轨迹 → 数据与反馈 → 行为概率 → 环境容量 → 独立评估 → coding agent 贯穿案例 |
 | Omni 扩展 | [八篇阅读路线](guides/Omni扩展阅读路线.md)：能力边界 → 音视频表示 → 计算图 → 流式会话 → 多阶段运行时 → 训练 → 评估 → 优化；以语音回答和条件媒体生成贯穿 |
 
 各专题 README 提供“通用原理 → 源码 → 性能/案例”入口，具体支持和性能结论须绑定实现版本与负载。Omni 当前作为扩展，不改变默认 26 篇主线；配套 [vLLM-Omni 固定版本走读](runtime/vLLM-Omni.md)和可运行的数值/状态核对。

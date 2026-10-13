@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-13",
+  "repository": "slime",
+  "head": "ed63d2c0fa4fea96a18ef7d4115e3e0205462cb8",
+  "scope": "Source identity and symbol lookup for the coding-agent case; no CLI, sandbox, model service, GPU training, or quality experiment was executed.",
+  "files": [
+    {
+      "path": "examples/coding_agent_rl/generate.py",
+      "sha256": "493f995c961ae302d81725c134f122a6933a4396236a498d514550dd8d7707b1",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "generate",
+          "line": 182,
+          "end_line": 283
+        },
+        {
+          "name": "boot_agent_sandbox",
+          "line": 96,
+          "end_line": 134
+        },
+        {
+          "name": "_abort_result",
+          "line": 316,
+          "end_line": 333
+        },
+        {
+          "name": "_eval_result",
+          "line": 336,
+          "end_line": 361
+        }
+      ]
+    },
+    {
+      "path": "examples/coding_agent_rl/swe.py",
+      "sha256": "ca8f69d23bb7f3b0fadd8e9bdccb6519ff87367203ae4f39e195696a752cfca7",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "prepare_workspace",
+          "line": 177,
+          "end_line": 198
+        },
+        {
+          "name": "git_diff",
+          "line": 230,
+          "end_line": 233
+        },
+        {
+          "name": "run_evaluation",
+          "line": 239,
+          "end_line": 247
+        },
+        {
+          "name": "_grade_scaleswe",
+          "line": 253,
+          "end_line": 287
+        }
+      ]
+    },
+    {
+      "path": "slime/agent/harness/common.py",
+      "sha256": "57919ecd4240f6631678f4ea395e2e0a784403ed4bb893c5e42992eabbe4b1fa",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "BaseHarness.run",
+          "line": 81,
+          "end_line": 104
+        },
+        {
+          "name": "run_agent",
+          "line": 107,
+          "end_line": 122
+        }
+      ]
+    },
+    {
+      "path": "slime/agent/adapters/common.py",
+      "sha256": "723d7157bed506da695113d167c5b9854571ce61fda8965fd451afffe90335a7",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "BaseAdapter._run_turn",
+          "line": 318,
+          "end_line": 393
+        },
+        {
+          "name": "BaseAdapter.finish_session",
+          "line": 245,
+          "end_line": 276
+        },
+        {
+          "name": "call_sglang_generate",
+          "line": 442,
+          "end_line": 514
+        }
+      ]
+    },
+    {
+      "path": "slime/agent/trajectory.py",
+      "sha256": "6dbb7bec446d81fa0542a4c954d458b4a11edab6776b45a63bc33bca08dd0469",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "_SampleBuilder.classify_token_drift",
+          "line": 169,
+          "end_line": 191
+        },
+        {
+          "name": "_SampleBuilder.to_sample",
+          "line": 234,
+          "end_line": 261
+        },
+        {
+          "name": "TrajectoryManager.record_turn",
+          "line": 283,
+          "end_line": 305
+        },
+        {
+          "name": "TrajectoryManager.get_trajectory",
+          "line": 307,
+          "end_line": 344
+        },
+        {
+          "name": "TrajectoryManager._try_merge_assistant_rewrite",
+          "line": 370,
+          "end_line": 426
+        },
+        {
+          "name": "TrajectoryManager._split_chain_into_builders",
+          "line": 456,
+          "end_line": 477
+        }
+      ]
+    },
+    {
+      "path": "slime/agent/sandbox.py",
+      "sha256": "0c1b475e02ccce0ed3089c9f73272c755d5090f7e63e9be909a44c8a40339d91",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "_await_done_marker",
+          "line": 65,
+          "end_line": 79
+        },
+        {
+          "name": "exec_and_wait",
+          "line": 82,
+          "end_line": 145
+        }
+      ]
+    },
+    {
+      "path": "slime/rollout/sglang_rollout.py",
+      "sha256": "b09d9aea3c5d105d816bc9028de9e7f9ed00f15832b12e72f6ef79b5b7ee3459",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "generate_and_rm",
+          "line": 257,
+          "end_line": 321
+        }
+      ]
+    },
+    {
+      "path": "slime/ray/rollout.py",
+      "sha256": "8cf97c67b265439adc37ddb4f6d0e9fc1aae0fdff97221624dbc2ea347aa99a0",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "RolloutManager._get_rollout_data",
+          "line": 286,
+          "end_line": 319
+        },
+        {
+          "name": "RolloutManager._post_process_rewards",
+          "line": 321,
+          "end_line": 346
+        },
+        {
+          "name": "RolloutManager._convert_samples_to_train_data",
+          "line": 348,
+          "end_line": 508
+        },
+        {
+          "name": "RolloutManager._split_train_data_by_dp",
+          "line": 513,
+          "end_line": 580
+        }
+      ]
+    },
+    {
+      "path": "slime/utils/dp_schedule.py",
+      "sha256": "ed87386712ecc0e296f038354878c9dd6f8ab5561832febe0f5f272caa9cfd02",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "build_dp_schedule",
+          "line": 82,
+          "end_line": 209
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/cp_utils.py",
+      "sha256": "01cc3c6cfa3574d233908af0d808099178a9c7f3319661a712bd88641925b80a",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "get_sum_of_sample_mean",
+          "line": 47,
+          "end_line": 124
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/loss.py",
+      "sha256": "b63b3beec3e6bc1557a21037c697640c04afab7d7584a2c61522e1142e006b47",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "loss_function",
+          "line": 1282,
+          "end_line": 1382
+        },
+        {
+          "name": "policy_loss_function",
+          "line": 933,
+          "end_line": 1172
+        }
+      ]
+    },
+    {
+      "path": "slime/backends/megatron_utils/actor.py",
+      "sha256": "6c25c72c7e8d8b9368f59d95884a0b161571dce9d15b203748c1c28db8b22860",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "MegatronTrainRayActor.train_actor",
+          "line": 436,
+          "end_line": 584
+        }
+      ]
+    },
+    {
+      "path": "train.py",
+      "sha256": "d29b5b892e17e6d27f0a643b04e6cd41ba3fe7d0397f5928d860776316e00749",
+      "matches_head": true,
+      "symbols": [
+        {
+          "name": "train",
+          "line": 9,
+          "end_line": 96
+        }
+      ]
+    }
+  ]
+}

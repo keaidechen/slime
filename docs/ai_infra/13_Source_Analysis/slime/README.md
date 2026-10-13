@@ -35,6 +35,7 @@
 ### 贯穿案例：tau-bench 如何连起整条执行链
 
 - **[tau-bench_qwen3_4B.md](tau-bench_qwen3_4B.md)**：以 tau-bench 客服 agent benchmark 为例，解释启动参数如何变成资源布局、GRPO 目标和训练时序。脚本中的每组配置都与其消费位置对应，可与 01/02/05/07 篇交叉阅读。
+- **[从 Agent 任务到策略更新](../../12_Performance_Reliability/贯穿案例_从Agent任务到策略更新.md)**：以 coding agent 连接沙盒、API adapter、实际上下文、片段、判分与参数更新；单独核对奖励组统计和 loss 归约，源码基线见该篇。
 
 主线与专题正文包含「深入拆解」小节——针对该篇最复杂的机制（如 Ray 探测重排、TP 下的分布式 logsumexp、TensorBackuper 的 pinned-memory 影子权重、TrajectoryManager 的 re-tokenization drift、GRPOGroupNSampler 的连续段扫描、HF↔Megatron 的 QKV/TP 转换）给出可以用符号名回到源码验证的例子。
 

@@ -2,6 +2,8 @@
 
 相关基础：[Ray、队列与前置系统](<../../11_RL_Systems/Ray与队列调度.md>)。
 
+Agent 通用概念从[Harness 边界](../../11_RL_Systems/Agent系统与Harness边界.md)和[数据与反馈闭环](../../11_RL_Systems/Agent训练的数据与反馈闭环.md)进入。本篇维护接口与实现分支；[coding agent 贯穿案例](../../12_Performance_Reliability/贯穿案例_从Agent任务到策略更新.md)连接当前任务执行、片段导出、奖励分组与训练消费，具有独立源码基线。
+
 
 > 对应综述（`00_rl_infra_survey.md`）§2.8「Agentic RL」。
 > slime 的核心承诺是"最大化的数据生成自由度"（README）：math、code、search、tool、sandbox、multi-agent 都能接入同一条 training / rollout / Data Buffer 路径。本篇讲清接口体系，并给出 examples 的完整地图。
