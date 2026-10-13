@@ -1,6 +1,6 @@
 # 1. 把 CUDA 程序放到真实 GPU 上理解
 
-[上一章](00_setup.md) · [目录](README.md) · [下一章：核心 kernel](02_core_kernels.md)
+[上一章](<00_setup.md>) · [目录](<README.md>) · [下一章：核心 kernel](<02_core_kernels.md>)
 
 本章沿一次 kernel 的执行，把三件事连起来：**程序怎样分工 → 硬件怎样承接 → 数据与依赖怎样限制执行**。先以常规独立显存的 NVIDIA GPU 和普通 thread-block kernel 为模型；具体容量、执行管线与缓存策略随架构变化。第 7–9 章再将它扩展到 SM80 的矩阵乘与 FA2。
 
@@ -202,7 +202,7 @@ block 槽位限制：16 blocks
 
 ## 1.8 用本教程自己的 kernel 查询实际机器
 
-第 2 章的完整 [cuda_basics.cu](examples/cuda_basics.cu) 会在执行算子前打印设备 SM 数、warp 大小、线程/寄存器/shared 资源，以及编译后的 `matmul_tiled` 寄存器和 shared 用量。它使用：
+第 2 章的完整 [cuda_basics.cu](<examples/cuda_basics.cu>) 会在执行算子前打印设备 SM 数、warp 大小、线程/寄存器/shared 资源，以及编译后的 `matmul_tiled` 寄存器和 shared 用量。它使用：
 
 ```cpp
 cudaGetDeviceProperties(&prop, device);
@@ -238,4 +238,4 @@ occupancy API 给的是给定 kernel、block 大小、动态 shared 请求与当
 5. 基线资源预算中，shared 从 16 KiB 增到 32 KiB 会怎样？驻留上限从 4 降到 2 blocks/SM；是否变慢仍需测量。
 6. 一次 global load 必须经过 shared 吗？不必；shared 是程序选择的协作存储，不是强制途经的缓存层。
 
-更完整的术语与架构背景可以查 [GPU 执行与内存基础](../03_Hardware_Systems/GPU执行与内存基础.md) 和 [CUDA 执行模型与调度](../03_Hardware_Systems/CUDA执行模型与调度.md)。本章把这些知识沿一段代码串起来，后续章节持续使用同一组对应关系。
+更完整的术语与架构背景可以查 [GPU 执行与内存基础](<../03_Execution/07_硬件与存储层次.md#s2>) 和 [CUDA 执行模型与调度](<../appendices/hardware/CUDA执行模型与调度.md>)。本章把这些知识沿一段代码串起来，后续章节持续使用同一组对应关系。

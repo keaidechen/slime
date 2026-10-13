@@ -1,6 +1,6 @@
 # 3. 正确性、性能与 slime
 
-[上一章](02_core_kernels.md) · [返回目录](README.md) · [下一章：行归约与 Softmax](04_row_softmax.md)
+[上一章](<02_core_kernels.md>) · [返回目录](<README.md>) · [下一章：行归约与 Softmax](<04_row_softmax.md>)
 
 ## 3.1 先证明答案可信
 
@@ -61,9 +61,9 @@ ncu --set basic --kernel-name regex:matmul_tiled --launch-count 1 /tmp/slime_cud
 
 occupancy 指驻留活跃 warp 数相对上限的比例。更多 warp 有时有助于隐藏延迟，但过度减少寄存器会引发 spill；最大 occupancy 不是性能目标。stream 多也不保证加速：同一 GPU 上计算、带宽和容量仍然共享。
 
-把 profiler 结果接回 [第 1 章的执行过程](01_execution_and_memory.md#launch-journey)：resident warp 少，先查资源预算与 grid 是否足够大；resident 多但 eligible 少，查依赖、访存和 barrier；有可发射工作仍不快，再看执行管线与带宽瓶颈。`cuda_basics.cu` 打印的 occupancy API 结果是理论容量，不能代替 profiler 的 achieved occupancy，更不是 `nvidia-smi` 的 GPU 利用率。
+把 profiler 结果接回 [第 1 章的执行过程](<01_execution_and_memory.md#launch-journey>)：resident warp 少，先查资源预算与 grid 是否足够大；resident 多但 eligible 少，查依赖、访存和 barrier；有可发射工作仍不快，再看执行管线与带宽瓶颈。`cuda_basics.cu` 打印的 occupancy API 结果是理论容量，不能代替 profiler 的 achieved occupancy，更不是 `nvidia-smi` 的 GPU 利用率。
 
-可用 `时间 ≳ max(计算量/算力, 数据量/带宽)` 做粗略下界判断，再补上启动、同步和依赖开销。这里的算力和带宽必须对应实际 dtype 与存储层级。详细推导及实验方法已有 [CUDA 工具与 Roofline](../12_Performance_Reliability/03_cuda_kernels.md)，无需在第一遍掌握所有指标。
+可用 `时间 ≳ max(计算量/算力, 数据量/带宽)` 做粗略下界判断，再补上启动、同步和依赖开销。这里的算力和带宽必须对应实际 dtype 与存储层级。详细推导及实验方法已有 [CUDA 工具与 Roofline](<../appendices/performance/03_cuda_kernels.md>)，无需在第一遍掌握所有指标。
 
 ## 3.5 回到 slime：从能读懂的 kernel 开始
 
@@ -71,10 +71,10 @@ occupancy 指驻留活跃 warp 数相对上限的比例。更多 warp 有时有�
 
 | 入口 | 先追什么 | 对应本教程 |
 |---|---|---|
-| [INT4 CUDA 实现](../../../slime/backends/megatron_utils/kernels/int4_qat/fake_int4_quant_cuda.cu) 的 `int4_quant_1x32_kernel` | `row`、`warp_id`、`lane_id` 如何定位元素；`warpReduceMax` 怎样生成量化 scale | 线程索引、stride、归约、尾部 mask |
-| [FP8 Triton 实现](../../../slime/backends/megatron_utils/kernels/fp8_kernel.py) 的 `_blockwise_cast_to_fp8_triton` | tile 的行列偏移、masked load、absmax、scale 和写回 | 二维索引、边界填充、局部归约 |
-| [FlashAttention 导读](../13_Source_Analysis/flash_attention/README.md) | Q/K/V 分块、在线 Softmax、shared 与寄存器之间的复用 | tile、归约、同步与数据移动 |
-| [slime Profiling](../../zh/developer_guide/profiling.md) | 找到 rollout 的真实热点，再决定是否深入 kernel | 系统时间线与热点定位 |
+| [INT4 CUDA 实现](<../../../slime/backends/megatron_utils/kernels/int4_qat/fake_int4_quant_cuda.cu>) 的 `int4_quant_1x32_kernel` | `row`、`warp_id`、`lane_id` 如何定位元素；`warpReduceMax` 怎样生成量化 scale | 线程索引、stride、归约、尾部 mask |
+| [FP8 Triton 实现](<../../../slime/backends/megatron_utils/kernels/fp8_kernel.py>) 的 `_blockwise_cast_to_fp8_triton` | tile 的行列偏移、masked load、absmax、scale 和写回 | 二维索引、边界填充、局部归约 |
+| [FlashAttention 导读](<../appendices/source/flash_attention/README.md>) | Q/K/V 分块、在线 Softmax、shared 与寄存器之间的复用 | tile、归约、同步与数据移动 |
+| [slime Profiling](<../../zh/developer_guide/profiling.md>) | 找到 rollout 的真实热点，再决定是否深入 kernel | 系统时间线与热点定位 |
 
 比如 INT4 实现中的 `tid >> 5` 相当于整数除以 32，`tid & 0x1F` 相当于取模 32。`tid=37` 时，`warp_id=1`、`lane_id=5`；首次循环 `item=1`，所以 `col=1*32+5=37`。再沿 `x[row*stride_xm + col*stride_xn]` 找到它读取的地址，就已经能把线程分工与量化值连起来。
 

@@ -1,8 +1,8 @@
 # 8. 从同步加载到异步双缓冲
 
-[上一章](07_mma_and_cute.md) · [目录](README.md) · [下一章](09_read_fa2.md)
+[上一章](<07_mma_and_cute.md>) · [目录](<README.md>) · [下一章](<09_read_fa2.md>)
 
-本章把 Attention 的数学暂时移开，用 [async_tiles.cu](examples/async_tiles.cu) 单独学习“谁可以在什么时候写入、读取、复用一块 shared memory”。这一示例与上一章的 WMMA/CuTe 独立，可逐个编译。
+本章把 Attention 的数学暂时移开，用 [async_tiles.cu](<examples/async_tiles.cu>) 单独学习“谁可以在什么时候写入、读取、复用一块 shared memory”。这一示例与上一章的 WMMA/CuTe 独立，可逐个编译。
 
 ## 8.1 单缓冲为什么会等待
 
@@ -38,7 +38,7 @@ y[tile*B+t] = tile_value[t] + tile_value[(t+1)%B]
 
 邻居按 tile 内循环，最后一个不足 B 的 tile 先补零。`n=129` 时，第二块只有一个有效元素，该元素的右邻居是补的零；不是重新绕回这一个有效元素。
 
-一个 block 的四个 warp 共同使用 `slots[2][128]`，显式 shared 预算为 1 KiB；单槽位则是 512 字节。两个槽位都属于同一个 block、由同一个 SM 的资源承载，不是两个 SM 各分担一个槽位。更大的实际算子使用双缓冲时，这一存储翻倍可能减少驻留 block，必须把流水收益与 [资源预算](01_execution_and_memory.md#residency)一起看。
+一个 block 的四个 warp 共同使用 `slots[2][128]`，显式 shared 预算为 1 KiB；单槽位则是 512 字节。两个槽位都属于同一个 block、由同一个 SM 的资源承载，不是两个 SM 各分担一个槽位。更大的实际算子使用双缓冲时，这一存储翻倍可能减少驻留 block，必须把流水收益与 [资源预算](<01_execution_and_memory.md#residency>)一起看。
 
 这个简单运算故意读取其他线程加载的值，使跨线程的可见性真正成为必要条件。它不适合证明性能收益，计算量太小，用于解释同步依赖。
 
@@ -94,7 +94,7 @@ FA2 当前配置并不是把上面的两个相同槽位机械替换为 Q/K/V。�
 
 这里利用的是 QK 不需要 V、PV 不需要下一块 K 这两个独立窗口。`cp_async_fence` 提交相关拷贝组，`cp_async_wait<0>` 等待，block barrier 协调不同线程的使用与复用。不能把名字中的 fence 误读成“所有数据已经到达”。
 
-具体等待条件与 Q 是否在寄存器、shared 是否复用、首尾块等配置有关。固定配置的两轮执行见下一章，再到已有 [流水精读](../13_Source_Analysis/flash_attention/03_layout_and_pipeline.md) 核对寄存器预取等细节。
+具体等待条件与 Q 是否在寄存器、shared 是否复用、首尾块等配置有关。固定配置的两轮执行见下一章，再到已有 [流水精读](<../appendices/source/flash_attention/03_layout_and_pipeline.md>) 核对寄存器预取等细节。
 
 ## 8.7 同步与容量的失败边界
 

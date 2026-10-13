@@ -1,8 +1,8 @@
 # 4. 从求和归约到逐行 Softmax
 
-[上一章](03_debug_profile_and_slime.md) · [目录](README.md) · [下一章](05_materialized_attention.md)
+[上一章](<03_debug_profile_and_slime.md>) · [目录](<README.md>) · [下一章](<05_materialized_attention.md>)
 
-这一章只增加一个问题：**一行有多个值，如何让线程先协作得到共同的统计量，再分别写回结果？** 完整实现为 [attention_lab.cu](examples/attention_lab.cu) 中的 `warp_reduce`、`block_reduce` 和 `row_softmax`。
+这一章只增加一个问题：**一行有多个值，如何让线程先协作得到共同的统计量，再分别写回结果？** 完整实现为 [attention_lab.cu](<examples/attention_lab.cu>) 中的 `warp_reduce`、`block_reduce` 和 `row_softmax`。
 
 ## 4.1 先在纸上计算一行
 

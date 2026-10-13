@@ -1,6 +1,6 @@
 # slime
 
-[English](./README.md)
+[English](<README.md>)
 
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](https://thudm.github.io/slime/)
 [![CI](https://img.shields.io/github/actions/workflow/status/THUDM/slime/pr-test.yml?branch=zilin%2Fci-dont-merge&event=pull_request&label=CI&logo=github)](https://github.com/THUDM/slime/pull/2053/checks)
@@ -39,11 +39,11 @@ slime 不只是一个能调用推理后端的框架。它尽量保留 Megatron �
 
 - 原生 SGLang 参数透传：当前安装版本 SGLang 支持的每个参数，都可以通过增加 `--sglang-` 前缀使用，例如把 `--mem-fraction-static` 写成 `--sglang-mem-fraction-static`；
 - 原生 Megatron 参数透传：slime 直接读取 Megatron 参数，因此 Megatron 侧的并行、优化器、checkpoint 和模型配置不需要 wrapper code 也能继续使用；
-- [SGLang Config](docs/zh/advanced/sglang-config.md) 作为可选 YAML 扩展，用于 topology-specific control，例如为 prefill/decode/EPD-style 部署设置独立参数、配置 heterogeneous server group、multi-model serving 和 per-group SGLang override；
-- 面向 multi-turn 和 agentic workload 的 [PD Disaggregation](docs/zh/advanced/pd-disaggregation.md)，用于处理 prefill/decode 资源需求不同的问题；
+- [SGLang Config](<docs/zh/advanced/sglang-config.md>) 作为可选 YAML 扩展，用于 topology-specific control，例如为 prefill/decode/EPD-style 部署设置独立参数、配置 heterogeneous server group、multi-model serving 和 per-group SGLang override；
+- 面向 multi-turn 和 agentic workload 的 [PD Disaggregation](<docs/zh/advanced/pd-disaggregation.md>)，用于处理 prefill/decode 资源需求不同的问题；
 - 面向 multi-turn agent 的 session affinity 等 router policy；
-- 面向 training/inference disaggregation 和大模型高效更新的 [Delta Weight Sync](docs/zh/advanced/delta-weight-sync.md)；
-- [External Rollout Engines](docs/zh/advanced/external-rollout-engines.md)，用于 serving 由训练任务外部管理的部署形态；SGLang serving 侧可以使用独立环境，disk transport 下还可以使用不同型号或不同厂家的 GPU，并通过共享文件系统做 full checkpoint update from disk 或 delta update。
+- 面向 training/inference disaggregation 和大模型高效更新的 [Delta Weight Sync](<docs/zh/advanced/delta-weight-sync.md>)；
+- [External Rollout Engines](<docs/zh/advanced/external-rollout-engines.md>)，用于 serving 由训练任务外部管理的部署形态；SGLang serving 侧可以使用独立环境，disk transport 下还可以使用不同型号或不同厂家的 GPU，并通过共享文件系统做 full checkpoint update from disk 或 delta update。
 
 这种透传设计让 slime 从一开始就是 native 的。大多数上游 engine 的优化会随着 engine 升级自然可用，而 slime 可以把主要复杂度集中在 RL loop、dataflow、synchronization 和 correctness check 上。
 
@@ -55,16 +55,16 @@ slime 被当作 RL 基础设施来开发，因为“脚本能跑起来”远远�
 
 相关工程文档：
 
-- [CI](docs/zh/developer_guide/ci.md)
-- [Debugging](docs/zh/developer_guide/debug.md)
-- [Reproducibility](docs/zh/advanced/reproducibility.md)
-- [Fault Tolerance](docs/zh/advanced/fault-tolerance.md)
-- [Trace Viewer](docs/zh/developer_guide/trace.md)
-- [Profiling](docs/zh/developer_guide/profiling.md)
+- [CI](<docs/zh/developer_guide/ci.md>)
+- [Debugging](<docs/zh/developer_guide/debug.md>)
+- [Reproducibility](<docs/zh/advanced/reproducibility.md>)
+- [Fault Tolerance](<docs/zh/advanced/fault-tolerance.md>)
+- [Trace Viewer](<docs/zh/developer_guide/trace.md>)
+- [Profiling](<docs/zh/developer_guide/profiling.md>)
 
 ## 博文
 
-- [AI Infra 深入解析](docs/ai_infra/README.md)：原理、模型架构、CUDA、性能分析与源码走读的统一入口。
+- [AI Infra 深入解析](<docs/ai_infra/README.md>)：原理、模型架构、CUDA、性能分析与源码走读的统一入口。
 
 - 我们的愿景：[slime：为 RL Scaling 设计的 SGLang-Native 后训练框架](https://thudm.github.io/slime/zh/blogs/introducing_slime.html)
 - 关于纯异步 agentic 训练的一些想法：[Agent-Oriented Design: An Asynchronous and Decoupled Framework for Agentic RL](https://www.notion.so/Agent-Oriented-Design-An-Asynchronous-and-Decoupled-Framework-for-Agentic-RL-2278e692d081802cbdd5d37cef76a547)
@@ -73,20 +73,20 @@ slime 被当作 RL 基础设施来开发，因为“脚本能跑起来”远远�
 
 ## 目录
 
-- [为什么这个设计重要](#为什么这个设计重要)
-- [生产验证](#生产验证)
-- [原生 Engine 透传与 SGLang 部署](#原生-engine-透传与-sglang-部署)
-- [正确性、稳定性与 CI](#正确性稳定性与-ci)
-- [架构总览](#架构总览)
-- [快速开始](#快速开始)
-- [基于 slime 构建的生态](#基于-slime-构建的生态)
-- [参数说明](#参数说明)
-- [开发指南](#开发指南)
-- [常见 Q&A 与致谢](#常见-qa-与致谢)
+- [为什么这个设计重要](<README_zh.md#为什么这个设计重要>)
+- [生产验证](<README_zh.md#生产验证>)
+- [原生 Engine 透传与 SGLang 部署](<README_zh.md#原生-engine-透传与-sglang-部署>)
+- [正确性、稳定性与 CI](<README_zh.md#正确性稳定性与-ci>)
+- [架构总览](<README_zh.md#架构总览>)
+- [快速开始](<README_zh.md#快速开始>)
+- [基于 slime 构建的生态](<README_zh.md#基于-slime-构建的生态>)
+- [参数说明](<README_zh.md#参数说明>)
+- [开发指南](<README_zh.md#开发指南>)
+- [常见 Q&A 与致谢](<README_zh.md#常见-qa-与致谢>)
 
 ## 架构总览
 
-![arch](./imgs/arch.png)
+![arch](<imgs/arch.png>)
 
 **模块说明**：
 
@@ -98,20 +98,20 @@ slime 被当作 RL 基础设施来开发，因为“脚本能跑起来”远远�
 
 有关环境配置、数据准备、训练启动和关键代码分析的完整快速开始指南，请参考：
 
-- [快速开始指南](./docs/zh/get_started/quick_start.md)
+- [快速开始指南](<docs/zh/get_started/quick_start.md>)
 
-我们还提供了一些未在快速开始中覆盖的使用示例，请查看 [examples](examples/)。
+我们还提供了一些未在快速开始中覆盖的使用示例，请查看 [examples](<examples>)。
 
 ### Agentic RL 示例
 
 下面这些 example 通过 customization 接口接入标准的 rollout / Data Buffer 闭环，而不是独立的 framework：
 
-- [`examples/multi_agent`](examples/multi_agent/README.md)：在标准 rollout loop 内通过 `--custom-generate-function-path` 实现多 agent 生成。
-- [`examples/search-r1`](examples/search-r1/)：通过 `--custom-generate-function-path` 实现 search/RAG 风格的多轮生成。
-- [`examples/fully_async`](examples/fully_async/README.md)：fully-async rollout，适合不同样本生成耗时差异较大的 long-tail agentic 场景。
-- [`examples/coding_agent_rl`](examples/coding_agent_rl/README.md)：端到端 SWE coding-agent RL，包含 sandboxed tool use、test-based reward，以及通过 `--custom-generate-function-path` 导出的 token-correct trajectory segments。
+- [`examples/multi_agent`](<examples/multi_agent/README.md>)：在标准 rollout loop 内通过 `--custom-generate-function-path` 实现多 agent 生成。
+- [`examples/search-r1`](<examples/search-r1>)：通过 `--custom-generate-function-path` 实现 search/RAG 风格的多轮生成。
+- [`examples/fully_async`](<examples/fully_async/README.md>)：fully-async rollout，适合不同样本生成耗时差异较大的 long-tail agentic 场景。
+- [`examples/coding_agent_rl`](<examples/coding_agent_rl/README.md>)：端到端 SWE coding-agent RL，包含 sandboxed tool use、test-based reward，以及通过 `--custom-generate-function-path` 导出的 token-correct trajectory segments。
 
-如何为某种 agentic workflow 选择合适的接口，请参考 [自定义指南](docs/zh/get_started/customization.md)。
+如何为某种 agentic workflow 选择合适的接口，请参考 [自定义指南](<docs/zh/get_started/customization.md>)。
 
 ## 基于 slime 构建的生态
 
@@ -169,9 +169,9 @@ slime 被当作 RL 基础设施来开发，因为“脚本能跑起来”远远�
 
 1. **Megatron 参数**：slime 会直接读取 Megatron 参数，可以通过传入如 `--tensor-model-parallel-size 2` 的方式配置 Megatron；
 2. **SGLang 参数**：支持当前环境中安装版本 SGLang 的所有参数，这些参数需要以 `--sglang-` 起始，例如 `--mem-fraction-static` 需要通过 `--sglang-mem-fraction-static` 传入。
-3. **slime 自身的参数**：请见：[slime/utils/arguments.py](slime/utils/arguments.py)
+3. **slime 自身的参数**：请见：[slime/utils/arguments.py](<slime/utils/arguments.py>)
 
-完整使用说明请查阅 [使用文档](docs/zh/get_started/usage.md)。
+完整使用说明请查阅 [使用文档](<docs/zh/get_started/usage.md>)。
 
 ## 代码阅读路线
 
@@ -204,11 +204,11 @@ train.py: train
   pre-commit run --all-files --show-diff-on-failure --color=always
   ```
 
-- 调试技巧请参考 [debug 指南](docs/zh/developer_guide/debug.md)
+- 调试技巧请参考 [debug 指南](<docs/zh/developer_guide/debug.md>)
 
 ## 常见 Q&A 与致谢
 
-- 常见问题请见 [Q&A](docs/zh/get_started/qa.md)
+- 常见问题请见 [Q&A](<docs/zh/get_started/qa.md>)
 - 特别感谢以下项目 & 社区：SGLang、Megatron‑LM、mbridge、OpenRLHF、veRL、Pai-Megatron-Patch 等。
 
 - 引用 slime 请使用：

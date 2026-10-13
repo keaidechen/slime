@@ -1,8 +1,8 @@
 # 6. 将普通 Attention 改成分块在线计算
 
-[上一章](05_materialized_attention.md) · [目录](README.md) · [下一章](07_mma_and_cute.md)
+[上一章](<05_materialized_attention.md>) · [目录](<README.md>) · [下一章](<07_mma_and_cute.md>)
 
-这一章先推导状态更新，再对应 [attention_lab.cu](examples/attention_lab.cu) 的 `online_attention`。它是**用于理解 FlashAttention 核心算法的简化 CUDA 实现**：每个 block 处理一个 query，FP32 标量运算，不使用 Tensor Core，也不实现 FA2 的线程分工和性能优化。
+这一章先推导状态更新，再对应 [attention_lab.cu](<examples/attention_lab.cu>) 的 `online_attention`。它是**用于理解 FlashAttention 核心算法的简化 CUDA 实现**：每个 block 处理一个 query，FP32 标量运算，不使用 Tensor Core，也不实现 FA2 的线程分工和性能优化。
 
 ## 6.1 为什么不能分别对每块做 Softmax
 
@@ -49,7 +49,7 @@ a_new = alpha*a + sum_j(p[j]*V[j])
 
 最终 O=`6.125/1.875=49/15≈3.266667`。如果第二轮忘了缩放旧状态，就得到 `l=3, a=8, O≈2.666667`。这不是小的浮点误差，而是算法改变了。
 
-[attention_cpu.py](examples/attention_cpu.py) 会打印这两轮 m/alpha/l/a，也会运行这个故意遗漏缩放的反例。参数 `rescale=False` **只用于演示错误**，不应作为正常算法选项。
+[attention_cpu.py](<examples/attention_cpu.py>) 会打印这两轮 m/alpha/l/a，也会运行这个故意遗漏缩放的反例。参数 `rescale=False` **只用于演示错误**，不应作为正常算法选项。
 
 ## 6.4 把数学量分配给 CUDA 线程
 
@@ -66,7 +66,7 @@ a_new = alpha*a + sum_j(p[j]*V[j])
 
 本实现限制 `1 <= dv <= 128`，从而每个有效输出通道恰好对应一个线程；d 由点积循环处理，Nk 可以超过一个 tile。更大的 dv 需要每线程持有多个输出，不能只改输入尺寸。
 
-对应 [硬件与存储图](01_execution_and_memory.md#memory-paths)，四个 warp 在同一 SM 上共同维护这一行：score/numerator 是线程私有状态，weights 和 m/l/alpha 用 block 的 shared 交接，Q/K/V/O 则是 global 数据。源码中显式 shared 数组与标量合计 `128*4 + 4*4 + 3*4 = 540` 字节，实际编译分配仍可能有对齐等差异。这里省去整张 S/P 的 global 存储，却没有消除片上状态的成本。
+对应 [硬件与存储图](<01_execution_and_memory.md#memory-paths>)，四个 warp 在同一 SM 上共同维护这一行：score/numerator 是线程私有状态，weights 和 m/l/alpha 用 block 的 shared 交接，Q/K/V/O 则是 global 数据。源码中显式 shared 数组与标量合计 `128*4 + 4*4 + 3*4 = 540` 字节，实际编译分配仍可能有对齐等差异。这里省去整张 S/P 的 global 存储，却没有消除片上状态的成本。
 
 一个 block 只有一个 query，因此 grid 只有 Nq blocks。Nq 很小时，即使 Nk 很长、每个 block 工作很多，也不一定能让很多 SM 同时忙碌。这说明“算法正确且省显存”不等于“硬件并行度足够”，也为第 9 章比较 FA2 的工作划分做准备。
 
@@ -103,4 +103,4 @@ a_new = alpha*a + sum_j(p[j]*V[j])
 
 CPU 脚本已包含分块尺寸/顺序组合验证。GPU 示例包含 Nk=129/257 的尾块、dv=17/128、等长 causal 和全 mask 行；还单列了最后一块最大值突然增大的例子：前 128 个 score 为 0、V 为 1，最后一个 score 为 ln(128)、V 为 3，正确输出为 2，以检查 GPU 代码是否同时缩放旧分子与分母。编译和 Sanitizer 命令见第 4 章。
 
-在线状态更新始终围绕最大值、分母和加权分子三个量展开。接下来的 Tensor Core、CuTe 和流水改变执行方式；阅读时始终保留这三个状态作为算法对照。更多数学及 LSE 推导见 [在线 Softmax 导读](../13_Source_Analysis/flash_attention/01_algorithm_and_online_softmax.md)，它也说明真实代码的 `exp2`、scale 与延迟分母归约。
+在线状态更新始终围绕最大值、分母和加权分子三个量展开。接下来的 Tensor Core、CuTe 和流水改变执行方式；阅读时始终保留这三个状态作为算法对照。更多数学及 LSE 推导见 [在线 Softmax 导读](<../appendices/source/flash_attention/01_algorithm_and_online_softmax.md>)，它也说明真实代码的 `exp2`、scale 与延迟分母归约。

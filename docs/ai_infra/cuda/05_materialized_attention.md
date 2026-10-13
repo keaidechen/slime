@@ -1,8 +1,8 @@
 # 5. 先实现一份普通 Attention
 
-[上一章](04_row_softmax.md) · [目录](README.md) · [下一章](06_online_attention.md)
+[上一章](<04_row_softmax.md>) · [目录](<README.md>) · [下一章](<06_online_attention.md>)
 
-这一章将已有的矩阵乘和 Softmax 组合起来。完整实现仍在 [attention_lab.cu](examples/attention_lab.cu)，顺序为 `qk_scores → row_softmax → pv_output`。先固定一个 batch、一个 head，使用连续行优先 FP32 数据，无 dropout、无反向传播。
+这一章将已有的矩阵乘和 Softmax 组合起来。完整实现仍在 [attention_lab.cu](<examples/attention_lab.cu>)，顺序为 `qk_scores → row_softmax → pv_output`。先固定一个 batch、一个 head，使用连续行优先 FP32 数据，无 dropout、无反向传播。
 
 ## 5.1 不跳过形状与下标
 
@@ -61,7 +61,7 @@ V ──────────────────────────
 
 例：长度 3 的 causal 对应 `[1,2,3]`，第 0 行只看 key 0。不能先对整行完成 Softmax，再把未来位置的概率直接清零：那样剩余概率的和一般不为 1。应先 mask，再确定 m/l。
 
-这里的 prefix 接口不表达任意稀疏 mask。**长度不等的 causal 对齐也不在本例约定内**；真实 FlashAttention 的右下对齐由现有 [变长与 KV cache 导读](../13_Source_Analysis/flash_attention/04_backward_varlen_kvcache.md)解释。
+这里的 prefix 接口不表达任意稀疏 mask。**长度不等的 causal 对齐也不在本例约定内**；真实 FlashAttention 的右下对齐由现有 [变长与 KV cache 导读](<../appendices/source/flash_attention/04_backward_varlen_kvcache.md>)解释。
 
 ## 5.4 三个 kernel 为什么还不是 FlashAttention
 
@@ -71,7 +71,7 @@ S 和 P 各有 `Nq*Nk` 个 FP32 数，各占 `4*Nq*Nk` 字节。取 Nq=Nk=4096�
 
 ## 5.5 输出的不变量与参考实现
 
-[CPU 参考](examples/attention_cpu.py)给出这些关系的数值对照：
+[CPU 参考](<examples/attention_cpu.py>)给出这些关系的数值对照：
 
 ```bash
 python3 docs/ai_infra/cuda/examples/attention_cpu.py

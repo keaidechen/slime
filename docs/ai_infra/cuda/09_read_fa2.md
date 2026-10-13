@@ -1,14 +1,14 @@
 # 9. 从在线状态读一条固定的 FA2 前向路径
 
-[上一章](08_async_pipeline.md) · [目录](README.md) · [继续源码精读](../13_Source_Analysis/flash_attention/README.md)
+[上一章](<08_async_pipeline.md>) · [目录](<README.md>) · [继续源码精读](<../appendices/source/flash_attention/README.md>)
 
 本章负责把前文的算子与布局分析接到真实代码，先限定一个可完整追踪的目标：**FP16、固定长度、无 dropout、无 causal 的 FA2 前向**。不要求同时读懂 backward、变长、分页、split-KV 或 FA3/FA4。
 
-源码基准为本项目 [flash-attention](../../../flash-attention) 的 commit `e9cf2c1651d2303191eb40a739a3c135fda00999`；以下硬件原语讨论针对 SM80 分支。输入为 `Q/K/V.shape=(2,256,4,64)`，连续布局，`dropout_p=0`、`causal=False`，无额外 bias/softcap。
+源码基准为本项目 [flash-attention](<../../../flash-attention>) 的 commit `e9cf2c1651d2303191eb40a739a3c135fda00999`；以下硬件原语讨论针对 SM80 分支。输入为 `Q/K/V.shape=(2,256,4,64)`，连续布局，`dropout_p=0`、`causal=False`，无额外 bias/softcap。
 
 ## 9.1 先认领你要追踪的 block
 
-根据 [flash_fwd_launch_template.h](../../../flash-attention/csrc/flash_attn/src/flash_fwd_launch_template.h) 的 `run_mha_fwd_hdim64`，无 dropout 分支选择：
+根据 [flash_fwd_launch_template.h](<../../../flash-attention/csrc/flash_attn/src/flash_fwd_launch_template.h>) 的 `run_mha_fwd_hdim64`，无 dropout 分支选择：
 
 ```cpp
 Flash_fwd_kernel_traits<64, 128, 128, 4, false, false, T>
@@ -63,7 +63,7 @@ col = (lane%4)*2 + j + nj*8
 i,j ∈ {0,1}; mi ∈ {0,1}; nj ∈ {0,...,15}
 ```
 
-`attention_cpu.py` 枚举全部 128 线程，检查恰好覆盖 `128×128` 个不同坐标。它验证的是这套坐标公式的覆盖；真实代码对应的 mask 推导、MMA 定义仍应通过 [布局精读 §10](../13_Source_Analysis/flash_attention/03_layout_and_pipeline.md)核对。
+`attention_cpu.py` 枚举全部 128 线程，检查恰好覆盖 `128×128` 个不同坐标。它验证的是这套坐标公式的覆盖；真实代码对应的 mask 推导、MMA 定义仍应通过 [布局精读 §10](<../appendices/source/flash_attention/03_layout_and_pipeline.md>)核对。
 
 线程 36/37/38/39 持有相同的行、互补的列，因此 Softmax 的 `Allreduce<4>` 是把同一行的部分统计量合并。它既不是任意四条线程，也不是让整块所有线程混合求一个最大值。
 
@@ -88,11 +88,11 @@ i,j ∈ {0,1}; mi ∈ {0,1}; nj ∈ {0,...,15}
 
 | 文件或导读 | 当前要回答的问题 |
 |---|---|
-| [FA2 前向导读 §1–5](../13_Source_Analysis/flash_attention/02_fa2_forward.md) | Python 参数如何变成指针、stride 与编译实例？ |
-| [kernel_traits.h](../../../flash-attention/csrc/flash_attn/src/kernel_traits.h) | 这个实例有多少线程、哪些布局、多少 shared memory？ |
-| [flash_fwd_kernel.h](../../../flash-attention/csrc/flash_attn/src/flash_fwd_kernel.h) 的 `compute_attn_1rowblock` | block 拥有哪些行，首轮加载了什么，循环保留了什么？ |
-| [softmax.h](../../../flash-attention/csrc/flash_attn/src/softmax.h) 与 [在线 Softmax 精读](../13_Source_Analysis/flash_attention/01_algorithm_and_online_softmax.md) | m/l/a 的更新各对应哪一段，什么时候跨线程归约？ |
-| [utils.h](../../../flash-attention/csrc/flash_attn/src/utils.h) 与 [布局精读](../13_Source_Analysis/flash_attention/03_layout_and_pipeline.md) | `gemm`/`gemm_rs` 的操作数从哪里来，什么时候可复用？ |
+| [FA2 前向导读 §1–5](<../appendices/source/flash_attention/02_fa2_forward.md>) | Python 参数如何变成指针、stride 与编译实例？ |
+| [kernel_traits.h](<../../../flash-attention/csrc/flash_attn/src/kernel_traits.h>) | 这个实例有多少线程、哪些布局、多少 shared memory？ |
+| [flash_fwd_kernel.h](<../../../flash-attention/csrc/flash_attn/src/flash_fwd_kernel.h>) 的 `compute_attn_1rowblock` | block 拥有哪些行，首轮加载了什么，循环保留了什么？ |
+| [softmax.h](<../../../flash-attention/csrc/flash_attn/src/softmax.h>) 与 [在线 Softmax 精读](<../appendices/source/flash_attention/01_algorithm_and_online_softmax.md>) | m/l/a 的更新各对应哪一段，什么时候跨线程归约？ |
+| [utils.h](<../../../flash-attention/csrc/flash_attn/src/utils.h>) 与 [布局精读](<../appendices/source/flash_attention/03_layout_and_pipeline.md>) | `gemm`/`gemm_rs` 的操作数从哪里来，什么时候可复用？ |
 
 第一次可以把 CuTe 已定义的 `copy` 和 `gemm` 当成带明确输入输出的操作；第二次用线程 37 展开分工，第三次才深入模板内部和 PTX。每一遍都应能给数据标上“位置、所有者、生命周期”。
 

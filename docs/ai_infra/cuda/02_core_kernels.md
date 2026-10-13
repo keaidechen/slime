@@ -1,10 +1,10 @@
 # 2. 三个核心 kernel
 
-[上一章](01_execution_and_memory.md) · [目录](README.md) · [下一章：验证与性能](03_debug_profile_and_slime.md)
+[上一章](<01_execution_and_memory.md>) · [目录](<README.md>) · [下一章：验证与性能](<03_debug_profile_and_slime.md>)
 
-完整实现集中在 [cuda_basics.cu](examples/cuda_basics.cu)，没有 PyTorch 或第三方库依赖。下面的代码片段解释其中的关键部分；编译时使用完整文件。三个算子分别对应**独立输出、多个输入合成一个输出、多个输出复用输入**，这些模式也出现在量化、归一化和 attention 中。
+完整实现集中在 [cuda_basics.cu](<examples/cuda_basics.cu>)，没有 PyTorch 或第三方库依赖。下面的代码片段解释其中的关键部分；编译时使用完整文件。三个算子分别对应**独立输出、多个输入合成一个输出、多个输出复用输入**，这些模式也出现在量化、归一化和 attention 中。
 
-沿用 [第 1 章的软硬件映射](01_execution_and_memory.md#hardware-map)，每个例子同时检查三件事：block 在一个 SM 上拥有哪些输出，数据存在哪一层，以及哪条同步保护了哪次读写。程序开头会打印设备资源与 `matmul_tiled` 的编译属性，供下面的源码预算对照。
+沿用 [第 1 章的软硬件映射](<01_execution_and_memory.md#hardware-map>)，每个例子同时检查三件事：block 在一个 SM 上拥有哪些输出，数据存在哪一层，以及哪条同步保护了哪次读写。程序开头会打印设备资源与 `matmul_tiled` 的编译属性，供下面的源码预算对照。
 
 ## 2.1 向量加法：先把完整生命周期走通
 
@@ -116,7 +116,7 @@ __syncthreads();
 
 把这一轮放回硬件：`dim3(16,16)` 是一个拥有 8 个 warp 的 block，整体落到一个 SM；`as/bs` 共申请 `2*16*16*4=2048` 字节 shared，`acc` 是每线程独立的累加值，通常使用该 SM 的寄存器资源。warp 0 横跨两行各 16 个线程，`as[ty][tx]` 的合作加载地址必须按这组实际 lane 来分析。此版使用标量 FP32 乘加，没有因为矩阵呈二维就自动成为 Tensor Core 运算。
 
-若把 TILE 从 16 改为 32，block 变为 1024 线程、32 个 warp，shared 变为 8 KiB。更大的数据复用同时带来更多线程和存储资源需求；必须先检查设备与 kernel 的线程限制，再核对 [驻留预算](01_execution_and_memory.md#residency)和实际时间。
+若把 TILE 从 16 改为 32，block 变为 1024 线程、32 个 warp，shared 变为 8 KiB。更大的数据复用同时带来更多线程和存储资源需求；必须先检查设备与 kernel 的线程限制，再核对 [驻留预算](<01_execution_and_memory.md#residency>)和实际时间。
 
 具体代入 `M=17, N=19, K=23`，grid 为 `(2,2)`。取 `bx=1, by=0, tx=2, ty=3`：该线程负责 `C[3,18]`，输出线性偏移为 `3*19+18=75`。第一轮 `base=0`，它搬运 `A[3,2]` 与 `B[3,18]`；计算时它使用的是整条 `as[3,j]` 与 `bs[j,2]`，其中多数元素由别的线程加载。第二轮 `base=16`，只剩 K 方向的 7 项有效，剩余 9 项填零。
 

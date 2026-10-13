@@ -1,6 +1,6 @@
 # 0. 环境与必要的 C++
 
-[返回目录](README.md) · [下一章：执行与内存](01_execution_and_memory.md)
+[返回目录](<README.md>) · [下一章：执行与内存](<01_execution_and_memory.md>)
 
 ## 0.1 先认识要安装的三层
 
@@ -21,7 +21,7 @@ nvidia-smi
 nvcc --version
 ```
 
-之后按 [目录中的命令](README.md)编译。`-O2` 开启优化，`-lineinfo` 保留供 profiler 使用的源码行信息，`-std=c++17` 选择 C++ 语言标准，`-o` 指定可执行文件。使用支持 `-arch=native` 的 Toolkit 且编译机器可以看到目标 GPU 时，可额外加 `-arch=native`；跨机器编译应按目标 GPU 的 compute capability 设置 `-arch=sm_XX` 或 `-gencode`，不能把示意字符串 `sm_XX` 原样使用。架构选项见 [nvcc 文档](https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list)。
+之后按 [目录中的命令](<README.md>)编译。`-O2` 开启优化，`-lineinfo` 保留供 profiler 使用的源码行信息，`-std=c++17` 选择 C++ 语言标准，`-o` 指定可执行文件。使用支持 `-arch=native` 的 Toolkit 且编译机器可以看到目标 GPU 时，可额外加 `-arch=native`；跨机器编译应按目标 GPU 的 compute capability 设置 `-arch=sm_XX` 或 `-gencode`，不能把示意字符串 `sm_XX` 原样使用。架构选项见 [nvcc 文档](https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list)。
 
 ## 0.2 只补当前需要的 C++
 

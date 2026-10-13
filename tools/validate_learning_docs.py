@@ -1,4 +1,4 @@
-"""Check the unified blog: links, anchors, headings, reachability, and example syntax.
+"""Check the book: chapter order, links, anchors, reachability, and example syntax.
 
 Run from any directory: python tools/validate_learning_docs.py
 GPU/framework examples are not executed by this validator.
@@ -69,10 +69,46 @@ def local_links(text):
         yield match[1].strip('<>')
 
 
+def audit_book():
+    errors = []
+    chapters = sorted(DOCS.glob('[0-9][0-9]_*/[0-9][0-9]_*.md'))
+    numbers = [int(file.name[:2]) for file in chapters]
+    if numbers != list(range(1, 33)):
+        errors.append({'kind': 'book-chapter-sequence', 'numbers': numbers})
+    contents = (DOCS/'README.md').read_text(encoding='utf-8')
+    listed = []
+    for raw in local_links(contents):
+        parsed = urlsplit(raw)
+        if not parsed.scheme and not parsed.fragment:
+            target = (DOCS/unquote(parsed.path)).resolve()
+            if target in chapters and target not in listed:
+                listed.append(target)
+    if listed != chapters:
+        errors.append({'kind': 'book-contents-order'})
+    for index, file in enumerate(chapters):
+        text = file.read_text(encoding='utf-8')
+        name = file.relative_to(ROOT).as_posix()
+        if not re.match(rf'^# 第 {index + 1} 章\s', text):
+            errors.append({'file': name, 'kind': 'book-chapter-title'})
+        navigation = re.findall(r'<!-- book-nav -->(.*?)<!-- /book-nav -->', text, re.S)
+        if len(navigation) != 1:
+            errors.append({'file': name, 'kind': 'book-navigation-count'})
+            continue
+        actual = [(file.parent/unquote(urlsplit(raw).path)).resolve()
+                  for raw in local_links(navigation[0])]
+        previous = chapters[index - 1] if index else DOCS/'README.md'
+        following = chapters[index + 1] if index + 1 < len(chapters) else DOCS/'appendices/README.md'
+        if actual != [previous, DOCS/'README.md', following]:
+            errors.append({'file': name, 'kind': 'book-navigation-order'})
+    if (DOCS/'guides').exists():
+        errors.append({'kind': 'retired-reading-routes'})
+    return errors
+
+
 def audit():
-    errors, link_count = [], 0
+    errors, link_count = audit_book(), 0
     files = sorted(DOCS.rglob('*.md'))
-    # Include repository entry points and official docs that reference the series.
+    # Include repository entry points and official docs that reference the book.
     for file in [*(ROOT/'docs').rglob('*.md'), *ROOT.glob('README*.md')]:
         if file not in files and (file == ROOT/'docs/README.md' or
                                   'ai_infra/' in file.read_text(encoding='utf-8-sig')):
@@ -81,6 +117,8 @@ def audit():
     cache = {}
     for file in files:
         text = file.read_text(encoding='utf-8-sig')
+        if re.search(r'<!-- (?:main-route|series-nav) -->', text):
+            errors.append({'file': file.relative_to(ROOT).as_posix(), 'kind': 'retired-navigation'})
         explicit_ids = re.findall(r'<a\s+id=["\']([^"\']+)["\']', prose(text)[0])
         if len(explicit_ids) != len(set(explicit_ids)):
             errors.append({'file': file.relative_to(ROOT).as_posix(), 'kind': 'duplicate-anchor'})

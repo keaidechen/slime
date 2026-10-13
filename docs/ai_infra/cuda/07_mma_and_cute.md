@@ -1,8 +1,8 @@
 # 7. 从一个线程一个结果，到 Tensor Core 与 CuTe 布局
 
-[上一章](06_online_attention.md) · [目录](README.md) · [下一章](08_async_pipeline.md)
+[上一章](<06_online_attention.md>) · [目录](<README.md>) · [下一章](<08_async_pipeline.md>)
 
-这一章有两个独立示例：[wmma_tile.cu](examples/wmma_tile.cu) 实际计算一个矩阵块，[cute_layout.cu](examples/cute_layout.cu) 验证形状、步长与同一份内存的多个视图。先学“共同持有一个矩阵”和“坐标怎样变成地址”，再看真实 FA2 的 `TiledMMA`，不需要先读完整 CUTLASS。
+这一章有两个独立示例：[wmma_tile.cu](<examples/wmma_tile.cu>) 实际计算一个矩阵块，[cute_layout.cu](<examples/cute_layout.cu>) 验证形状、步长与同一份内存的多个视图。先学“共同持有一个矩阵”和“坐标怎样变成地址”，再看真实 FA2 的 `TiledMMA`，不需要先读完整 CUTLASS。
 
 ## 7.1 先跨过 C++ 模板这道门
 
@@ -147,7 +147,7 @@ nvcc -O2 -std=c++17 --expt-relaxed-constexpr \
 
 搬运希望连续、对齐；MMA 则要求特定的操作数分布，因此不必采用同一分工。shared memory 充当交接处。对相同逻辑元素，global 与 shared 的物理地址布局也可以不同。
 
-例如一个**纯教学**的 4×4 布局用 `physical_col=logical_col XOR row` 重排每行；每行仍是原列的一次排列。读者必须用同样的映射才能取回原元素。真实 `Swizzle<...>` 作用于指定地址位，不能把这个 4×4 公式直接套入 FA2；先理解“逻辑坐标没变、物理摆放改变”，再读已有 [布局与流水精读](../13_Source_Analysis/flash_attention/03_layout_and_pipeline.md) 的 swizzle 和线程 37 算例。
+例如一个**纯教学**的 4×4 布局用 `physical_col=logical_col XOR row` 重排每行；每行仍是原列的一次排列。读者必须用同样的映射才能取回原元素。真实 `Swizzle<...>` 作用于指定地址位，不能把这个 4×4 公式直接套入 FA2；先理解“逻辑坐标没变、物理摆放改变”，再读已有 [布局与流水精读](<../appendices/source/flash_attention/03_layout_and_pipeline.md>) 的 swizzle 和线程 37 算例。
 
 ## 7.7 四种布局概念的边界
 

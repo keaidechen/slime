@@ -5,7 +5,7 @@ Most documentation files are located under the `docs/` folder.
 
 ## Learning Guides
 
-- [AI Infra 深入解析](ai_infra/README.md): a unified Chinese blog series connecting principles, model architectures, performance analysis, and source-level explanations of slime, Megatron, SGLang, and FlashAttention.
+- [AI Infra 深入解析](<ai_infra/README.md>): a Chinese textbook with one seven-part, 32-chapter sequence covering model computation, hardware execution, training, inference, and RL systems; papers and source analyses are reference appendices.
 
 ## Docs Workflow
 

@@ -1,6 +1,6 @@
 # slime
 
-[中文版](./README_zh.md)
+[中文版](<README_zh.md>)
 
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](https://thudm.github.io/slime/)
 [![CI](https://img.shields.io/github/actions/workflow/status/THUDM/slime/pr-test.yml?branch=zilin%2Fci-dont-merge&event=pull_request&label=CI&logo=github)](https://github.com/THUDM/slime/pull/2053/checks)
@@ -39,11 +39,11 @@ slime is not just a framework that can call an inference backend. It keeps the M
 
 - native SGLang argument pass-through: every argument supported by the installed SGLang can be used by adding the `--sglang-` prefix, such as passing `--mem-fraction-static` as `--sglang-mem-fraction-static`;
 - native Megatron argument pass-through: slime reads Megatron arguments directly, so Megatron-side parallelism, optimizer, checkpointing, and model options remain available without wrapper code;
-- [SGLang Config](docs/en/advanced/sglang-config.md) as an optional YAML extension for topology-specific control, such as separate prefill/decode/EPD-style settings, heterogeneous server groups, multi-model serving, and per-group SGLang overrides;
-- [PD Disaggregation](docs/en/advanced/pd-disaggregation.md) for multi-turn and agentic workloads with different prefill/decode resource needs;
+- [SGLang Config](<docs/en/advanced/sglang-config.md>) as an optional YAML extension for topology-specific control, such as separate prefill/decode/EPD-style settings, heterogeneous server groups, multi-model serving, and per-group SGLang overrides;
+- [PD Disaggregation](<docs/en/advanced/pd-disaggregation.md>) for multi-turn and agentic workloads with different prefill/decode resource needs;
 - router policies such as session affinity for multi-turn agents;
-- [Delta Weight Sync](docs/en/advanced/delta-weight-sync.md) for training/inference disaggregation and large-model update efficiency;
-- [External Rollout Engines](docs/en/advanced/external-rollout-engines.md) for deployments where serving is managed outside the training job. The SGLang serving side can use an independent environment, and with disk transport can even run on different GPU models or vendors while using full-checkpoint update from disk or delta update over a shared filesystem.
+- [Delta Weight Sync](<docs/en/advanced/delta-weight-sync.md>) for training/inference disaggregation and large-model update efficiency;
+- [External Rollout Engines](<docs/en/advanced/external-rollout-engines.md>) for deployments where serving is managed outside the training job. The SGLang serving side can use an independent environment, and with disk transport can even run on different GPU models or vendors while using full-checkpoint update from disk or delta update over a shared filesystem.
 
 This pass-through design makes slime native from the start. Most upstream engine improvements remain accessible as the engines evolve, while slime focuses on the RL loop, dataflow, synchronization, and correctness checks.
 
@@ -55,16 +55,16 @@ slime is developed as RL infrastructure, where "the script runs" is not enough. 
 
 Useful engineering docs:
 
-- [CI](docs/en/developer_guide/ci.md)
-- [Debugging](docs/en/developer_guide/debug.md)
-- [Reproducibility](docs/en/advanced/reproducibility.md)
-- [Fault Tolerance](docs/en/advanced/fault-tolerance.md)
-- [Trace Viewer](docs/en/developer_guide/trace.md)
-- [Profiling](docs/en/developer_guide/profiling.md)
+- [CI](<docs/en/developer_guide/ci.md>)
+- [Debugging](<docs/en/developer_guide/debug.md>)
+- [Reproducibility](<docs/en/advanced/reproducibility.md>)
+- [Fault Tolerance](<docs/en/advanced/fault-tolerance.md>)
+- [Trace Viewer](<docs/en/developer_guide/trace.md>)
+- [Profiling](<docs/en/developer_guide/profiling.md>)
 
 ## Blogs
 
-- [AI Infra In Depth](docs/ai_infra/README.md): a Chinese series on principles, CUDA kernels, model architecture, performance, and source code.
+- [AI Infra In Depth](<docs/ai_infra/README.md>): a Chinese series on principles, CUDA kernels, model architecture, performance, and source code.
 
 - Our vision: [slime: An SGLang-Native Post-Training Framework for RL Scaling](https://lmsys.org/blog/2025-07-09-slime/).
 - Our ideas on agentic training: [Agent-Oriented Design: An Asynchronous and Decoupled Framework for Agentic RL](https://www.notion.so/Agent-Oriented-Design-An-Asynchronous-and-Decoupled-Framework-for-Agentic-RL-2278e692d081802cbdd5d37cef76a547)
@@ -72,20 +72,20 @@ Useful engineering docs:
 
 ## Table of Contents
 
-- [Why This Design Matters](#why-this-design-matters)
-- [Production Validation](#production-validation)
-- [Native Engine Pass-Through and SGLang Deployment](#native-engine-pass-through-and-sglang-deployment)
-- [Correctness, Stability, and CI](#correctness-stability-and-ci)
-- [Architecture Overview](#architecture-overview)
-- [Quick Start](#quick-start)
-- [Ecosystem Built on slime](#ecosystem-built-on-slime)
-- [Arguments Walkthrough](#arguments-walkthrough)
-- [Developer Guide](#developer-guide)
-- [FAQ & Acknowledgements](#faq--acknowledgements)
+- [Why This Design Matters](<README.md#why-this-design-matters>)
+- [Production Validation](<README.md#production-validation>)
+- [Native Engine Pass-Through and SGLang Deployment](<README.md#native-engine-pass-through-and-sglang-deployment>)
+- [Correctness, Stability, and CI](<README.md#correctness-stability-and-ci>)
+- [Architecture Overview](<README.md#architecture-overview>)
+- [Quick Start](<README.md#quick-start>)
+- [Ecosystem Built on slime](<README.md#ecosystem-built-on-slime>)
+- [Arguments Walkthrough](<README.md#arguments-walkthrough>)
+- [Developer Guide](<README.md#developer-guide>)
+- [FAQ & Acknowledgements](<README.md#faq--acknowledgements>)
 
 ## Architecture Overview
 
-![arch](./imgs/arch.png)
+![arch](<imgs/arch.png>)
 
 **Module Descriptions**:
 
@@ -96,20 +96,20 @@ Useful engineering docs:
 ## Quick Start
 
 For a comprehensive quick start guide covering environment setup, data preparation, training startup, and key code analysis, please refer to:
-- [Quick Start Guide](./docs/en/get_started/quick_start.md)
+- [Quick Start Guide](<docs/en/get_started/quick_start.md>)
 
-We also provide examples for some use cases not covered in the quick start guide; please check [examples](examples/).
+We also provide examples for some use cases not covered in the quick start guide; please check [examples](<examples>).
 
 ### Agentic RL examples
 
 For agentic RL workloads, the following examples plug into the standard rollout / Data Buffer loop through customization interfaces — they are not separate frameworks:
 
-- [`examples/multi_agent`](examples/multi_agent/README.md): Multi-agent generation via `--custom-generate-function-path` inside the standard rollout loop.
-- [`examples/search-r1`](examples/search-r1/): Search/RAG-style multi-turn generation via `--custom-generate-function-path`.
-- [`examples/fully_async`](examples/fully_async/README.md): Fully-async rollout, useful for long-tail agentic generation where some samples take much longer than others.
-- [`examples/coding_agent_rl`](examples/coding_agent_rl/README.md): End-to-end SWE coding-agent RL with sandboxed tool use, test-based rewards, and token-correct trajectory segments via `--custom-generate-function-path`.
+- [`examples/multi_agent`](<examples/multi_agent/README.md>): Multi-agent generation via `--custom-generate-function-path` inside the standard rollout loop.
+- [`examples/search-r1`](<examples/search-r1>): Search/RAG-style multi-turn generation via `--custom-generate-function-path`.
+- [`examples/fully_async`](<examples/fully_async/README.md>): Fully-async rollout, useful for long-tail agentic generation where some samples take much longer than others.
+- [`examples/coding_agent_rl`](<examples/coding_agent_rl/README.md>): End-to-end SWE coding-agent RL with sandboxed tool use, test-based rewards, and token-correct trajectory segments via `--custom-generate-function-path`.
 
-See the [Customization Guide](docs/en/get_started/customization.md) for which interface to use for a given agentic workflow.
+See the [Customization Guide](<docs/en/get_started/customization.md>) for which interface to use for a given agentic workflow.
 
 ## Ecosystem Built on slime
 
@@ -167,9 +167,9 @@ Arguments in slime are divided into three categories:
 
 1.  **Megatron arguments**: slime reads Megatron arguments directly. You can configure Megatron by passing arguments like `--tensor-model-parallel-size 2`.
 2.  **SGLang arguments**: All arguments for the installed SGLang are supported through pass-through. These arguments must be prefixed with `--sglang-`. For example, `--mem-fraction-static` should be passed as `--sglang-mem-fraction-static`.
-3.  **slime-specific arguments**: Please refer to: [slime/utils/arguments.py](slime/utils/arguments.py)
+3.  **slime-specific arguments**: Please refer to: [slime/utils/arguments.py](<slime/utils/arguments.py>)
 
-For complete usage instructions, please refer to the [Usage Documentation](docs/en/get_started/usage.md).
+For complete usage instructions, please refer to the [Usage Documentation](<docs/en/get_started/usage.md>).
 
 ## Code Reading Path
 
@@ -202,11 +202,11 @@ pre-commit install
 pre-commit run --all-files --show-diff-on-failure --color=always
 ```
 
-- For debugging tips, please refer to the [Debugging Guide](docs/en/developer_guide/debug.md)
+- For debugging tips, please refer to the [Debugging Guide](<docs/en/developer_guide/debug.md>)
 
 ## FAQ & Acknowledgements
 
-- For frequently asked questions, please see the [Q\&A](docs/en/get_started/qa.md)
+- For frequently asked questions, please see the [Q\&A](<docs/en/get_started/qa.md>)
 - Special thanks to the following projects & communities: SGLang, Megatron‑LM, mbridge, OpenRLHF, veRL, Pai-Megatron-Patch and others.
 - To quote slime, please use:
 
