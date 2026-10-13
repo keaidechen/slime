@@ -9,6 +9,7 @@
 | [Transformer执行与KV基础](Transformer执行与KV基础.md) | Transformer 执行与 KV 基础 |
 | [推理内存系统](推理内存系统.md) | 推理内存系统：KV Cache、Paging 与复用 |
 | [批处理排队与调度演进](批处理排队与调度演进.md) | 批处理、排队与推理调度的演进 |
+| [服务准入路由与弹性控制](服务准入路由与弹性控制.md) | 多租户合同、工作与状态准入、缓存路由、反馈延迟与排空 |
 | [采样与推测解码](采样与推测解码.md) | 采样、自回归依赖与推测解码 |
 | [推理并行方案设计](推理并行方案设计.md) | 固定模型与混合到达，比较副本、TP、前缀、量化与 PD |
 | [案例_Prefill-Decode分离](案例_Prefill-Decode分离.md) | 案例：Prefill–Decode 分离与 KV Cache 传输 |
@@ -48,6 +49,7 @@
 | 系统问题 | 通用正文 | 实现走读 | 性能或案例 |
 |---|---|---|---|
 | 请求、调度与 KV 生命周期 | [KV](推理内存系统.md)、[调度](批处理排队与调度演进.md) | [SGLang 固定版本](../13_Source_Analysis/sglang/README.md) | [生成与 KV 案例](../12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md) |
+| 多副本服务的资源承诺 | [服务控制](服务准入路由与弹性控制.md) | [SGLang 部署与路由](../13_Source_Analysis/sglang/03_scaling_and_deployment/02_deployment_topology_and_routing.md) | [排队与容量](排队长尾与容量规划.md) |
 | 执行、量化与功能组合 | [执行优化](执行优化与功能组合.md)、[量化](量化推理与缓存精度.md) | [跨引擎 runtime](../runtime/README.md) | [推理性能](../12_Performance_Reliability/05_inference.md) |
 | Grammar、adapter 与媒体状态 | [高级服务功能](结构化生成与多模型服务.md) | [SGLang 固定版本](../13_Source_Analysis/sglang/README.md) | [功能组合算例](../12_Performance_Reliability/贯穿案例_生成请求与KV生命周期.md#功能组合算例前缀复用与-adapter-身份) |
 | 长上下文与阶段交接 | [并行](推理并行方案设计.md)、[PD](案例_Prefill-Decode分离.md) | [runtime 对比](../runtime/README.md) | [PD 容量推演](案例_Prefill-Decode分离.md) |

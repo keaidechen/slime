@@ -12,6 +12,7 @@
 | [Collective通信算法](Collective通信算法.md) | Collective 通信算法 |
 | [节点内GPU互联](节点内GPU互联.md) | 节点内 GPU 互联：PCIe、NVLink 与 NVSwitch |
 | [跨节点网络](跨节点网络.md) | 跨节点网络：InfiniBand、RoCE、RDMA 与 GPUDirect |
+| [拓扑拥塞与通信进度](拓扑拥塞与通信进度.md) | 切面与路径、流量调度、拥塞反馈、乱序恢复和进度保证 |
 | [NCCL软件栈](NCCL软件栈.md) | NCCL 软件栈：从 API 到传输路径 |
 | [通信性能模型](通信性能模型.md) | 通信性能模型：从 $\alpha$–$\beta$ 到有效带宽 |
 | [通信计算重叠](通信计算重叠.md) | 通信计算重叠：从“两个 Stream”到真实隐藏时间 |
