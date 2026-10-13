@@ -58,6 +58,8 @@ mode=full, transport=nccl          -> UpdateWeightFromDistributed
 
 设计要点：
 
+PD 分离（Prefill–Decode disaggregation）把输入处理与逐步生成放到不同执行资源。它允许分别调度两阶段，但增加 KV 传输、交接等待和资源预留。
+
 - **只有 DP=0 且 TP=0 的 rank 当"源"**：因为 DP 是纯副本、TP 切片会被 all-gather 补全（见 §2.2），所以每个 PP 段只需一个源 rank；
 - **每个 PP rank 一个 NCCL 组**（`slime-pp_0`、`slime-pp_1`…）：流水线并行下不同 PP 段持有不同层，各自并行推权重；
 - `connect_rollout_engines_from_distributed`（268-314）：训练源 rank 当 rank 0、所有引擎的全部 GPU 依次排 rank，world_size = `sum(engine_gpu_counts) + 1`。注意它支持**异构 TP 的引擎**（注释里举例 prefill TP=2 / decode TP=4 各占不同 rank 数）——这正对应 PD 分离部署。
@@ -167,6 +169,8 @@ mode=full, transport=nccl          -> UpdateWeightFromDistributed
 ---
 
 ## 5. FP8 与量化链路
+
+TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
 
 - **FP8 cast**：`slime/backends/megatron_utils/sglang.py` 从 SGLang 引入 `quant_weight_ue8m0 / transform_scale_ue8m0`（DeepSeek 系 FP8 checkpoint 的 ue8m0 scale 格式）；`megatron_to_hf/processors/quantizer_fp8.py` 在 `convert_to_hf` 时把 BF16 权重 cast 成 FP8 再传输——**带宽减半**，推理侧直接跑 FP8。
 - **自研 Triton kernel**：`slime/backends/megatron_utils/kernels/fp8_kernel.py` 提供 blockwise FP8 cast。

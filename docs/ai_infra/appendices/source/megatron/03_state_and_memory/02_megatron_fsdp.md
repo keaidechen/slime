@@ -42,6 +42,8 @@ optim_grads_params~= optimizer + gradient + training-param sharding / ZeRO-3
 
 ## 3. FSDP unit 只在哪条路径上是生命周期边界
 
+reshard（重新分片）把全局张量映射为新的分片布局；在 FSDP 的局部生命周期中，也可指释放临时完整参数、回到常驻分片。要根据上下文区分拓扑转换与局部释放。
+
 FSDP unit 的职责是界定一组 full parameters 必须存活到哪里：进入 unit 前 all-gather/materialize，forward/backward 使用后释放或 reshard。源码明确说明 `optim`、`optim_grads` 不分片 model params，因此不需要 FSDP units；unit 对 `optim_grads_params` 才是核心边界。
 
 unit 太大：
@@ -98,6 +100,8 @@ main param + optimizer moments
 打开 overlap 或 double buffer 会用更多显存换遮蔽窗口。显存快照若只统计 persistent shard，会严重低估 forward/backward 峰值。开启 `--nccl-ub` 时，当前参数逻辑还会默认打开 FSDP double buffer 与 manual registration，应把这两个隐式变化记录进 A/B 配置。
 
 ## 6. TP、PP、CP、EP 组合时谁先切什么
+
+DeviceMesh（设备网格）用逻辑坐标组织参与者并定义各维通信组。网格维度命名描述切分语义，实际 rank 到设备和网络的映射决定物理通信路径。
 
 顺序上先由模型构建确定本 rank 的 PP layers 与 TP shards，再由 FSDP 沿 `dp_cp` mesh 管理这些 local parameters。`mcore_fsdp_adapter._init_dist_index` 显式构造包含 DP/CP、TP 以及 expert mesh 的 `DeviceMesh`，并给 column/row/replicated 参数标注 TP 模式。
 

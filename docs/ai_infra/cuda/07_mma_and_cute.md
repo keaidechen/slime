@@ -92,6 +92,8 @@ i,j ∈ {0,1}
 
 例如 lane 5 拥有 `(1,2)、(1,3)、(9,2)、(9,3)`。lane 4/5/6/7 拥有相同的两行、不同列，合起来覆盖这两行全部 8 列。需要做逐行归约时，这四个 lane 就是自然的协作组。
 
+PTX 是 NVIDIA 的虚拟指令表示，还需经后续编译生成目标 GPU 的机器代码；查看 PTX 可以理解部分操作，但不能据此确定最终寄存器占用与指令调度。
+
 这张坐标表针对上述 MMA 指令的 accumulator；**不能拿来索引 WMMA 的 fragment.x，也不能直接套给 A/B 操作数或其他指令形状**。硬件布局可核对 [PTX ISA 的矩阵片段说明](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-fragment-mma-16816-float)。`attention_cpu.py` 会枚举这 128 个坐标，检查既不重复也不遗漏；第 9 章再扩展到 FA2 的 `128×128` tile。
 
 ## 7.4 CuTe Layout 先理解成“坐标到偏移的函数”

@@ -24,6 +24,8 @@
 
 </details>
 
+MLP（Multi-Layer Perceptron，多层感知机）由线性变换与非线性组成；Transformer 文中常用它指位置独立的 FFN，但具体门控和维度仍以模型定义为准。
+
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**。**Static batching（静态批处理）**是整批请求绑定到一起直到全部完成；**iteration-level scheduling（迭代级调度）**是在每一轮生成迭代重新决定 batch；**continuous batching（连续批处理）**允许运行过程中动态加入、移出请求；**selective batching（选择性批处理）**是 Orca 对不同算子采用不同 batching 方式的设计。 另外：MLP = **Multi-Layer Perceptron（多层感知机）**；AI = **Artificial Intelligence（人工智能）**。
 
 > 论文：Gyeong-In Yu et al., **Orca: A Distributed Serving System for Transformer-Based Generative Models**，OSDI 2022。

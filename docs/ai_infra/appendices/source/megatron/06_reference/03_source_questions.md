@@ -33,6 +33,8 @@
 
 ## 快速索引
 
+MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
+
 | 问题 | 先看结论 | 主要源码 |
 |---|---|---|
 | world size 为什么不能总写成六维乘积？ | dense 网格和 expert 网格是两套视图 | `parallel_state.initialize_model_parallel` |
@@ -95,6 +97,8 @@ num_microbatches = GBS / (MBS × DP)
 本 DP replica 每次 update 的样本数 = MBS × num_microbatches
 全局每次 update 的样本数 = MBS × DP × num_microbatches
 ```
+
+GBS（Global Batch Size，全局批量）是一次逻辑参数更新共同消费的样本数。它与单卡 microbatch、推理时的动态 batch 不同，变长数据还需独立记录有效 token 分母。
 
 `train_step()` 只调用一次 `forward_backward_func`，但 schedule 在内部循环 `num_microbatches` 次。PP 不出现在 GBS 公式中：PP ranks 合作处理的是同一批样本，而不是新增数据副本。
 
@@ -371,6 +375,8 @@ exposed_comm_after = max(comm_time - coverable_compute_window, tail_and_sync)
 ## 18. strict resume 为什么比固定 seed 多得多
 
 严格续训要求恢复同一条状态轨迹：model、optimizer/master state、scheduler、loss scaler、iteration/consumed samples、data iterator/sampler、Python/NumPy/PyTorch/CUDA RNG、TP RNG tracker，以及低精度 recipe 的动态状态。
+
+bitwise 相同（逐位一致）要求同一浮点格式下每个结果的二进制位完全相同；满足数值容差只要求误差足够小，两种验收标准不同。
 
 即便这些都恢复，改变 TP/PP/DP 后 collective 次序、浮点归约树或 kernel 也可能改变，通常只能要求容差内数值接近，而不是 bitwise 相等。FP8 delayed scaling 若 amax/scale history 没恢复，恢复后前若干 step 尤其容易偏离。
 

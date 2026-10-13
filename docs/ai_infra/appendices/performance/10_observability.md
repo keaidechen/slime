@@ -5,6 +5,10 @@
 
 线上可观测性的目标不是复刻 profiler，而是以可控开销持续回答：谁慢、从何时开始、影响多大、与部署/流量/硬件哪个变化相关，并能触发短时深度采样。
 
+DCGM（Data Center GPU Manager）提供 NVIDIA GPU 的管理与监控能力。采样指标反映特定窗口内的设备状态，不能单独恢复每个请求或训练 step 的执行因果。
+
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
+
 DCGM = Data Center GPU Manager（数据中心 GPU 管理器）；SLO = Service Level Objective（服务等级目标）。
 
 ## 1. 四层信号
@@ -49,6 +53,8 @@ llm_kv_cache_usage_ratio{replica="..."}
 ## 5. Dashboard 不应只有平均值
 
 建议页面：
+
+MFU（Model FLOPs Utilization，模型浮点运算利用率）通常按“模型约定的每步 FLOPs ÷ 步耗时 ÷ 全部设备的对应精度峰值”计算。重计算通常不计入模型有效工作量，比较前必须固定 FLOPs 与峰值口径。
 
 | 页面 | 核心图 |
 |---|---|

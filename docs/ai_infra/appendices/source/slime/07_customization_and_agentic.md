@@ -14,6 +14,8 @@ Agent 通用概念从[Harness 边界](<../../../06_Post_Training/28_Agent环境�
 
 按侵入程度从低到高（`slime/utils/arguments.py` 中定义）：
 
+TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
+
 | 层级 | 参数 | 替换对象 | 签名 |
 |---|---|---|---|
 | 单样本生成 | `--custom-generate-function-path` | 一条样本如何产生（可含多轮/工具） | `async (args, sample, sampling_params[, evaluation]) -> Sample \| list[Sample]` |

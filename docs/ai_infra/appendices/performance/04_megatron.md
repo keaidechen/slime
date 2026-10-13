@@ -82,6 +82,8 @@ T_step =
 
 保存：
 
+GBS（Global Batch Size，全局批量）是一次逻辑参数更新共同消费的样本数。它与单卡 microbatch、推理时的动态 batch 不同，变长数据还需独立记录有效 token 分母。
+
 - MBS、GBS、sequence length、token packing；
 - TP/PP/CP/EP/DP/VPP；
 - dtype、FP8、recompute、distributed optimizer；
@@ -98,6 +100,8 @@ GBS = MBS × DP × gradient_accumulation_steps
 改并行度时要保持 token budget/GBS 不变，否则 step time 和吞吐都无法公平归因。
 
 ### 3.2 使用 Megatron timers
+
+straggler（慢参与者）是明显晚于其他参与者到达同步点或完成工作的进程／设备。同步操作受最晚到达者影响，原因可能是数据、计算、资源配额或网络。
 
 Megatron Core 的 `Timers` 支持 `max`、`minmax`、`all` 等跨 rank 汇总，并可在记录前选择 barrier。优先用 `minmax`，因为平均值会隐藏 straggler。不同 Megatron/Bridge 版本的 CLI 或 config 名称不同，先查当前入口的 `--help` 或配置类；timer 语义见 [Megatron Core timers API](https://docs.nvidia.com/megatron-core/developer-guide/latest/apidocs/core/core.timers.html)。
 
@@ -522,6 +526,8 @@ $$bubble \approx \frac{p-1}{m+p-1}$$
 
 ### 4. TP：算子变小与通信变频繁
 
+MFU（Model FLOPs Utilization，模型浮点运算利用率）通常按“模型约定的每步 FLOPs ÷ 步耗时 ÷ 全部设备的对应精度峰值”计算。重计算通常不计入模型有效工作量，比较前必须固定 FLOPs 与峰值口径。
+
 增大 TP degree 会缩小 per-rank GEMM。若从大 GEMM 变成多个低 occupancy 小 GEMM，即使参数能放下，MFU 也会下降。trace 上通常表现为 GEMM duration 缩短、collective 比例和 kernel count 上升、空洞更敏感。
 
 所以 TP 优先留在高速节点内；跨节点是否值得必须用真实 message size 和 GEMM shape 实测。
@@ -567,6 +573,8 @@ $$imbalance=\frac{\max_e(tokens_e)}{\operatorname{mean}_e(tokens_e)}$$
 Model FLOPs Utilization（MFU，模型浮点运算利用率）：
 
 $$MFU=\frac{F_{model\ per\ token}\cdot tokens/s}{N_{gpu}\cdot P_{peak}}$$
+
+HFU（Hardware FLOPs Utilization，硬件浮点运算利用率）把重计算等实际执行的浮点工作也纳入吞吐核算，再与对应硬件峰值比较。它可能比 MFU 高，但多做重算不等于更早达到训练质量目标。
 
 Hardware FLOPs Utilization（HFU，硬件浮点运算利用率）使用实际执行 FLOPs 作为分子，activation recomputation 等额外工作会提高 HFU，却不一定提高有效训练进度。MFU 更强调“有用模型工作”，HFU 更接近硬件忙碌程度。
 

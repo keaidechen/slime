@@ -4,6 +4,8 @@
 
 节点内 GPU 之间并不存在一个抽象的“本地带宽”。实际路径可能经过 NVIDIA NVLink、NVIDIA NVSwitch、PCI Express（PCIe，高速串行总线）、PCIe switch、CPU root complex，甚至因 peer access 不可用而经 host memory 中转。
 
+root complex（根复合体）连接主机处理器／内存系统与 PCIe 结构，PCIe switch（交换芯片）则连接多个设备端口并转发事务。“同一交换芯片下”与“必须经过根端或跨 CPU 互联”描述的是不同路径。P2P（peer-to-peer，设备对设备）表示设备之间直接访问或传输，而不是先由 CPU 复制到主机缓冲；是否支持、是否实际选用该路径，仍需验证。
+
 ```mermaid
 flowchart TB
     G0["GPU 0"] --> S["NVSwitch / PCIe Switch"]
@@ -26,6 +28,8 @@ PCIe 以 lane 数与 generation 描述。宣传值可能是 raw signaling、单�
 - Access Control Services（ACS，访问控制服务）是否把 P2P 流量上送 root complex？
 - IOMMU 是否影响 peer mapping？
 - NIC 与 GPU 的 PCI locality 如何？
+
+IOMMU（Input–Output Memory Management Unit，输入输出内存管理单元）为设备的 DMA 访问提供地址转换与保护；ACS 是 PCIe 访问控制机制，会影响哪些路径允许直接转发。它们处理映射、隔离与路由条件，不能仅凭某个开关名字推断 P2P 必然更快。
 
 ## NVLink 与 NVSwitch 的分工
 

@@ -229,6 +229,8 @@ for rollout_id in range(args.start_rollout_id, args.num_rollout):
 
 关键函数：
 
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
 - **`parse_args()`**（`slime/utils/arguments.py`）：聚合 Megatron + slime + sglang 的所有参数，末尾调用 `slime_validate_args` 做一致性校验。其中与本例强相关的校验：`if args.kl_coef != 0 or args.use_kl_loss:` 要求 `--ref-load` 路径必须存在（本例满足，因为开了 `--use-kl-loss`）；`assert not (args.kl_coef != 0 and args.kl_loss_coef != 0)` 保证两种 KL 不共存。
 - **`create_training_models(args, ...)`**（`slime/ray/placement_group.py`）：用 `with_ref = kl_coef != 0 or use_kl_loss` 告诉 actor 是否需要 reference tag（本例为真）。它**不会额外预留一组 reference GPU**；ref 权重由同一训练 actor 的 `TensorBackuper` 存在 pinned CPU，前向时覆盖到同一份活跃 GPU model。
 - **`create_rollout_manager` / `create_training_models`**：都返回 Ray Actor 的「未来句柄」，真正的初始化在各自 `create()` 里异步完成（sglang 启动慢，故异步等待）。
@@ -302,6 +304,8 @@ if custom_func_path is not None:
 if sample.reward is None:                              # tau-bench 已在 generate 里填好 reward, 跳过
     sample.reward = await async_rm(args, sample)
 ```
+
+IPC（Inter-Process Communication，进程间通信）让地址空间相互隔离的进程交换消息或共享资源。另一个进程的普通指针不能直接当作本进程的可访问地址。
 
   - **`load_function(path)`**（`slime/utils/misc.py`）：按 `"module.func"` 字符串动态 `importlib` 导入。`--custom-generate-function-path generate_with_tau.generate` → 导入本例目录下的 `generate_with_tau.generate`。
   - tau-bench 的 `generate` **自行把 reward 写进 Sample**，所以 `if sample.reward is None` 分支被跳过（不会走通用 reward-model `async_rm`）。

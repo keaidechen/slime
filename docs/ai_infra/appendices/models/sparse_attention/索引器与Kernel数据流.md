@@ -107,6 +107,8 @@ Indexer 的分布为：
 =\operatorname{Softmax}(I_{t,:}).
 ```
 
+KL 散度（Kullback–Leibler divergence）按 D_KL(p∥q)=∑pᵢlog(pᵢ/qᵢ) 衡量分布差异。它一般不对称；某个已采样 token 的 logprob 差也不等于完整分布的精确 KL。
+
 训练目标使用 KL divergence：
 
 ```math
@@ -375,6 +377,8 @@ out = dense_attention(q, selected_kv)
 
 
 ### 2 但直接 indexed load 也不是免费
+
+coalescing（合并访存）指同一 warp 的相邻线程访问邻近地址时，硬件用较少内存事务覆盖这些请求。需要同时检查地址、访问宽度和对齐，单看张量形状无法判断。
 
 - 同一个 warp 的 threads 可能访问不同 pages；
 - coalescing 变差；

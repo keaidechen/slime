@@ -17,6 +17,8 @@
 
 以 PP=4、microbatch=8 为例：
 
+1F1B（one forward, one backward）在流水线进入稳态后交替安排一个 microbatch 的前向和另一个 microbatch 的反向，减少待反向激活的驻留；前后仍有填充和排空阶段。
+
 - all-forward-all-backward：先把 8 个前向都推进，再反向；activation 峰值高；
 - 1F1B：warmup 后每做一个 forward 尽快做一个 backward；限制在途 activation。
 
@@ -86,6 +88,8 @@ rank3: layers 6-7, 14-15
 `forward_backward_pipelining_with_interleaving()` 中最难读的是 microbatch→model chunk 映射、warmup 数、forward/backward chunk 顺序。建议用 PP=2、VPP=2、M=8 手工列一张表，再对照辅助函数。
 
 ## 6. 自定义 pipeline layout
+
+MTP（Multi-Token Prediction，多 token 预测）在训练中增加对后续多个位置的预测目标或模块。它改变训练计算与状态；是否用于推理草稿生成，是另一个实现选择。
 
 `megatron/core/transformer/pipeline_parallel_layer_layout.py` 和官方 `pipeline_parallel_layout` 文档支持非均匀 layer 类型/数量。MoE、MTP、embedding、loss 的成本不同，按“层数均分”未必按时间均分。
 

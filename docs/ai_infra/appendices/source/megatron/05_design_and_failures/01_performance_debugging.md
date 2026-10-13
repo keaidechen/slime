@@ -15,6 +15,8 @@
 - data、forward、backward、optimizer、checkpoint 分段；
 - p50/p95/p99 step time 和各 rank 最大值。
 
+straggler（慢参与者）是明显晚于其他参与者到达同步点或完成工作的进程／设备。同步操作受最晚到达者影响，原因可能是数据、计算、资源配额或网络。
+
 只看 rank0 平均值会掩盖 straggler；分布式 step 由最慢 rank 决定。
 
 ## 2. 容量估算
@@ -28,6 +30,8 @@
 + CUDA graph/allocator 碎片
 + dataloader/pinned host memory
 ```
+
+MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
 
 参数状态受 DP shard、TP/PP/EP shard 和 dtype 影响；activation 受 MBS、seq、hidden、layers/stage、SP/CP、recompute 影响。估算只是上界起点，最终以 allocator snapshot 和 profiler 验证。
 
@@ -53,6 +57,8 @@
 ### PyTorch profiler
 
 截取 warmup 后 3–5 个稳定 step，带：
+
+NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线上的操作更容易对应业务阶段，标记区间本身不会自动等待 GPU 完成。
 
 - CPU/CUDA activity；
 - shape（短 trace 才开）；

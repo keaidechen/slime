@@ -37,6 +37,8 @@ Transformer 中的 Q/K/V Projection、Attention 输出投影、MLP（Multi-Layer
 
 但“数学上是矩阵乘”不等于“硬件上自动很快”。高性能实现必须同时解决：
 
+occupancy（驻留率）是一个 SM 上驻留 warp 数与硬件支持的最大驻留 warp 数之比。寄存器、共享内存和线程配置都会限制它；驻留线程可能在等待，所以它不等于有效计算利用率。
+
 - 把输出空间切给 CTA、Warp、Thread；
 - 让 A/B Tile 在 Shared Memory 和 Register 中复用；
 - 选择 Tensor Core 支持的数据类型与 Layout；
@@ -874,6 +876,8 @@ K / N
 RL 训练经常只需要“已选中 token 的 logprob”，而模型输出的词表可能很大。若为每个位置保存完整概率向量，中间结果会占据大量显存。假设 8192 个位置、词表 128000、每值 4 字节，仅一份完整矩阵就约 3.91 GiB；还未计梯度和其他工作区。
 
 设某位置 logits 为 $z_1,\ldots,z_V$，已选动作编号为 $a$，则
+
+LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，其中 m=max(xᵢ)。它把指数归一化的分母放到对数域计算，减最大值可避免大正数的指数溢出。
 
 $$\log p(a)=z_a-\operatorname{LSE}(z),\qquad
 \operatorname{LSE}(z)=m+\log\sum_j e^{z_j-m},\quad m=\max_j z_j.$$

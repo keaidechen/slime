@@ -35,6 +35,8 @@ Rubin               224 SM
 
 SM 确实越来越多，但真正推动 AI 性能跨代增长的更重要因素是下面五条线同时演化：
 
+CTA（Cooperative Thread Array）在 CUDA 中通常指一个 thread block（线程块）；块内线程可共享 shared memory 并使用块级同步，一个块的执行需要同时满足线程与资源限制。
+
 1. **计算粒度越来越“大”**：CUDA Core → Tensor Core → Warp-level MMA → Warp-group MMA → CTA-pair / 更大协作域。
 2. **数值精度越来越“低而聪明”**：FP32/FP16 → TF32/BF16 → FP8 → FP4 / microscaling → 更灵活的低比特与压缩表示。
 3. **数据搬运越来越“异步、专用化”**：普通 LD/ST → Ampere async copy → Hopper TMA → Blackwell TMEM + 更强 TMA → Rubin enhanced TMA。
@@ -590,6 +592,8 @@ tokens / joule
 training progress / joule
 useful FLOPs / watt
 ```
+
+TFLOP/s（也常写 TFLOPS）表示每秒 10¹² 次浮点运算；TFLOP 则是 10¹² 次运算总数。速率和工作量不能直接互换，峰值还必须注明精度与是否使用稀疏条件。
 
 而不只是 peak TFLOPS。
 

@@ -68,6 +68,8 @@ TP 中某些 AR 可以拆成匹配的 RS/AG，SP 因而不必等价于把一整�
 
 先运行 `python3 docs/ai_infra/examples/parallel_runtime_walkthroughs.py`，查看 `PASS sequence_context`。这是数学参考，不是实际 SP kernel 测试。
 
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
 在 TP=2、相同输入和全局参数下，SP off/on 的差异应来自布局。dropout=0 或已对齐的分布式 RNG 排除了随机性差异，此时以下边界决定等价性：
 
 - 对齐输出、dX、FC1/FC2 梯度和 norm 参数梯度；按 token index 重组，不只比较 loss。

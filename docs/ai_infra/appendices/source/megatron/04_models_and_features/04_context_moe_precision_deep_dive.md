@@ -97,6 +97,8 @@ x_fp8 = quantize(x / scale)
 近似恢复 x ≈ dequantize(x_fp8) × scale
 ```
 
+amax 是指定张量或量化组的最大绝对值 max|x|，用于选择量化尺度。使用当前值还是历史值、统计在哪些参与者之间合并，都会影响实际编码与恢复状态。
+
 scale 通常来自 amax 历史或 current scaling recipe。工程关键：
 
 - 哪些 tensor 用 FP8，哪些累加仍是高精度；
@@ -113,6 +115,8 @@ scale 通常来自 amax 历史或 current scaling recipe。工程关键：
 - recompute：少存 activation，backward 前重算；交换 compute；
 - offload：把 activation 搬到 CPU，backward 前搬回；交换 PCIe/NVLink-C2C 带宽；
 - fine-grained 策略可对 attention/MLP/norm 分别选择。
+
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
 
 理想 overlap 条件是搬运时间小于可遮蔽的计算窗口。否则显存下降但 step time 明显上升。还要计入 pinned host memory 与 NUMA 位置。
 

@@ -47,6 +47,8 @@ physical_kv_index
 
 根节点为空。路径拼接是完整 token prefix。
 
+LoRA（Low-Rank Adaptation，低秩适配）冻结原权重 W，用较小的矩阵乘积 BA 表示可训练增量，使有效权重为 W+BA。减少的是可训练参数及其梯度、优化器状态，原权重仍需参与前向。
+
 `extra_key` 构成命名空间：相同 token 在不同 LoRA、cache version 或隔离上下文下不能错误共享。仅用 token ids 做 key 可能产生 silent correctness bug。
 
 ## 4. prefix match 与节点 split
@@ -95,6 +97,8 @@ request 运行时：req row 持有/引用 KV
 ```
 
 ## 6. `lock_ref` 为何不能省
+
+LRU（Least Recently Used，最近最少使用）优先淘汰最长时间未被访问的缓存对象。被活跃请求引用的对象能否淘汰，还需先满足生命周期约束。
 
 LRU 不能驱逐正在被 running request 使用的 prefix。请求命中节点后增加从节点到 root 的保护引用；结束/切换时减少。通常：
 

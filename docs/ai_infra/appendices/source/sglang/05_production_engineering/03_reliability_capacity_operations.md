@@ -15,6 +15,8 @@
 
 ## 1. Admission control
 
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
+
 过载时继续接收请求会让 queue、TTFT 和超时同时恶化。保护策略可以按并发请求、waiting tokens、预计 KV、租户配额和 SLO 分级拒绝或排队。拒绝必须快速、可观测并返回明确错误。
 
 ## 2. 资源生命周期

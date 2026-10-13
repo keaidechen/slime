@@ -15,6 +15,8 @@
 
 ## 1. Profiling 路线
 
+VAE（Variational Autoencoder，变分自编码器）学习编码与解码潜在表示；扩散系统中常在潜在空间生成，再经解码器得到媒体，潜在网格大小与原图分辨率不同。
+
 先用阶段计时定位 text encoder、denoising、scheduler、VAE、后处理、通信或存储，再用 PyTorch Profiler 看 operator/CPU-GPU 关系，最后用 Nsight Systems 看 kernel、collective 和空洞。
 
 Trace 只覆盖少量稳定 denoising steps，排除首次编译、加载和 warmup；另做端到端测试保留这些真实冷启动成本。

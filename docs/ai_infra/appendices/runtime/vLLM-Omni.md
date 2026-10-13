@@ -38,6 +38,8 @@ stage 0 完成
  → stage_engine.generate
 ```
 
+TTS（Text-to-Speech，文本转语音）根据文字生成可播放语音。模型产生编码或波形、服务器发送数据与客户端实际播放，是不同完成事件。
+
 [OmniStage.process_engine_inputs](https://github.com/vllm-project/vllm-omni/blob/ed89c8b0436999e9210f11363f4eb512330a9dfa/vllm_omni/entrypoints/omni_stage.py#L436)按 `engine_input_source` 找上游，或调用自定义转换。[thinker2talker](https://github.com/vllm-project/vllm-omni/blob/ed89c8b0436999e9210f11363f4eb512330a9dfa/vllm_omni/model_executor/stage_input_processors/qwen3_omni.py#L120)实际打包 embeddings、hidden states、token IDs 和 TTS 特殊嵌入等字段，并生成长度匹配的占位 prompt IDs。这是一份模型专用契约，不能解释为“把上游生成文字直接送入普通 TTS”。
 
 这些字段的命名和传递不等于已证明模型在所有位置消费所有 hidden states；若研究架构语义，还应沿模型 forward 追踪实际选择。通用原理篇只说“文本与多模态条件”，避免把运行时载荷名当作统一模型定义。

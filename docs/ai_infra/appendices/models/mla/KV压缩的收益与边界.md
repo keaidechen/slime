@@ -124,6 +124,10 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 
 ### 误区 7：KV Cache 减少 50×，吞吐就一定增加 50×
 
+TTFT（Time To First Token，首 token 延迟）从约定的请求起点计到首个输出 token，通常包含排队、输入处理和 Prefill。客户端与服务端的起点可能不同，报告时应明确。
+
+TPOT（Time Per Output Token，每输出 token 时间）常按首 token 到末 token 的时间除以输出 token 数减一计算。它是后续生成的平均间隔，不能替代逐个间隔的尾延迟。
+
 端到端速度还受权重读取、MoE、网络、sampling、batch、scheduler、kernel efficiency 和 TTFT/TPOT 目标约束。容量比、带宽比和吞吐比不能互换。
 
 ### 误区 8：TP 可以天然把 MLA Cache 均匀切开
@@ -189,6 +193,8 @@ naive 路径会这么做，但矩阵吸收正是为了避免它。生产 decode 
 - MTP 使 $s_q$ 增大后，MLA kernel 是否从带宽瓶颈跨到计算瓶颈。
 
 一个可靠的结论应该长这样：
+
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
 
 > 在固定模型、请求长度分布、精度和 SLO 下，MLA backend 将每请求 Cache 从 X 降至 Y，使稳定 active sequences 从 A 增至 B；decode TPOT 从 C 降至 D。Nsight 指标显示瓶颈由 HBM throughput 转向 Tensor Core/其他模块。
 

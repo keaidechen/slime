@@ -15,6 +15,10 @@
 
 ## 1. 并行和解耦
 
+CFG（Classifier-Free Guidance，无分类器引导）组合有条件与无条件等预测来加强生成条件的影响。它可能增加网络计算，也会改变生成分布，具体执行次数与组合公式需声明。
+
+DiT（Diffusion Transformer）使用 Transformer 组织扩散生成中的去噪计算。一次输出通常需多个采样时间步，所以一次网络前向不能直接当作完整生成耗时。
+
 Sequence Parallel 切分 token/patch 序列，适合高分辨率图像和长视频；CFG parallel 可分离条件/无条件分支；TP 切分权重；组件解耦把 text encoder、DiT 和 VAE 放入不同资源池。
 
 选择并行度时同时测阶段计算、collective、pipeline 空洞和跨阶段传输。Diffusion 解耦传输 tensor/latent，LLM PD 传输 KV，容量和失败模型不同。

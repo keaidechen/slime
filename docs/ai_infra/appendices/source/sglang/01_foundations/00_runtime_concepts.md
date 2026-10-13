@@ -806,7 +806,11 @@ silent corruption 往往来自三个状态机推进不同步。
 
 ### 请求主线如何连接各专题
 
+IPC（Inter-Process Communication，进程间通信）让地址空间相互隔离的进程交换消息或共享资源。另一个进程的普通指针不能直接当作本进程的可访问地址。
+
 进程与 IPC 定义消息边界，scheduler 推进 prefill/decode，KV/Radix 管理 pool 与引用锁。ModelRunner 将 ForwardBatch 的 shape 和 metadata 交给 eager 或 CUDA Graph 路径。TP/EP/PD 再引入跨 rank 数据移动与所有权交接。
+
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
 
 Speculative 和 grammar 增加 token、状态回滚与合法输出的约束。最终服务表现由这条完整路径上的 latency-throughput 关系和 SLO 决定；源码模块的边界需要与状态边界一起理解。
 

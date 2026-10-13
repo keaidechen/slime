@@ -90,6 +90,8 @@ Column→激活→Row 的组合避免在 MLP 中间巨大维度上收集完整 t
 4. mask 位置置零；
 5. 默认 TP all-reduce 得到完整 embedding；若 `reduce_scatter_embeddings=True`，则转为 sequence-first 后做 TP reduce-scatter，直接产出 SP layout。
 
+cross entropy（交叉熵）按 $H(q,p)=-\sum_i q_i\log p_i$ 比较目标分布 q 与预测分布 p；单个目标 token 的 q 为 one-hot 时，结果就是该 token 的 $-\log p_{target}$。它需要全词表的归一化分母，即使最终只读取目标位置，也不能各分片分别归一化。entropy（熵）则使用 p 自身作权重，$H(p)=-\sum_i p_i\log p_i$，衡量预测分布的不确定性。
+
 parallel cross entropy 同理避免收集完整 `[tokens, vocab]` logits：先做跨 shard global max，再 global sum-exp，并只从拥有 target id 的 rank 取 target logit。这是数值稳定分布式 log-sum-exp 的典型模板。
 
 ## 5. Sequence Parallel 不等于 Context Parallel
@@ -250,6 +252,8 @@ local 实现的主线是 [layers.py](<../../../../../../Megatron-LM/megatron/cor
 成本模型先看两项：GEMM 随 TP 切小后的实际效率，以及每层 collective 的暴露时间。更小矩阵不一定按 1/TP 加速；跨节点带宽、额外 launch 与同步可抵消容量收益。输出 gather 也应由下游所需布局决定，不能为了方便调试永久 gather 所有激活。
 
 `parallel_runtime_walkthroughs.py` 的 `tensor_parallel` 参考覆盖重建输出、dX、FC1/FC2 dW 与有限差分。真实 GPU 执行还引入 local/TE 实现类型、通信组与 GEMM shape；只有参数和全局输入相同，才能讨论这条路径的数值等价。详见[并行证据边界](<../05_design_and_failures/03_parallelism_validation.md>)。
+
+ETP（Expert Tensor Parallelism，专家张量并行）把同一个专家的矩阵拆给多个参与者；它与把不同专家分给不同设备的 EP 是两个切分维度。
 
 SP 的完整反向和 norm 参数归约移到[独立执行章节](<03_sequence_parallel_execution.md>)；专家内部 TP 见 [ETP](<05_ep_etp_execution.md>)，不要默认复用 attention TP group。
 

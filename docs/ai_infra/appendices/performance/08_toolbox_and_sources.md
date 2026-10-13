@@ -7,6 +7,8 @@
 
 ## 1. 一张工具选择表
 
+DCGM（Data Center GPU Manager）提供 NVIDIA GPU 的管理与监控能力。采样指标反映特定窗口内的设备状态，不能单独恢复每个请求或训练 step 的执行因果。
+
 | 层级 | 工具 | 最适合回答 | 典型输出 | 开销/风险 |
 |---|---|---|---|---|
 | 业务/框架 | 原生日志、TensorBoard、W&B | step、reward、tokens/s、阶段耗时是否异常 | scalar/曲线 | 低 |
@@ -115,6 +117,8 @@
 
 2. [使用 NVIDIA Nsight Systems 加速数据中心和 HPC 性能分析](https://developer.nvidia.cn/zh-cn/blog/accelerating-data-center-and-hpc-performance-analysis-with-nvidia-nsight-systems/)
 
+NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线上的操作更容易对应业务阶段，标记区间本身不会自动等待 GPU 完成。
+
    了解系统级时间线、NVTX 和多节点/多进程分析思路。
 
 3. [在 NVIDIA Grace Hopper 上分析 LLM 训练工作流](https://developer.nvidia.cn/zh-cn/blog/profiling-llm-training-workflows-on-nvidia-grace-hopper/)
@@ -158,6 +162,8 @@
    用于理解 operator schema、dispatch key、CPU/CUDA/autograd 注册，解决“Python API 到底调用哪个实现”。
 
 7. [Profiling `torch.compile`](https://docs.pytorch.org/docs/main/user_guide/torch_compiler/torch.compiler_profiling_torch_compile.html)、[`torch._logging`](https://docs.pytorch.org/docs/stable/logging) 与 [Troubleshooting](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/torch.compiler_troubleshooting.html)
+
+graph break（计算图中断）表示编译器无法把某段执行继续纳入同一捕获图，程序可能分为多个编译片段与普通执行片段。它会缩小跨操作优化范围，也可能增加提交开销。
 
    用于 graph break、recompile、编译时间和生成 kernel。日志很大，只开启与当前问题相关的类别。
 

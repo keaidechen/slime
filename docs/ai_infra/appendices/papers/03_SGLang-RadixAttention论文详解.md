@@ -35,6 +35,10 @@
 
 </details>
 
+LRU（Least Recently Used，最近最少使用）优先淘汰最长时间未被访问的缓存对象。被活跃请求引用的对象能否淘汰，还需先满足生命周期约束。
+
+FCFS（First Come, First Served，先到先服务）按到达顺序处理请求。规则简单，但长请求可能使后续短请求等待，平均到达率可承载也不代表尾延迟达标。
+
 > **标题缩写与首次术语说明**：SGLang 是项目名，可理解为“面向结构化生成与高性能 LLM serving 的框架”；LLM = **Large Language Model（大语言模型）**；LM = **Language Model（语言模型）**；KV Cache = **Key-Value Cache（键值缓存）**；RAG = **Retrieval-Augmented Generation（检索增强生成）**；JSON = **JavaScript Object Notation（常用结构化数据格式）**；LRU = **Least Recently Used（最近最少使用缓存淘汰策略）**；DFS = **Depth-First Search（深度优先搜索）**；FCFS = **First-Come, First-Served（先到先服务）**；GQA = **Grouped-Query Attention（分组查询注意力）**；MQA = **Multi-Query Attention（多查询注意力）**。本文中的 **runtime** 指运行时系统，**prefix cache** 指复用相同输入前缀已计算出的状态，**cache-aware scheduling（缓存感知调度）** 指调度决策会显式考虑缓存命中与复用价值。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；API = **Application Programming Interface（应用程序编程接口）**；HBM = **High Bandwidth Memory（高带宽内存）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；AI = **Artificial Intelligence（人工智能）**；OS = **Operating System（操作系统）**；JIT = **Just-In-Time（即时编译）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**。 会议缩写：NeurIPS = **Conference on Neural Information Processing Systems（神经信息处理系统大会）**。
 
 > 论文：**SGLang: Efficient Execution of Structured Language Model Programs**

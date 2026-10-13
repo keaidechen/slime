@@ -30,6 +30,8 @@
 
 </details>
 
+FCFS（First Come, First Served，先到先服务）按到达顺序处理请求。规则简单，但长请求可能使后续短请求等待，平均到达率可承载也不代表尾延迟达标。
+
 > **标题缩写与首次术语说明**：KV Cache = **Key-Value Cache（键值缓存）**；LLM = **Large Language Model（大语言模型）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**；HBM = **High Bandwidth Memory（高带宽内存，GPU 主显存）**；OS = **Operating System（操作系统）**；FCFS = **First-Come, First-Served（先到先服务）**；RAM = **Random-Access Memory（随机存取存储器）**。vLLM 是项目名，本文把它理解为“高吞吐 LLM 推理/服务框架”，不对项目名本身生造字母展开。**Virtual Memory（虚拟内存）**用逻辑地址抽象物理内存，**page（页）**是分页管理的基本单位，**fragmentation（内存碎片）**是分配方式造成的不可有效利用空间，**Copy-on-Write（写时复制）**是在真正修改共享数据时才复制，**preemption（抢占）**是在资源不足时暂停或移出部分请求。 另外：GPU = **Graphics Processing Unit（图形处理器）**；CPU = **Central Processing Unit（中央处理器）**；I/O = **Input/Output（输入/输出）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**。
 
 > 论文：**Efficient Memory Management for Large Language Model Serving with PagedAttention**

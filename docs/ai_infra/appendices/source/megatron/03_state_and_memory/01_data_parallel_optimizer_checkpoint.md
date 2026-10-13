@@ -54,6 +54,8 @@ distributed optimizer：
 
 DP=2，逻辑参数/grad 展平后 8 元素。rank0 管 optimizer index `[0:4)`，rank1 管 `[4:8)`：
 
+master weight（主权重）通常是优化器更新使用的较高精度参数副本，计算时再转换为低精度副本。它能累积较小更新，但不能恢复低精度前反向中已丢失的信息。
+
 1. 两 rank backward 得到各自样本的 8 元素 grad；
 2. reduce-scatter 求和后，rank0 的 optimizer view 是前 4，rank1 的 optimizer view 是后 4；完整 grad buffer 通常仍作为通信/累积 backing storage 分配；
 3. 各自更新自己的 FP32 master weight 与 Adam m/v；
@@ -103,6 +105,8 @@ BF16/FP16 训练常同时存在：
 ## 6. checkpoint 必须包含什么
 
 要精确续训通常需要：
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
 
 - model；
 - optimizer master params/moments；

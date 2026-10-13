@@ -67,6 +67,8 @@ Multi-Storage Client（MSC）用 `msc://<profile>/<path>` 统一访问 S3/GCS �
 
 一次可解释的参数更新，需要以下条件同时成立：
 
+MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
+
 1. world size 与 TP/PP/CP/EP/DP 分解一致；
 2. global batch 满足 `MBS × DP × num_microbatches`；
 3. tokenizer special token 与数据索引一致；

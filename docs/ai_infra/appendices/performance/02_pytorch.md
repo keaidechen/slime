@@ -192,6 +192,10 @@ with torch.profiler.profile(
 
 ### 5.1 常见模式
 
+graph break（计算图中断）表示编译器无法把某段执行继续纳入同一捕获图，程序可能分为多个编译片段与普通执行片段。它会缩小跨操作优化范围，也可能增加提交开销。
+
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
 | 时间线模式 | 第一解释假设 | 下一步 |
 |---|---|---|
 | GPU 空洞，CPU 同时在 `aten::item` | `.item()` 引发 host-device 同步 | 搜索同步调用，做移除/降频 A/B |
@@ -342,6 +346,8 @@ python -m memray summary /tmp/memray.bin
 
 ## 10. torch.compile：看 graph break、重编译和生成 kernel
 
+guard（运行条件检查）验证已编译代码所依赖的形状、类型或其他假设。条件不满足时可能重编译或回退，因此动态输入会影响编译缓存命中率。
+
 `torch.compile` 的性能问题常来自编译时间、graph break、shape guard 失败和重复编译。先分开测：
 
 ```text
@@ -445,6 +451,8 @@ print(prof.key_averages(group_by_input_shape=True).table(
 
 
 ### 8. 工具分工
+
+DCGM（Data Center GPU Manager）提供 NVIDIA GPU 的管理与监控能力。采样指标反映特定窗口内的设备状态，不能单独恢复每个请求或训练 step 的执行因果。
 
 | 问题 | 首选 |
 |---|---|

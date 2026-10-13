@@ -26,6 +26,8 @@
 
 </details>
 
+MoE（Mixture of Experts，混合专家）由路由器为每个 token 选择少量专家子网络，只执行被选中的分支。总参数量决定存储，激活专家数决定部分计算，还需计入路由和交换成本。
+
 > **标题缩写与首次术语说明**：vLLM 是高吞吐大语言模型推理/服务框架，项目名不强行字母展开；V1 指 vLLM 的新一代运行时架构；LLM = **Large Language Model（大语言模型）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；API = **Application Programming Interface（应用程序编程接口）**；P/D = **Prefill/Decode（预填充/解码）**；TP = **Tensor Parallelism（张量并行）**；DP = **Data Parallelism（数据并行）**；NCCL = **NVIDIA Collective Communications Library（NVIDIA 集合通信库）**；HBM = **High Bandwidth Memory（高带宽内存）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；MoE = **Mixture of Experts（混合专家模型）**。本文中的 **Engine Core** 是调度和状态管理核心，**worker** 是执行模型计算的工作进程，**Model Runner** 是组织一次模型前向执行的运行组件。 另外：HTTP = **Hypertext Transfer Protocol（超文本传输协议）**；CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；AI = **Artificial Intelligence（人工智能）**；SOSP = **ACM Symposium on Operating Systems Principles（ACM 操作系统原理大会）**。
 
 > 本文基于截至 2026-08 的 vLLM V1 官方架构文档整理，未绑定可复核的源码 commit。“今天”和“现代”均指该整理时点；具体配置与功能支持需要核对所用版本。

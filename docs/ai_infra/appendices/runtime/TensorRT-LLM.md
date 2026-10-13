@@ -24,6 +24,8 @@
 
 </details>
 
+MoE（Mixture of Experts，混合专家）由路由器为每个 token 选择少量专家子网络，只执行被选中的分支。总参数量决定存储，激活专家数决定部分计算，还需计入路由和交换成本。
+
 > **标题缩写与首次术语说明**：TensorRT-LLM 是 NVIDIA 面向大语言模型的高性能推理与 runtime（运行时）技术栈，项目名不强行字母展开；LLM = **Large Language Model（大语言模型）**；API = **Application Programming Interface（应用程序编程接口）**；KV Cache = **Key-Value Cache（键值缓存）**；GPU = **Graphics Processing Unit（图形处理器）**；IFB = **In-Flight Batching（在途批处理，即运行中动态更新 batch）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；MoE = **Mixture of Experts（混合专家模型）**；PP = **Pipeline Parallelism（流水线并行）**；EP = **Expert Parallelism（专家并行）**；HTTP = **Hypertext Transfer Protocol（超文本传输协议）**。本文中的 **scheduler** 是请求调度器，**executor/worker** 是实际组织或执行模型计算的组件，**backend** 是某类算子/执行能力的后端实现。 另外：CUDA = **Compute Unified Device Architecture（NVIDIA GPU 并行计算平台与编程模型）**；FP16/BF16/FP8 分别是 **16 位浮点、bfloat16 与 8 位浮点格式**；INT8/INT4 分别是 **8 位/4 位整数格式**；FP4 = **4-bit Floating Point（4 位浮点格式）**；AI = **Artificial Intelligence（人工智能）**。
 
 > 本文主体是截至 2026-08 的 **TensorRT-LLM runtime 架构学习笔记**；第 13–14 节于 2026-10-12 核对执行后端迁移和功能组合边界。历史组件说明不能直接充当当前部署指南。
@@ -457,6 +459,8 @@ Chunking：
 ## 14. 如何用相同负载比较 TensorRT-LLM 与 vLLM
 
 比较时先固定模型、硬件、精度、输入/输出长度、并发、采样处理与质量门槛，再分别记录：
+
+PD 分离（Prefill–Decode disaggregation）把输入处理与逐步生成放到不同执行资源。它允许分别调度两阶段，但增加 KV 传输、交接等待和资源预留。
 
 | 维度 | 需要核对的证据 |
 |---|---|

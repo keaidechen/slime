@@ -27,6 +27,8 @@
 
 ### 1.2 内容字段
 
+TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
+
 | 字段 | 含义 |
 |---|---|
 | `prompt` / `tokens` | prompt 文本（或 chat 消息列表）/ 完整 token 序列（prompt+response） |

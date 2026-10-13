@@ -106,6 +106,10 @@ CuTe 把 Layout 视为从逻辑坐标到物理索引的映射。它需要同时�
 - Thread 0/1/2…分别持有不同 Row；
 - 多个 Thread 协作持有 Tensor Core 所需 Fragment。
 
+coalescing（合并访存）指同一 warp 的相邻线程访问邻近地址时，硬件用较少内存事务覆盖这些请求。需要同时检查地址、访问宽度和对齐，单看张量形状无法判断。
+
+bank conflict（共享内存 bank 冲突）指一组并行访问落到同一 bank 的不同地址，使访问需要分批完成。它会增加等待；同地址广播等特殊情况不能简单按同 bank 判为冲突。
+
 三者数学 Shape 相同，但 Coalescing、Bank Conflict 和 MMA 接口可能完全不同。
 
 

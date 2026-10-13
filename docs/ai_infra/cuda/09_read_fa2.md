@@ -18,6 +18,10 @@ Flash_fwd_kernel_traits<64, 128, 128, 4, false, false, T>
 
 这与第 6 章“一块一个 query”不同：现在一个 block 同时处理 128 个 query，以便在矩阵乘中共享数据和使用 Tensor Core。
 
+spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部分线程私有值放入 local memory。local 表示线程私有地址空间，底层访问可能经过显存与缓存，因此增加访存成本。
+
+occupancy（驻留率）是一个 SM 上驻留 warp 数与硬件支持的最大驻留 warp 数之比。寄存器、共享内存和线程配置都会限制它；驻留线程可能在等待，所以它不等于有效计算利用率。
+
 将配置映射到硬件，一个 block 的四个 warp 在一个 SM 上协作；当前 `Share_Q_K_smem=false`，三个 FP16 Q/K/V tile 各为 `128*64*2=16 KiB`，合计 48 KiB shared/block。score 和输出 accumulator 由线程的寄存器片段持有，实际寄存器分配与可能的 spill 要查编译报告，不能只由 shared 数量推算 occupancy。
 
 一次循环中，Q/K/V 的 global 访问经过相应缓存与搬运路径到 shared，MMA 所需片段送入矩阵运算路径，Softmax 则进行非矩阵的归约、指数与缩放，最后得到可写回 global 的 O。这让“为什么分块、为什么换布局、为什么要等待”同时对应到 SM 的存储和执行资源。

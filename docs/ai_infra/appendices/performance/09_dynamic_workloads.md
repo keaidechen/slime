@@ -47,6 +47,8 @@ $$padding\ waste=\frac{\sum_e (n'_e-n_e)}{\sum_e n'_e}$$
 
 ## 3. 动态 shape 的 profiler 陷阱
 
+guard（运行条件检查）验证已编译代码所依赖的形状、类型或其他假设。条件不满足时可能重编译或回退，因此动态输入会影响编译缓存命中率。
+
 若把所有 `attention_fwd` 聚合，平均值可能没有意义。应按 `(batch, q_len, kv_len, heads, dtype, causal, layout)` group；对 `torch.compile` 还要记录 graph ID、guard failure 与 compilation time。
 
 长上下文 p99 有时不是 kernel 慢，而是某个新 shape 第一次编译/autotune。将 cold 与 warm 分开报告。
@@ -68,6 +70,8 @@ flowchart TD
 
 ## 5. RL 指标
 
+MFU（Model FLOPs Utilization，模型浮点运算利用率）通常按“模型约定的每步 FLOPs ÷ 步耗时 ÷ 全部设备的对应精度峰值”计算。重计算通常不计入模型有效工作量，比较前必须固定 FLOPs 与峰值口径。
+
 | 层级 | 指标 |
 |---|---|
 | 用户目标 | accepted/rewarded samples per hour、time-to-quality |
@@ -80,6 +84,8 @@ flowchart TD
 KL = Kullback–Leibler divergence（库尔贝克–莱布勒散度）。只提高 rollout tokens/s 可能产生更多无效/截断样本，甚至降低最终 time-to-quality。
 
 ## 6. Colocation 的资源争用
+
+reshard（重新分片）把全局张量映射为新的分片布局；在 FSDP 的局部生命周期中，也可指释放临时完整参数、回到常驻分片。要根据上下文区分拓扑转换与局部释放。
 
 rollout 与 trainer colocate（同卡复用）时，切换可能包含：释放/恢复 KV、权重 reshard、CUDA Graph pool、NCCL communicator 与 allocator cache。观察：
 

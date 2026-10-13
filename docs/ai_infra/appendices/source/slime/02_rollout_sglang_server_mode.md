@@ -76,9 +76,13 @@ def launch_server_process(server_args: ServerArgs) -> multiprocessing.Process:
     p.start()
 ```
 
+IPC（Inter-Process Communication，进程间通信）让地址空间相互隔离的进程交换消息或共享资源。另一个进程的普通指针不能直接当作本进程的可访问地址。
+
 它用 `multiprocessing.Process` 启动了一个**独立的操作系统进程**，运行 sglang 自己的 `launch_server`。真正跑推理的 Scheduler / DetokenizerManager 是**另外的子进程**，进程间用 **ZMQ IPC** 通信，Ray 完全不参与这条链路；sglang 对外暴露的唯一稳定"接口契约"就是 FastAPI 起的这个 HTTP 服务（`/generate`、`/health_generate`、`/update_weights_from_tensor` 等几十个 endpoint，11 篇详解）。所以 `SGLangEngine._make_request` 等方法本质上都是 `requests.post/get(...)`——**不是"不想"直接调引擎，而是"没有别的方式"直接调**：sglang 引擎架构就是"HTTP server 前置于子进程引擎"，Ray actor 无法穿透到它内部的 ZMQ IPC 做函数调用。
 
 **为什么真正的生成请求（海量并发采样）走 HTTP router，而不走 Ray**：
+
+RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码为消息，在另一进程或机器执行并返回结果。调用超时不证明远端没有执行，重试还需检查幂等性。
 
 1. **一个"engine"可能跨多个节点，Ray 看不到内部拓扑**：当 `tp_size` 超过单机 GPU 数时，一个 engine 跨 `nnodes` 个节点，只有 `node_rank == 0` 的进程对外暴露 HTTP 端口，真正的跨 rank 协同（TP/PP all-reduce）发生在 sglang 内部靠 NCCL，Ray 完全介入不了这层；
 2. **负载均衡/容错/PD-disaggregation 路由是重活，没必要在 Ray 里重造轮子**：sgl-model-gateway（Rust 实现）已经提供了 prefix-cache 感知路由、熔断重试、PD bootstrap room 路由等工业级能力（11 篇 §7）；

@@ -19,6 +19,8 @@
 
 TP 与 Megatron 类似切 Linear/attention。decode 每轮工作小，collective latency 比训练更敏感，因此：
 
+ITL（Inter-Token Latency，token 间延迟）是相邻输出 token 的到达时间差；一条回答会有多个 ITL，用于观察流式输出的停顿和抖动。
+
 - 优先让 TP group 落在高速互联域；
 - TP 太大可能让本地 GEMM 太小；
 - batch 增大可摊薄通信，但会提高 ITL；
@@ -111,9 +113,13 @@ bytes ≈ prompt_tokens × layers × 2(K,V)
         × local_kv_heads × head_dim × kv_dtype_bytes
 ```
 
+RDMA（Remote Direct Memory Access，远程直接内存访问）让网络设备对已授权的远端内存执行传输，减少 CPU 中转。内存注册、权限以及远端消费者何时可读取，仍属于协议的一部分。
+
 长 prompt 的 KV 可达 GB 级。需要 RDMA/高速网络并与 prefill 计算 overlap。短 prompt 或低负载下统一部署可能更简单更快。
 
 ## 8. 容量规划
+
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
 
 prefill pool 按 arrival rate、prompt token/s、TTFT SLO 规划；decode pool按活跃序列、output token/s、ITL SLO 和 KV 容量规划。两边扩缩容信号不同，不能只用 GPU utilization。
 

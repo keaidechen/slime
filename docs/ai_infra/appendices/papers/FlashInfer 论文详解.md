@@ -126,6 +126,8 @@ Tile 也不能只用一个配置。Query 长度 4096 时，128-row query tile �
 
 ## 从长尾请求到可以调度的小任务
 
+CTA（Cooperative Thread Array）在 CUDA 中通常指一个 thread block（线程块）；块内线程可共享 shared memory 并使用块级同步，一个块的执行需要同时满足线程与资源限制。
+
 假设四个请求的 KV 长度为 `[100,200,10000,80]`。一个 CTA（Cooperative Thread Array，即 CUDA thread block）处理一个请求时，前三个短任务很快结束，最长任务仍在运行。CTA 被安排在 SM 上执行；任务时长差异会让部分执行资源提前空闲。
 
 将长度 10000 的 KV 拆成五个 2000-token chunk，任务集合变成 `[A,B,C1,C2,C3,C4,C5,D]`，便于平衡工作。原文用如下形式的成本估计讨论调度：
@@ -200,6 +202,8 @@ Plan 根据长度等信息安排 chunk 与 CTA 工作；Run 消费工作区中�
 | vLLM、SGLang、MLC 等服务引擎 | 请求准入、batch、KV 生命周期与前缀缓存 |
 | FlashInfer 一类算子执行库 | Attention 布局、变体特化、GPU 任务安排与执行 |
 | CUDA 等执行环境与 GPU | 实际提交、同步、指令和设备资源 |
+
+DSL（Domain-Specific Language，领域专用语言）针对特定问题提供表达方式，例如描述张量分块和搬运。简化表达并不自动保证生成代码达到硬件最优性能。
 
 引擎可以选择 FlashInfer 作为相关计算后端，二者不是同一层面的替代品。Triton 是编写 GPU kernel 的 DSL，CUDA 提供编程与执行机制；FlashInfer 则组织特定领域的算子、编译与运行时。库内的 GPU 任务调度也不等于服务引擎的请求准入调度。
 

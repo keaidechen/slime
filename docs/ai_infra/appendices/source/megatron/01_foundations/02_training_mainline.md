@@ -7,6 +7,8 @@
 
 `Megatron-LM/pretrain_gpt.py` 最值得先读的不是参数列表，而是传给训练框架的三个函数：
 
+VPP（Virtual Pipeline Parallelism，虚拟流水线并行）让一个物理流水阶段持有多个模型层块，按交错日程执行。它改变调度与通信频率，不增加物理 GPU 数。
+
 - `model_provider(...)`：构建当前 PP/VPP stage 应拥有的模型部分；
 - `train_valid_test_datasets_provider(...)`（约 444 行）：构建数据集；
 - `forward_step(...)`：取 batch、调用 model，返回 output 与延迟执行的 `loss_func`。
@@ -78,6 +80,10 @@ M = global_batch / (micro_batch × DP)
 ```
 
 每次 optimizer update 调用一次 `forward_backward_func`，内部跑 M 个 microbatch。当前快照的 step batch-size schedule 会让 M 随 consumed samples 改变；旧 `rampup_batch_size` 参数已被 calculator 标为 deprecated 并忽略。PP schedule、loss scale、LR scheduler 的 sample increment 都依赖当前 M。
+
+GBS（Global Batch Size，全局批量）是一次逻辑参数更新共同消费的样本数。它与单卡 microbatch、推理时的动态 batch 不同，变长数据还需独立记录有效 token 分母。
+
+MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
 
 例：GBS=512、MBS=2、DP=32，则 M=8。PP=8 时只有 8 个 microbatch，恰好能填满但 bubble 仍明显；若 M=1，绝大多数 stage 会等待。
 

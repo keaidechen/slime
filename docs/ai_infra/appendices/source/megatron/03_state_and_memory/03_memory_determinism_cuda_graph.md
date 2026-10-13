@@ -9,6 +9,10 @@ Activation recompute 用更多计算换少存中间结果；offload 用数据搬
 
 例如 forward 后把 activation 放到 CPU，backward 前必须及时取回；若预取晚到，GPU 会等待。CUDA Graph 则需要满足实际实现对地址、shape 和控制流的约束；新 shape 的编译/capture 与稳态重放要分开统计。
 
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
 | 改动 | 正确性检查 | 性能证据 |
 |---|---|---|
 | recompute | RNG/dropout 与梯度是否符合预期 | 峰值减少量、额外 backward 计算 |
@@ -42,6 +46,8 @@ Optimizer CPU offload 搬运的是 optimizer 更新所需状态与参数，而�
 验收不能只看 graph 成功 capture：比较 eager/graph 的前若干步 loss 与梯度，确认 replay 没有复用过期输入或 RNG 状态，再测 CPU gap 和端到端 step time。
 
 ## 4. 确定性是全栈属性
+
+bitwise 相同（逐位一致）要求同一浮点格式下每个结果的二进制位完全相同；满足数值容差只要求误差足够小，两种验收标准不同。
 
 固定 seed 不等于 bitwise deterministic。还要固定数据顺序、并行布局、microbatch、kernel/通信算法、环境变量、gradient accumulation/reduction 次序与精度。PP 布局改变 LayerNorm 或 loss 所在 stage 时，归约顺序也可能改变。
 

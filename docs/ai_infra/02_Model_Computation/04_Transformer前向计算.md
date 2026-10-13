@@ -35,7 +35,9 @@ Attention 混合不同位置的信息；FFN（Feed-Forward Network，前馈网�
 $$Q\in\mathbb R^{S_q\times d},\quad K\in\mathbb R^{S_k\times d},\quad V\in\mathbb R^{S_k\times d_v},$$
 $$P=\operatorname{softmax}(QK^T/\sqrt d+M),\qquad O=PV.$$
 
-上标 T 表示转置。QKᵀ 的形状为 `[S_q,S_k]`，每个元素比较一个查询和一个键；除以 √d 用于调节分数尺度。Softmax 将每行分数 z 转为非负、和为 1 的权重：$p_j=\exp(z_j)/\sum_k\exp(z_k)$。exp(z) 表示 $e^z$，e≈2.718；先取指数使数值为正，再除以总和。输入分数常称 logits；此处是注意力分数，还不是输出词表的预测分数。O 的每一行是按 P 加权求和的 Value，形状为 `[S_q,d_v]`。
+上标 T 表示转置。QKᵀ 的形状为 `[S_q,S_k]`，每个元素比较一个查询和一个键；除以 √d 用于调节分数尺度。直觉是：若 Q、K 的各分量相互独立、均值为零且方差为 1，那么 d 项乘积之和的方差为 d，标准差为 √d；除以 √d 后可把这个尺度保持在 1 附近，避免仅因向量变宽就让 softmax 过度集中。这是简化的初始化直觉，不是对训练中所有 Q/K 分布的保证。
+
+Softmax 将每行分数 z 转为非负、和为 1 的权重：$p_j=\exp(z_j)/\sum_k\exp(z_k)$。exp(z) 表示 $e^z$，e≈2.718；先取指数使数值为正，再除以总和。输入分数常称 logits；此处是注意力分数，还不是输出词表的预测分数。O 的每一行是按 P 加权求和的 Value，形状为 `[S_q,d_v]`。
 
 M 是 mask（访问限制）。假设训练输入是 `[我,喜欢,猫]`，第一个位置只能看“我”，第二个能看“我、喜欢”。这种 causal（因果）限制防止预测下一个 token 时偷看答案。在加法 mask 公式里，允许项加 0、禁止项加负无穷，使后者的 softmax 权重为 0。短序列补齐到共同长度称为 padding，补齐位置应按规则排除；独立样本合装称为 packing，还需隔离跨样本访问。
 
@@ -93,6 +95,8 @@ Prefill 常有更多矩阵并行工作，decode 常包含较多历史读取；�
 | 0 | A | 第一个回答 token | $\log p(B\mid A)$ |
 | 1 | A、B | 第二个回答 token | $\log p(C\mid A,B)$ |
 | 2 | A、B、C | 后续 token | 没有对应目标，排除 |
+
+BOS（Begin Of Sequence）与 EOS（End Of Sequence）分别是编码规则中的序列起始、结束标记；是否插入以及对应 ID 要由 tokenizer 和模板约定。Logprob 是概率的自然对数，例如 p=0.25 时 logprob≈−1.386；一条序列的条件概率连乘可以在对数域写成各位置 logprob 相加。
 
 这就是预测位置比目标 token 的输入位置早一位的原因。B 出现在输入中，是为了预测 C；B 自己的概率必须从前一个位置取。把 `logits[:,t]` 与 `tokens[:,t]` 直接对应，会让模型在已经看到答案后给答案打分。若训练目标还包含 EOS，则补上该目标，并使用位置 2 的分布预测它。
 

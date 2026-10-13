@@ -103,6 +103,8 @@ decode 每轮 kernel 多而小，Python/CPU launch 开销显著。CUDA Graph 把
 
 sampler 必须处理每请求不同的：
 
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
 - temperature/top-k/top-p/min-p；
 - repetition/frequency/presence penalty；
 - allowed token mask/grammar；
@@ -115,6 +117,8 @@ sampling metadata 的动态性会影响 CUDA graph 与 overlap。DP attention �
 ## 8. kernel 性能判断
 
 不要凭“用了 FlashAttention”断定 attention 已最优。至少看：
+
+occupancy（驻留率）是一个 SM 上驻留 warp 数与硬件支持的最大驻留 warp 数之比。寄存器、共享内存和线程配置都会限制它；驻留线程可能在等待，所以它不等于有效计算利用率。
 
 - prefill/decode 分开；
 - head_dim、GQA ratio、page size；

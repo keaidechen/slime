@@ -81,6 +81,8 @@ async def batched_async_rm(args, samples: list[Sample], **kwargs) -> list[int | 
     return rewards
 ```
 
+RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码为消息，在另一进程或机器执行并返回结果。调用超时不证明远端没有执行，重试还需检查幂等性。
+
 设了全局 `custom_rm_path` 时，**整批** samples 一次性传给自定义函数（契约：签名须是 `async def fn(args, samples: list[Sample]) -> list[float]`）——这是给"需要看到整批样本才能打分"的场景留的接口（比如需要跨样本比较、批量调用外部服务减少 RPC 次数）。否则退化为对每条样本并发调用 `async_rm`。
 
 ### 1.3 `remote_rm`：外部奖励服务

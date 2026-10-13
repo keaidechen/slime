@@ -101,6 +101,10 @@ return out, softmax_lse, S_dmask, rng_state
 
 `flash_attn_gpu` 在 NVIDIA 路径是 `flash_attn_2_cuda` 扩展模块。`fwd` 的第 4 个实参是 `None`，对应可选的预先分配输出；这里让 C++ 分配。末尾 `None` 是保留的旧 generator 参数位置，不能按名字推断仍可传自定义 generator。
 
+LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，其中 m=max(xᵢ)。它把指数归一化的分母放到对数域计算，减最大值可避免大正数的指数溢出。
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
 扩展返回四项：O、逐行 LSE、测试用途的 `S_dmask`、RNG（随机数生成器）状态。`alibi_slopes` 是可选位置偏置的参数，本例为 `None`，无需进入该分支。默认调用不会把四项返回值全交给用户。上层的处理是：
 
 源码摘录：[flash_attn_interface.py，868–878 行](https://github.com/Dao-AILab/flash-attention/blob/e9cf2c1651d2303191eb40a739a3c135fda00999/flash_attn/flash_attn_interface.py#L868-L878)。

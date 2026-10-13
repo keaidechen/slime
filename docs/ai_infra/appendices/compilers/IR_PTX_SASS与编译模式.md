@@ -14,7 +14,7 @@ flowchart TB
     P --> S["SASS<br/>目标 GPU 机器码"]
 ```
 
-ISA = **Instruction Set Architecture（指令集架构）**。
+ISA = **Instruction Set Architecture（指令集架构）**，定义程序可使用的机器指令、操作数及其可观察行为，是代码与处理器之间的执行契约。它与负责加载、提交任务的 Runtime API 属于不同层次。
 
 
 ## PTX 不是 GPU 最终直接执行的代码
@@ -84,7 +84,7 @@ Cache Key 不完整可能错误复用；过于敏感则导致 Cache 爆炸。多
 
 ## MLIR 与 LLVM 的关系
 
-MLIR 不是单一固定 IR，而是构建多层 Dialect（方言）和 Lowering Pass 的基础设施。Triton 可在其中定义 TTIR/TritonGPU 等语义，再逐步 Lower。LLVM IR 更接近通用低层优化和目标代码生成。
+MLIR 不是单一固定 IR，而是构建多层 Dialect（方言）和 Lowering Pass 的基础设施。Dialect 在这里是一组表达某个领域操作与类型的规则；Pass 是一次程序分析或改写，Lowering 是把较高层的操作逐步翻译到较低层表示。例如高层“矩阵乘”可以展开为分块循环，再转换成具体的加载与乘加指令。Triton 可在其中定义 TTIR/TritonGPU 等语义，再逐步 Lower。LLVM IR 更接近通用低层优化和目标代码生成。
 
 不要把路线记成永远固定的：
 

@@ -40,6 +40,8 @@ $$
 Z_r=XW_r^T,\qquad Z_r\in\mathbb{R}^{T\times V/p}
 $$
 
+这里的 cross entropy（交叉熵）衡量预测分布对目标分布的匹配程度：$H(q,p)=-\sum_i q_i\log p_i$。单个正确 token 的目标分布 q 为 one-hot（目标位置为 1，其余为 0）时，它就是 $-\log p_{target}$。后文的 entropy（熵）则是 $H(p)=-\sum_i p_i\log p_i$，衡量预测分布自身的不确定性；两者的求和权重不同。
+
 朴素做法 AllGather 完整 logits，会产生巨量 activation。Megatron 的 vocab-parallel cross entropy 直接在 sharded logits 上计算准确 softmax loss。
 
 ## 不 Gather 完整 Logits 如何算 Cross Entropy

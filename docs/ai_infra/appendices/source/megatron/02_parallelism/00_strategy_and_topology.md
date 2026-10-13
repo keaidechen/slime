@@ -5,6 +5,10 @@
 
 ## 1. 每个维度解决不同约束
 
+CP（Context Parallelism，上下文并行）把同一序列的位置拆给多个参与者。每个查询仍需按 Attention 规则获得其他分片的信息，因此必须交换 K/V 或等价状态，并正确合并归一化。
+
+ETP（Expert Tensor Parallelism，专家张量并行）把同一个专家的矩阵拆给多个参与者；它与把不同专家分给不同设备的 EP 是两个切分维度。
+
 | 维度 | 切分对象 | 典型通信 | 首要目标 |
 |---|---|---|---|
 | DP | batch | gradient AR 或 RS/AG | 扩吞吐 |
@@ -21,6 +25,8 @@
 DP 是 dense/attention 网格中的剩余副本维度，但不能机械套用一个乘法式。当前实现分别建立包含 CP 的 decoder grid 和包含 EP 的 expert grid；EP 会改变 expert DP 的解释，而不是在同一 world size 外再乘一次。真实分组以 `megatron/core/parallel_state.py` 和 `RankGenerator` 为准，公式推导见[源码问题详解第 1 节](<../06_reference/03_source_questions.md>)。
 
 ## 2. 选择顺序
+
+EDP（Expert Data Parallelism，专家数据并行）表示同一专家参数分片的多个数据副本，需合并各副本处理不同样本得到的梯度。它不能替代专家矩阵内部的 ETP 合并。
 
 1. 先用 DP，直到单副本放不下或 batch 已受约束。
 2. TP 优先放在 NVLink/NVSwitch 域内，因为每层都可能通信。

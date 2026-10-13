@@ -5,6 +5,12 @@
 
 ## 入门例子：把新架构翻译为状态、算子和通信
 
+MoE（Mixture of Experts，混合专家）由路由器为每个 token 选择少量专家子网络，只执行被选中的分支。总参数量决定存储，激活专家数决定部分计算，还需计入路由和交换成本。
+
+MLA（Multi-head Latent Attention，多头潜在注意力）用压缩的历史表示及相关投影组织多头注意力，以减少 KV 状态；缓存容量、展开计算与位置编码必须按具体结构核算。
+
+MTP（Multi-Token Prediction，多 token 预测）在训练中增加对后续多个位置的预测目标或模块。它改变训练计算与状态；是否用于推理草稿生成，是另一个实现选择。
+
 MoE 增加 router、token dispatch/combine 与不规则 expert GEMM；MLA 改变 attention 的投影和缓存表达；MTP 增加额外预测计算及其训练/推理使用方式。理解模型名之后，必须分别追这三类工程变化。
 
 例如 MoE 的 router replay 可以固定某些路由决策用于对齐，但不等于消除所有数值或采样差异。MLA 的缓存优势也取决于实际 backend 保存了什么，而不能仅从论文参数量推断进程显存。

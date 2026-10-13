@@ -15,9 +15,13 @@
 
 ## 1. Benchmark 先描述 workload
 
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
+
 至少记录模型/精度、硬件/互联、SGLang commit、并行配置、输入/输出长度分布、并发或到达过程、cache 命中率、streaming 和 SLO。缺少这些条件的 tokens/s 无法复现。
 
 性能指标同时报告：
+
+goodput（有效吞吐）只计入同时满足约定质量、延迟和成功条件的产出，再除以时间。提高总吞吐却增加超时，未必提高 goodput。
 
 - TTFT、ITL/TPOT、E2E 的 p50/p95/p99；
 - request/s、input/output/total token/s；

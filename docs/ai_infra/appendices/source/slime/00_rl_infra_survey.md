@@ -51,6 +51,10 @@ RL post-training（RLHF / RLVR / Agentic RL）是"数据由模型自己产生"�
 
 ### 1.3 RL infra 的十大工程问题
 
+PPO（Proximal Policy Optimization，近端策略优化）比较当前与旧策略对同一动作的概率比，并通过裁剪目标等方式抑制某些过大的更新收益；裁剪不是对最终参数距离的硬保证。
+
+GRPO（Group Relative Policy Optimization，组相对策略优化）用同一任务多条候选的奖励比较构造优势，通常不依赖独立价值模型。组定义、标准差、概率比与损失归约仍需具体说明。
+
 | # | 问题 | 一句话描述 |
 |---|---|---|
 | 1 | 编排（orchestration） | 训练进程、推理进程、数据进程如何组织与通信（Ray / 单控制器 / 服务化） |
@@ -141,6 +145,8 @@ server 模式下的关键组件：
 AReaL 的解耦生成、Magistral 的权重切换与 LlamaRL 的 GPU 直连同步从不同层面缩短等待；吞吐结论应回到各自论文的模型、资源和质量约束。
 
 ### 2.6 RL 算法 → 走读文档 05
+
+GAE（Generalized Advantage Estimation，广义优势估计）把多步时序差分残差按 (γλ) 的幂加权合并，用来估计动作相对价值基线的优势。终止与时间截断会决定是否继续递推和 bootstrap。
 
 - **PPO**：actor-critic，GAE 估计 advantage，clip 目标 + KL 惩罚。RLHF 经典配方（InstructGPT）。
 - **GRPO**（DeepSeekMath）：去掉 critic，同一 prompt 采样一组（group）回答，组内 reward 归一化当 advantage。省一个 value model 的显存与训练成本，是当前开源 RLVR 的主流。

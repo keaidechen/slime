@@ -123,6 +123,8 @@ def train(args):
 
 **举例**：假设 `rollout_batch_size=128`、`n_samples_per_prompt=8`，那么第 1 步会采集 128 个 prompt × 8 = 1024 条回答（GRPO 的 128 个"group"）；第 3 步训练把这 1024 条按 DP 切分喂给 Megatron 做若干 micro-batch 更新；第 6 步把更新后的几百 GB 权重推给所有 SGLang server。
 
+GAE（Generalized Advantage Estimation，广义优势估计）把多步时序差分残差按 (γλ) 的幂加权合并，用来估计动作相对价值基线的优势。终止与时间截断会决定是否继续递推和 bootstrap。
+
 **PPO（有 critic）时的细节**（train.py:61-67）：先让 critic 训 value model，拿到 `value_refs`（critic 对这批样本的估值），再以 `external_data=value_refs` 传给 actor 训练——actor 算 GAE 需要 critic 的 values。前 `num_critic_only_steps` 步只训 critic（预热 value model）。
 
 ---

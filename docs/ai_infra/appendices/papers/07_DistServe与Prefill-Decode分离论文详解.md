@@ -27,6 +27,10 @@
 
 </details>
 
+ITL（Inter-Token Latency，token 间延迟）是相邻输出 token 的到达时间差；一条回答会有多个 ITL，用于观察流式输出的停顿和抖动。
+
+RDMA（Remote Direct Memory Access，远程直接内存访问）让网络设备对已授权的远端内存执行传输，减少 CPU 中转。内存注册、权限以及远端消费者何时可读取，仍属于协议的一部分。
+
 > **标题缩写与首次术语说明**：LLM = **Large Language Model（大语言模型）**；GPU = **Graphics Processing Unit（图形处理器）**；OSDI = **USENIX Symposium on Operating Systems Design and Implementation（USENIX 操作系统设计与实现大会）**；P/D 或 PD = **Prefill/Decode（预填充/解码）**；TTFT = **Time To First Token（首 Token 延迟）**；TPOT = **Time Per Output Token（平均每个输出 Token 的耗时）**；ITL = **Inter-Token Latency（相邻输出 Token 延迟）**；TBT = **Time Between Tokens（相邻 Token 时间间隔）**；SLO = **Service Level Objective（服务等级目标）**；P2P = **Peer-to-Peer（点到点通信）**；RDMA = **Remote Direct Memory Access（远程直接内存访问）**；NIXL = **NVIDIA Inference Xfer Library（NVIDIA 推理数据传输库，Xfer 即 transfer）**。**goodput（有效吞吐量）**只统计满足 SLO 的请求吞吐；**disaggregation（解耦/分离部署）**指把 Prefill 与 Decode 放到不同资源池。 另外：KV Cache = **Key-Value Cache（键值缓存）**；GEMM = **General Matrix-Matrix Multiplication（通用矩阵-矩阵乘法）**；HBM = **High Bandwidth Memory（高带宽内存）**；AI = **Artificial Intelligence（人工智能）**。
 
 > 论文：Yinmin Zhong et al., **DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving**，OSDI 2024。

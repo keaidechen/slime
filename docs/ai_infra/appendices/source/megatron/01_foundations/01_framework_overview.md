@@ -5,6 +5,8 @@
 
 ## 1. 先建立正确边界
 
+DDP（DistributedDataParallel，分布式数据并行）让各数据并行参与者持有模型副本，处理不同数据并同步梯度。全局目标的平均分母与框架的梯度缩放规则必须配合。
+
 Megatron 不是一个“把模型包进 DDP”的脚本，而是四层系统：
 
 ```text
@@ -19,6 +21,10 @@ pretrain_gpt.py / examples
 ## 2. 必须掌握的知识点
 
 ### A. 分布式与硬件基础
+
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
+Roofline 用算术强度 I=F/Q 连接计算与数据搬运：可达到的计算速率上界为 min(P_peak, BW×I)。F 是 FLOPs，Q 是选定存储层级的传输字节数，BW 是该层带宽，峰值要匹配计算精度。
 
 - CUDA stream/event、异步 kernel launch、pinned memory；
 - NCCL 的 all-reduce、reduce-scatter、all-gather、all-to-all、send/recv；

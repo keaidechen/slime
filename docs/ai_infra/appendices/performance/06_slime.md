@@ -129,6 +129,8 @@ wait_time_ratio 高
 
 `--load-debug-rollout-data` 会跳过 SGLang 初始化。现在每次实验输入相同，可以公平比较 TP/PP/CP、micro-batch、activation checkpoint、kernel backend 等训练变量。
 
+KL 散度（Kullback–Leibler divergence）按 D_KL(p∥q)=∑pᵢlog(pᵢ/qᵢ) 衡量分布差异。它一般不对称；某个已采样 token 的 logprob 差也不等于完整分布的精确 KL。
+
 先验证 loss、KL、grad norm 和有效 token 数与基线一致，再比较性能。固定数据并不代表可以跳过正确性检查。
 
 完整参数语义见 [Debug 指南](<../../../zh/developer_guide/debug.md>)。
@@ -341,6 +343,8 @@ nsys profile \
 ## 10. 角色资源怎样决定系统平衡
 
 固定总 GPU 数时，更多训练卡意味着更少 rollout 卡，反之亦然。独立角色池的稳态产出受较慢阶段和交接边界限制；共置还增加显存切换与资源争用。让每张卡都忙并非充分条件，关键是减少限制下一轮有效工作的等待。
+
+TFLOP/s（也常写 TFLOPS）表示每秒 10¹² 次浮点运算；TFLOP 则是 10¹² 次运算总数。速率和工作量不能直接互换，峰值还必须注明精度与是否使用稀疏条件。
 
 相同样本与 token 分布下，端到端有效 token/s 或 samples/hour、rollout/train/update 时间、wait ratio、GPU 占用与显存余量说明资源取舍；reward、KL 和有效 token 则检查优化是否改变任务。actor TFLOPS 上升而整轮更慢，是局部与全局目标不一致的直接反例。
 

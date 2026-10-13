@@ -31,6 +31,8 @@ greedy 下，draft token 等于 target argmax 就接受，直观简单。
 accept probability = min(1, p(x) / q(x))
 ```
 
+MTP（Multi-Token Prediction，多 token 预测）在训练中增加对后续多个位置的预测目标或模块。它改变训练计算与状态；是否用于推理草稿生成，是另一个实现选择。
+
 拒绝后从校正分布（与 `max(p-q,0)` 相关）采样。不同 EAGLE/MTP/tree verification 实现细节不同，但验收底线是输出分布与非 speculative target 等价或满足明确近似。
 
 ## 3. 树形验证与 KV
@@ -94,6 +96,8 @@ JSON schema、regex、EBNF 等被编译成 FSM/grammar state。每步：
 树形 speculative 下，每个 candidate branch 有自己的 grammar state；可提前剪枝非法候选，但必须与最终接受路径状态一致。
 
 ## 8. sampling 的可复现性
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
 
 动态 batching 会改变请求在 batch 中的位置与 kernel 执行形态。若 RNG 只按 batch slot 推进，其他请求到达/结束会改变某请求输出。更稳健的设计按 request 维护 seed/offset 或 counter-based RNG。
 

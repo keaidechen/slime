@@ -17,6 +17,8 @@
 - decode：通常每请求每轮处理一个新 token；
 - chunked prefill：长 prompt 分成多轮 extend，避免独占 GPU/延迟尖峰。
 
+TTFT（Time To First Token，首 token 延迟）从约定的请求起点计到首个输出 token，通常包含排队、输入处理和 Prefill。客户端与服务端的起点可能不同，报告时应明确。
+
 prefill 的大 GEMM 算术强度高；decode 的 batch×1 GEMM 和 KV 读取更依赖带宽/launch latency。混在同一 batch 的策略决定 TTFT 与 ITL 的权衡。
 
 ## 3. 正常 scheduler loop
@@ -105,6 +107,8 @@ finish 顺序很重要：先确定哪些 KV 可纳入 prefix cache，再释放 r
 - 减少本轮 prefill；
 - retract/preempt 部分 running request，使其之后重算；
 - 拒绝超长请求。
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
 
 retract 不是“暂停 GPU kernel”，而是释放其部分资源并把请求放回可恢复状态。需要保证 output token、已缓存前缀、sampling RNG 与 grammar 状态可重建，否则会产生不一致输出。
 

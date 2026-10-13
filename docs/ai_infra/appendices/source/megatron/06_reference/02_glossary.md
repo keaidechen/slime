@@ -22,6 +22,6 @@
 | TE | NVIDIA Transformer Engine | 提供 kernel/FP8 等实现，不负责完整训练循环 |
 | recompute | backward 前重算 activation | 与把 activation 搬到 CPU 的 offload 不同 |
 | CUDA Graph | 捕获并 replay 稳定 CUDA 工作图 | 不自动优化 GPU kernel 本身 |
-| MLA | Multi-Latent Attention | 与 MoE/MTP 是不同架构维度 |
+| MLA | Multi-head Latent Attention，多头潜在注意力，用联合压缩的历史表示组织 K/V | 与 MoE/MTP 是不同架构维度 |
 | MTP | Multi-Token Prediction | 训练目标/额外模块，不是推理 speculative decoding 本身 |
 | critical path | 决定 step 完成时间的暴露路径 | profiler 中累计耗时最大者未必在关键路径 |

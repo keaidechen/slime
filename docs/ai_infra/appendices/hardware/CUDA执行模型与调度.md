@@ -147,6 +147,8 @@ cycle 3: Warp D 发出 Shared Memory Load
 ...
 ```
 
+FMA（fused multiply-add，融合乘加）按乘积与加数合并后只舍入一次的语义计算 ab+c；分别执行乘法和加法会先舍入乘积，因此结果可能不同。
+
 FMA = **Fused Multiply-Add（融合乘加）**。这种做法隐藏的是 Latency（单次操作延迟），并不会突破 Bandwidth（单位时间最大传输量）。如果所有 Warp 都在持续读取 HBM，最终仍会达到内存带宽上限。
 
 
@@ -192,6 +194,8 @@ MMA = **Matrix Multiply-Accumulate（矩阵乘累加）**。这也是为什么�
 ## 四种配置变化分别改变了什么
 
 Block size 从 64、128、256 到 512，改变的是每块线程数和资源分配颗粒度。它可能影响同驻 block 数、活跃 warp、尾块浪费和同步成本，因此时间与 occupancy 不会必然同向变化。
+
+spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部分线程私有值放入 local memory。local 表示线程私有地址空间，底层访问可能经过显存与缓存，因此增加访存成本。
 
 更多局部数组和中间变量可能提高 register usage；寄存器不足时的 spill 又引入 local-memory 流量。两个独立 stream 只表达可并发性，若一个 kernel 已耗尽资源，另一个仍然可能等待。Warp 内分支一致与不一致则改变有效 lane 和执行路径，不能用线程数量直接推导有效计算量。
 

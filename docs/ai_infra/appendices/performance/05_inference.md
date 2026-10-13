@@ -351,6 +351,8 @@ model weights
 - 在不同长度、并发和 cache 场景是否稳定；
 - 冷启动与稳态分开。
 
+SLO（Service Level Objective，服务等级目标）是服务承诺的可量化目标，例如“至少 99% 的请求首 token 延迟小于 1 秒”；阈值、统计窗口、失败请求和分母都属于定义。
+
 不要只报告优化最有利的单点。至少展示低并发延迟点、SLO 附近点和吞吐饱和点。
 
 
@@ -399,6 +401,8 @@ TTFT 突增可能是长 prompt，也可能是 queue 或 chunked prefill 调度�
 ### 6. Continuous batching 的权衡
 
 更大 running batch 通常提高 decode GEMM 效率和总吞吐，但会：
+
+head-of-line blocking（队首阻塞）指前面一个未就绪或很慢的任务，使后面本可执行的任务也不得不等待。按成本分桶或重排能缓解等待，但要同时保持样本与目标语义。
 
 - 增加每轮 decode duration，推高 ITL；
 - 占用更多 KV blocks；

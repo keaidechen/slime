@@ -265,6 +265,8 @@ LoRA 不替换整个 base model，而是在共享模型上管理多个 adapter�
 
 ### 9.1 `LoRARef` 为什么需要独立 `lora_id`
 
+这里 `LoRARef.pinned` 表示适配器的保留策略：自动选择 LRU 淘汰对象时会排除被 pinned 的 adapter。它与用于 DMA 的 pinned host memory（页锁定主机内存）是不同层次的“固定”；前者约束缓存淘汰，后者约束主机物理页。具体筛选见[本地 `LoRARegistry.lru_lora_name`](<../../../../../../sglang/python/sglang/srt/lora/lora_registry.py>)，下文 9.5 节说明容量已满时的行为。
+
 `LoRARef` 包含 name、path、pinned 和唯一 ID。动态加载默认生成新 UUID；启动参数中的 adapter 可由 name/path 生成跨节点稳定 ID。
 
 ID 的意义是：即使复用相同 name/path，新旧 adapter incarnation 仍可区分，并可进入 radix/cache namespace。只用可复用的 adapter name 做 cache key 容易命中新旧权重混合的前缀。
@@ -272,6 +274,8 @@ ID 的意义是：即使复用相同 name/path，新旧 adapter incarnation 仍�
 ### 9.2 请求如何取得和释放 LoRA 所有权
 
 `LoRARegistry.acquire(name)`：
+
+LRU（Least Recently Used，最近最少使用）优先淘汰最长时间未被访问的缓存对象。被活跃请求引用的对象能否淘汰，还需先满足生命周期约束。
 
 1. 在 registry lock 下查找 adapter，并更新 LRU 顺序；
 2. 得到 `lora_id`；

@@ -5,6 +5,8 @@
 
 Benchmark = **基准测试**。一次 Kernel Benchmark 至少回答：
 
+autotune（自动调优）实际试运行多个候选分块或执行配置，再为指定形状选择较快的一种。搜索本身有成本，其结果受形状、硬件和测量条件影响。
+
 - 测的是单 Kernel、一个 Operator，还是端到端 Iteration？
 - 是否包含数据准备、编译、Autotune、通信和同步？
 - 输入 Shape/Dtype/Layout 是否与生产一致？
@@ -102,6 +104,8 @@ flowchart TB
 4. 看 Tensor Core/SM Pipeline 利用率；
 5. 改变计算量或数据量做对照实验。
 
+FMA（fused multiply-add，融合乘加）按乘积与加数合并后只舍入一次的语义计算 ab+c；分别执行乘法和加法会先舍入乘积，因此结果可能不同。
+
 例如将同一输入重复做 10 次 FMA 而不增加 HBM Load：如果时间接近不变，原实现大概率受内存限制；如果近似线性增长，则计算逐渐成为主导。
 
 
@@ -181,6 +185,8 @@ MHA = **Multi-Head Attention（多头注意力）**；GQA = **Grouped-Query Atte
 ## 从现象连接到根因
 
 问题出现的范围与首个版本，限定回退发生在哪里。GPU、driver、CUDA、框架、编译器和 DSL 决定可用实现，shape/dtype/layout 决定实际选择。端到端时间线、operator 分解、kernel 指标和编译图分别说明不同层次的成本。
+
+spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部分线程私有值放入 local memory。local 表示线程私有地址空间，底层访问可能经过显存与缓存，因此增加访存成本。
 
 若融合减少了 launch，却提高寄存器压力并产生 spill，就可能出现 kernel 数量更少、总时间更长的结果。这个反例说明改动需要有可反驳预测，证据还要覆盖正确性、适用输入和端到端收益。回归指标记录的是这些边界，而不是某个孤立的最快数字。
 

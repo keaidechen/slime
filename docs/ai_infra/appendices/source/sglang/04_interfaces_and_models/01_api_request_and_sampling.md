@@ -265,6 +265,10 @@ flowchart TD
 - PyTorch fallback 使用自身的 top-k/top-p/min-p 实现；
 - Ascend 有独立的 logits sampling 路径。
 
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
+bitwise 相同（逐位一致）要求同一浮点格式下每个结果的二进制位完全相同；满足数值容差只要求误差足够小，两种验收标准不同。
+
 数学意图相近不意味着所有 backend 在浮点边界、RNG 和过滤顺序上 bitwise 相同。跨硬件或 backend 做可复现比较时，应比较 token IDs、最终规范化参数和 backend 配置，而不是只比较请求 JSON。
 
 ### 6.3 seed 能否保证全局完全复现

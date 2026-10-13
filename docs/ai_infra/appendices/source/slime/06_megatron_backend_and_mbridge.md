@@ -24,6 +24,8 @@
 
 ### 1.1 深入拆解：`TensorBackuper` ——用"pinned CPU 影子权重"模拟多个模型，而不是真的多份 GPU 权重
 
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
 如果给 actor/ref/old_actor 各开一份独立的 GPU 权重，显存直接翻 3 倍——colocate 场景下这是不可接受的。slime 的解法在 `slime/utils/tensor_backper.py`：**永远只有一份"活跃"的 GPU 权重，其余 tag 的权重被搬到 pinned CPU 内存里当"备份"，切换时整段拷回 GPU 覆盖当前权重**。
 
 ```python
@@ -39,6 +41,8 @@ class _TensorBackuperNormal(TensorBackuper):
             param.copy_(backup_dict[name], non_blocking=True)                           # 异步 H2D
         torch.cuda.synchronize()
 ```
+
+DMA（Direct Memory Access，直接内存访问）让设备在 CPU 配置任务后自行搬运数据，减少 CPU 逐字节复制的工作；数据依赖和完成同步仍需显式管理。
 
 **`pin_memory=True` 是关键**：普通 CPU 内存（page-able memory）做 D2H/H2D 拷贝时 CUDA 驱动要先把数据搬到一段临时的锁页缓冲区再传输，pinned memory 直接跳过这一步，DMA 带宽能跑满——对一个几十 GB 的模型来说，这个选择直接决定了 `_switch_model` 是"零点几秒"还是"好几秒"的量级差异。
 
@@ -128,6 +132,8 @@ AutoConfig.model_type
   -> shard_mcore_tensor 按 Megatron 参数属性切 TP/ETP shard
   -> copy_ 到当前 rank 的 parameter/buffer
 ```
+
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
 
 `SafetensorReader.get_tensor` 的 `lru_cache(maxsize=1)` 缓存的是最近一次按名称返回的 **tensor 结果**，不是 shard handle。访问过的 `safe_open` 对象会保存在 `self._files` 中，以便同一 shard 后续复用；它依靠 safetensors 的 mmap/lazy read 避免一次性把所有 shard 内容读入内存，但当前实现并不把“已打开文件数”限制为 1。FP8 checkpoint 如果带 `<name>_scale_inv`，读取时会按 128×128 block 反量化为 BF16。词表 embedding/output layer 会按 `padded_vocab_size` 补齐。HF checkpoint 不包含 Megatron optimizer、RNG 和训练迭代状态，所以 loader 返回 iteration 0，参数校验阶段也会设置 `no_load_optim/no_load_rng/finetune`。
 

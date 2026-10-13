@@ -126,6 +126,8 @@ def get_grpo_returns(rewards, kl):
 
 **数值例子**：prompt "1+1=?" 采 8 条，reward = [1,1,1,0,1,0,1,1]。GRPO 的"组内归一化"发生在 reward 计算侧（rollout 端对组内 reward 减均值除标准差，见 `--advantage-estimator` 相关 RM 后处理），这里拿到的 rewards 已是相对值；`kl_coef=0` 时 advantage 就是常数广播——好回答的每个 token 都被同等鼓励。**这就是 GRPO 省掉 critic 的本质：用组内统计量替代 value 网络。**
 
+GAE（Generalized Advantage Estimation，广义优势估计）把多步时序差分残差按 (γλ) 的幂加权合并，用来估计动作相对价值基线的优势。终止与时间截断会决定是否继续递推和 bootstrap。
+
 **PPO（GAE）**：critic 给每个 token 估值，`vanilla_gae/chunked_gae`（ppo_utils.py:579/603）按 $ \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t) $、$ A_t = \sum_l (\gamma\lambda)^l \delta_{t+l} $ 递推；reward 被加在最后一个 token 的 KL 惩罚项上（loss.py:727-738）。
 
 **REINFORCE++**：token 级 reward = `-kl_coef * kl`，序列 reward 加在最后一个有效 token（`last_idx`，ppo_utils.py:418-419），再按 $ G_t = r_t + \gamma G_{t+1} $ 倒推（421-426）；`reinforce_plus_plus_baseline` 则是 `(reward - 组基线)` 直接广播（441-468）。
@@ -195,6 +197,8 @@ MiniMax-M1 的做法：比率 clamp 后 **stop-gradient** 当权重，梯度从 
 ## 5. TIS：训推数值不一致的修正
 
 推理精度、kernel、采样处理和权重陈旧度都可能使 rollout 评分与训练评分不同。下列代码对记录的评分比率做截断加权；它是否对应严格的行为重要性比率，要核对两个字段的概率语义及支持集合，不能只凭“同参数”或字段名判断。通用定义与适用条件见[四份概率与行为校正](<../../../06_Post_Training/27_权重发布异步与资源调度.md#s2>)。
+
+TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
 
 本篇代码块保留走读时的行号。2026-10-12 核对当前工作区：`policy_loss_function` 为 TIS 优先取缓存 `batch["log_probs"]`，缺失时取当前评分的 detached 值；PPO 分母还受 `use_rollout_logprobs` 控制。因此当前 detached 评分不应被一律称作冻结 old。请按符号追踪调用链，区分快照说明与当前路径。
 

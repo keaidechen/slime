@@ -29,6 +29,8 @@ compute-sanitizer --tool synccheck /tmp/slime_cuda_basics
 
 ## 3.2 怎样计时才有意义
 
+H2D（Host-to-Device）是从主机内存向设备内存传输，D2H 是反向传输。提交复制的 CPU 调用返回，与设备已完成复制，是两个不同事件。
+
 示例在输入拷贝完成、正确性检查通过后，预热 10 次，再用同一默认 stream 的 CUDA Events 包住 100 次加法启动；等待 stop event 后读取总毫秒数并除以 100。分配、H2D/D2H 拷贝和 CPU 对照都不在计时范围内。
 
 这是设备时间线上的批量执行间隔：若 CPU 提交不够快，间隔中也可能包含 GPU 等待提交的空隙。因此不要将它解释成纯指令执行周期。短 kernel 应多次独立测量，记录波动；也不要在被 profiler 或 Sanitizer 干扰的运行中取最终基准。
@@ -51,6 +53,8 @@ ncu --set basic --kernel-name regex:matmul_tiled --launch-count 1 /tmp/slime_cud
 
 ## 3.4 最值得先掌握的性能判断
 
+pinned memory（页锁定主机内存）在注册期间保持物理页稳定，可供某些异步 DMA 路径使用。它消耗主机资源，是否真正与计算重叠还取决于设备、stream 依赖和缓冲区生命周期。
+
 | 观察或假设 | 可尝试的改变 | 必须核对的代价 |
 |---|---|---|
 | 访存地址离散 | 调整线程与连续维度的映射 | 布局变换本身是否更贵 |
@@ -58,6 +62,8 @@ ncu --set basic --kernel-name regex:matmul_tiled --launch-count 1 /tmp/slime_cud
 | 大量很短的 kernel | 合适的算子融合；固定流程考虑 CUDA Graph | 数值行为、额外驻留状态与图的约束 |
 | H2D 拷贝可与计算重叠 | pinned host memory、异步拷贝与多个 stream | 数据依赖、缓冲区生命周期、硬件并发能力 |
 | block 太少 | 增加独立工作量或重新分块 | 是否增加冗余计算与合并成本 |
+
+spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部分线程私有值放入 local memory。local 表示线程私有地址空间，底层访问可能经过显存与缓存，因此增加访存成本。
 
 occupancy 指驻留活跃 warp 数相对上限的比例。更多 warp 有时有助于隐藏延迟，但过度减少寄存器会引发 spill；最大 occupancy 不是性能目标。stream 多也不保证加速：同一 GPU 上计算、带宽和容量仍然共享。
 

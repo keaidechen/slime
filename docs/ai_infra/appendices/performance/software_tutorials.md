@@ -48,6 +48,8 @@ Trace 可能包含源码路径、kernel 名、主机名、进程参数、prompt 
 
 ## 2. 工具依赖对应不同观测层
 
+DCGM（Data Center GPU Manager）提供 NVIDIA GPU 的管理与监控能力。采样指标反映特定窗口内的设备状态，不能单独恢复每个请求或训练 step 的执行因果。
+
 Python/PyTorch 与驱动定义模型运行环境，`nvidia-smi` 提供设备遥测。Nsight Systems 增加系统时间线，Nsight Compute 增加 kernel 计数器；缺少后者不妨碍前者解释等待。TensorBoard 与 Perfetto 面向不同记录格式，py-spy 和 Memray 分别面向 CPU 栈与主机分配，DCGM 面向持续 GPU 遥测。
 
 `--version` 或包版本说明的是工具身份，工具可用还取决于 target 架构、容器设备映射、CUPTI 和 counter/ptrace 权限。驱动、DCGM host engine 与系统服务属于运行环境的一部分，不能从 Python 包导入成功推断它们都可用。
@@ -390,6 +392,8 @@ python -m memray tree allocations.bin
 打开生成的 HTML。默认 flame/icicle 图中，框宽表示在所选峰值存活的分配量，不表示函数执行时间，也不直接代表调用次数。
 
 ### 11.2 什么时候用它
+
+RSS（Resident Set Size，常驻集大小）表示进程当前驻留在物理内存中的页所占空间。它与虚拟地址空间大小不同，共享页和多个进程的加总口径也要注明。
 
 - Python worker RSS 持续增长；
 - tokenizer、dataset、request object 或序列化对象泄漏；

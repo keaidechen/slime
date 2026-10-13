@@ -103,4 +103,6 @@ a_new = alpha*a + sum_j(p[j]*V[j])
 
 CPU 脚本已包含分块尺寸/顺序组合验证。GPU 示例包含 Nk=129/257 的尾块、dv=17/128、等长 causal 和全 mask 行；还单列了最后一块最大值突然增大的例子：前 128 个 score 为 0、V 为 1，最后一个 score 为 ln(128)、V 为 3，正确输出为 2，以检查 GPU 代码是否同时缩放旧分子与分母。编译和 Sanitizer 命令见第 4 章。
 
+LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，其中 m=max(xᵢ)。它把指数归一化的分母放到对数域计算，减最大值可避免大正数的指数溢出。
+
 在线状态更新始终围绕最大值、分母和加权分子三个量展开。接下来的 Tensor Core、CuTe 和流水改变执行方式；阅读时始终保留这三个状态作为算法对照。更多数学及 LSE 推导见 [在线 Softmax 导读](<../appendices/source/flash_attention/01_algorithm_and_online_softmax.md>)，它也说明真实代码的 `exp2`、scale 与延迟分母归约。

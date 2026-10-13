@@ -25,6 +25,8 @@
 
 这些系统都试图降低高性能 Kernel 的开发成本，但它们把多少决定权交给编译器并不相同。
 
+DSL（Domain-Specific Language，领域专用语言）针对特定问题提供表达方式，例如描述张量分块和搬运。简化表达并不自动保证生成代码达到硬件最优性能。
+
 | 工具 | 主要输入抽象 | 编译基础 | 控制粒度 | 典型优势 |
 |---|---|---|---|---|
 | Triton | Block Tensor / Program Instance | MLIR、LLVM 及目标后端 | 中等 | 简洁、PyTorch 生态强、适合融合 Kernel |
@@ -149,6 +151,8 @@ flowchart LR
 ## Helion：再提高一层
 
 Helion 允许开发者使用接近 PyTorch 的运算和 Tile Loop 描述 Kernel，编译器与 Autotuner 决定 Block Size、Loop Order、Stage、Warp Specialization 等配置。
+
+autotune（自动调优）实际试运行多个候选分块或执行配置，再为指定形状选择较快的一种。搜索本身有成本，其结果受形状、硬件和测量条件影响。
 
 2026 年 PyTorch Foundation 的更新显示，Helion 正在扩展 CuTe DSL 和 TPU Pallas Backend，并探索 LLM-guided Autotuning。它代表另一种路线：
 

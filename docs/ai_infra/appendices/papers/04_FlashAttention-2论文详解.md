@@ -501,6 +501,8 @@ FA3：Tensor Core 再变快后，异步流水和 softmax overlap 继续成为重
 
 而是：
 
+occupancy（驻留率）是一个 SM 上驻留 warp 数与硬件支持的最大驻留 warp 数之比。寄存器、共享内存和线程配置都会限制它；驻留线程可能在等待，所以它不等于有效计算利用率。
+
 > **在 tile reuse、occupancy、并行度和 reduction overhead 之间找到更好的平衡。**
 
 ---

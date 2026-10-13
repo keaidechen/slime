@@ -57,6 +57,8 @@
 
 不是一次性校验，而是每步记录（05 篇 §5）：
 
+TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
+
 - `train_rollout_logprob_abs_diff`：同参数下训练侧与推理侧 logprob 的绝对差，是 FP8、kernel 差异、routing 差异的"体温计"（loss.py:1073-1077）；
 - `tis / tis_clipfrac / tis_abs / ois`：TIS 修正的强度与截断比例；
 - `examples/train_infer_mismatch_helper/`：专门的离线诊断工具。
@@ -304,6 +306,8 @@ python tools/profile_rollout.py \
 ```
 
 `--num-steps 5` 表示自动抓 5 个 forward step（prefill/decode 各算一步）后自动停止（源码注释："If it is set, profiling is automatically stopped after this step"）。不传的话需要再手动执行一次 `--action stop`。每个 worker 各自把 trace dump 到配置的目录，格式同样是 `.pt.trace.json.gz`，**查看方式跟 §4.3 完全一样**。
+
+NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线上的操作更容易对应业务阶段，标记区间本身不会自动等待 GPU 完成。
 
 **进阶**：`--profile-by-stage` 让 SGLang 按"prefill 阶段"和"decode 阶段"分别落盘 trace，适合区分"长 prompt 处理慢"还是"逐 token 生成慢"。`--sglang-enable-layerwise-nvtx-marker`（转发给 SGLang 引擎）让每层 Transformer layer 打一个 NVTX marker，配合 §4.6 的 `nsys` 能精确看到"第几层"、"attention 还是 MLP"耗时多少。
 

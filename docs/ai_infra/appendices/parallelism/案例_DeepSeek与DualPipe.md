@@ -79,6 +79,10 @@ DeepSeek 的目标是联合隐藏：
 
 ## 如何客观复现
 
+1F1B（one forward, one backward）在流水线进入稳态后交替安排一个 microbatch 的前向和另一个 microbatch 的反向，减少待反向激活的驻留；前后仍有填充和排空阶段。
+
+MFU（Model FLOPs Utilization，模型浮点运算利用率）通常按“模型约定的每步 FLOPs ÷ 步耗时 ÷ 全部设备的对应精度峰值”计算。重计算通常不计入模型有效工作量，比较前必须固定 FLOPs 与峰值口径。
+
 1. 先用相同 layer/shape 测 F/B、dispatch、combine、P2P 独立时间；
 2. 对比 1F1B、interleaved 1F1B 与 DualPipe 的理论 schedule；
 3. 用真实 profiler 验证隐藏时间，而非只看 colored bars；

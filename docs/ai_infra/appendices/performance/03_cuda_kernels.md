@@ -25,6 +25,12 @@
 相关基础：[必要基础](<../foundations/README.md>)。
 
 
+IR（Intermediate Representation，中间表示）是编译器分析和改写程序时使用的结构；高层 IR 可保留算子与形状，低层 IR 更接近循环、内存访问和指令。
+
+PTX 是 NVIDIA 的虚拟指令表示，还需经后续编译生成目标 GPU 的机器代码；查看 PTX 可以理解部分操作，但不能据此确定最终寄存器占用与指令调度。
+
+SASS 指目标 NVIDIA GPU 的机器指令表示；它比 PTX 更接近实际执行，通常用于核对指令选择和编译结果。
+
 本章建立“先宏观、后微观”的工具链：Nsight Systems 找到关键路径和热点 kernel，Nsight Compute 解释单 kernel 为什么慢，Triton/二进制工具继续检查 IR、PTX 和 SASS。
 
 
@@ -58,6 +64,8 @@ nvidia-smi
 
 
 ## 3. 用 NVTX 给时间线加“路标”
+
+NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线上的操作更容易对应业务阶段，标记区间本身不会自动等待 GPU 完成。
 
 只有 kernel 名的时间线很难读。用 NVTX 标记业务阶段：
 
@@ -479,6 +487,8 @@ Occupancy（占用率）是 active warps 相对硬件上限的比例。限制可
 | barrier | block 内同步等待 | 减少 barrier、均衡 warp 工作 |
 | not selected | 有其他 eligible warp 被选中 | 未必是问题 |
 | no instruction / dispatch stall | 前端/依赖/供给不足 | 看指令混合与 dependency chain |
+
+spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部分线程私有值放入 local memory。local 表示线程私有地址空间，底层访问可能经过显存与缓存，因此增加访存成本。
 
 stall reason 是症状，不是修复建议。例如 long scoreboard 可能来自真实 HBM latency，也可能是 local memory spill；必须结合 memory table 与 source line。
 

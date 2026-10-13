@@ -22,6 +22,8 @@ RL 一步里有多种角色（Actor / Rollout / Ref / RM / Advantage），它们
 - rollout 样本**乱序完成**，而训练要攒批——"哪些样本已齐、被谁消费过"需要全局账本；
 - 数据重分配（resharding）在 DP/PP 维度反复发生。
 
+RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码为消息，在另一进程或机器执行并返回结果。调用超时不证明远端没有执行，重试还需检查幂等性。
+
 这些都不是"一次 RPC 传一个 batch"能优雅表达的。TransferQueue 的做法：**把数据放进共享存储，系统里流动的只有轻量元数据（BatchMeta）**，消费方按元数据直接去存储拉取。
 
 ---
@@ -194,6 +196,8 @@ while i <= len(sorted_ready_indexes) - n and found_groups < required_groups:
 ## 8. 可插拔存储后端
 
 `storage/` 下：
+
+RDMA（Remote Direct Memory Access，远程直接内存访问）让网络设备对已授权的远端内存执行传输，减少 CPU 中转。内存注册、权限以及远端消费者何时可读取，仍属于协议的一部分。
 
 | 组件 | 说明 |
 |---|---|

@@ -127,6 +127,8 @@ sequenceDiagram
     B1->>C: compute tile 1
 ```
 
+epilogue（尾处理）是在主计算完成、写回结果前执行的操作，例如加偏置、激活和精度转换；在同一内核完成可减少中间结果写回和再次读取。
+
 Software Pipeline（软件流水）把加载、计算、Epilogue（尾处理）安排为多个重叠阶段。Hopper 的 TMA 能以较少线程发起多维 Tensor 搬运，使 Producer Warp 负责数据，Consumer Warp Group 负责 MMA。
 
 
@@ -147,6 +149,8 @@ Fusion 主要减少：
 - Kernel 之间的同步边界。
 
 但可能增加：
+
+autotune（自动调优）实际试运行多个候选分块或执行配置，再为指定形状选择较快的一种。搜索本身有成本，其结果受形状、硬件和测量条件影响。
 
 - Register/Shared Memory 使用；
 - 编译时间与 Autotune 空间；

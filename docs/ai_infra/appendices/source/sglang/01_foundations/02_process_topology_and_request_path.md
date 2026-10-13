@@ -113,6 +113,8 @@ flowchart LR
     H -->|"SSE or JSON"| C
 ```
 
+IPC（Inter-Process Communication，进程间通信）让地址空间相互隔离的进程交换消息或共享资源。另一个进程的普通指针不能直接当作本进程的可访问地址。
+
 主要 IPC endpoint 在 `PortArgs` 中分配，socket 初始化分散在：
 
 - `srt/managers/tokenizer_manager.py:407`：`TokenizerManager.init_ipc_channels()`；
@@ -810,6 +812,8 @@ EOS 是 decode 2 的采样结果，因此 EOS 自己还没有 KV，也不需要�
 | TokenizerManager | 每次 event 都 yield | `finished` 前不 yield 用户结果 |
 | HTTP | SSE delta + `[DONE]` | 一个 JSON response |
 
+RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+
 所以如果相同 seed、sampling 参数和运行模式下 streaming/non-streaming 的 token ids 不同，应优先怀疑请求参数、batching/RNG、grammar/tool parser 或实现 bug，而不是把差异归因于 HTTP 格式。
 
 
@@ -1014,6 +1018,8 @@ detokenize + HTTP flush
 ### 27.3 ITL 抖动
 
 重点检查：
+
+backpressure（背压）把下游容量不足的信号传回上游，通过限制并发、暂停生产或拒绝准入控制在途工作。它防止无界队列，也会改变生成与消费的节奏。
 
 - decode batch size 是否剧烈变化；
 - 是否被长 prefill/chunked prefill 打断；

@@ -17,6 +17,8 @@
 
 attention 接收的 `dO` 同样来自后面的计算。测试中可以直接指定 `dO=G`，等价于选择一个简单损失 `loss=sum(O*G)`，方便独立检查这个算子。
 
+LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，其中 m=max(xᵢ)。它把指数归一化的分母放到对数域计算，减最大值可避免大正数的指数溢出。
+
 第 02 节已展开 [`FlashAttnFunc.forward`](<../../../../../flash-attention/flash_attn/flash_attn_interface.py>) 的 `ctx.save_for_backward(...)`：当需要梯度时保存 Q、K、V、O、LSE、随机数状态。这里没有保存一张完整的 P。问题于是变成：反向需要概率时从哪里获得它？
 
 ## 2. LSE 让局部概率可以重建
