@@ -12,6 +12,7 @@
 | [omni_walkthroughs.py](<omni_walkthroughs.py>) | 音频帧/字节、播放缺口、块身份、取消与背压、损失梯度、迭代恢复及阶段容量 | Python 标准库；教学模拟；可选固定源码文件 hash 核对，不运行真实媒体模型 |
 | [etp_reference.py](<etp_reference.py>) | 专家内部 TP 与 EP×ETP 网格 | Python 标准库；固定路由概率，不覆盖 router 参数梯度 |
 | [optimizer_walkthroughs.py](<optimizer_walkthroughs.py>) | AdamW 两步历史、Muon 矩阵迭代与分片反例 | Python 标准库；解析答案与谱分解对照，不运行真实优化器后端 |
+| [rl_infra_contracts.py](<rl_infra_contracts.py>) | 词表归约与梯度、DPO、策略梯度、KL、过滤偏移、ESS、终止与截断、组尾部和重试 | Python 标准库；有限差分与反例，不运行真实训练、奖励服务或环境 |
 | [training_rl_walkthroughs.py](<training_rl_walkthroughs.py>) | 更新、packing、checkpoint、PD、PPO/GAE 与异步队列 | Python 标准库；教学协议不等于仓库实现 |
 | [loss_normalization.py](<loss_normalization.py>) | 不等长样本与归约分母 | Python 标准库；只检查给定目标口径 |
 | [case_source_evidence.py](<case_source_evidence.py>) | 源码身份、内容哈希与符号定位 | Python 3.10+；源码漂移检查，不执行训练 |

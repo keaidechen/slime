@@ -6,6 +6,7 @@
 
 - [1. GEMM、Tensor Core 与高性能 Kernel 设计模式](#s1)
 - [2. 案例：FlashAttention 与 MoE Grouped GEMM](#s2)
+- [3. 从 Attention 的在线归约到词表概率](#s3)
 
 <a id="s1"></a>
 
@@ -858,6 +859,25 @@ K / N
 - [FlexAttention + FlashAttention-4](https://pytorch.org/blog/flexattention-flashattention-4-fast-and-flexible/)
 - [CUTLASS Grouped GEMM examples and changelog](https://docs.nvidia.com/cutlass/latest/CHANGELOG.html)
 - [PyTorch torchao quantized training](https://docs.pytorch.org/ao/stable/workflows/training.html)
+
+<a id="s3"></a>
+
+## 3. 从 Attention 的在线归约到词表概率
+
+RL 训练经常只需要“已选中 token 的 logprob”，而模型输出的词表可能很大。若为每个位置保存完整概率向量，中间结果会占据大量显存。假设 8192 个位置、词表 128000、每值 4 字节，仅一份完整矩阵就约 3.91 GiB；还未计梯度和其他工作区。
+
+设某位置 logits 为 $z_1,\ldots,z_V$，已选动作编号为 $a$，则
+
+$$\log p(a)=z_a-\operatorname{LSE}(z),\qquad
+\operatorname{LSE}(z)=m+\log\sum_j e^{z_j-m},\quad m=\max_j z_j.$$
+
+输出只需一个数，但归一化仍依赖整个词表。只取 $z_a$ 不能得到概率。可将词表分块，对各块维护最大值 $m_b$ 与指数和 $s_b$；合并两块时，取 $m=\max(m_1,m_2)$，再计算 $s=e^{m_1-m}s_1+e^{m_2-m}s_2$。这与本章在线 Softmax 使用的是同一种归约思想。
+
+融合投影与损失的实现可以逐块计算 logits，只保留所需结果和反向状态，从而避免完整中间矩阵长期驻留；但反向可能需要重算，支持的损失也有边界。交叉熵对第 $j$ 个 logit 的梯度为 $p_j-\mathbf 1[j=a]$，因此“只输出一个 logprob”并不意味着只有一个词表参数需要梯度。
+
+还要区分需要的统计量。所选动作的 logprob 足以参与某些策略目标，却不能独自恢复整个分布的精确熵或 KL。选择融合算子之前，先列出训练目标需要哪些归约、是否保留梯度，再核对峰值与执行时间。第 15 章会将同一归一化过程扩展到词表分片，第 25 章解释这些概率怎样进入 RL 目标。
+
+词表分块归约与交叉熵梯度可用[标准库复算程序](<../examples/rl_infra_contracts.py>)检查，验证范围限于上述教学模型。
 
 ## 本章回顾
 
