@@ -8,6 +8,8 @@
 
 ## 1.1 两套层次之间是映射，不是一一对应
 
+假设要做一百万次互不依赖的加法，给每个元素分配一个逻辑线程很自然，但机器不可能同时放下一百万份执行状态。我们需要两层安排：程序先把线程打包成可协作的组，硬件再根据资源分批接收这些组。grid 是一次启动的全部工作，block 是协作组，warp 是其中按 32 个线程组织的执行组，lane 是线程在 warp 内的编号。CTA（Cooperative Thread Array）是 block 的另一名称；SM（Streaming Multiprocessor，流式多处理器）是接收和执行 blocks 的硬件单元。
+
 CUDA 的 grid/block/warp/thread 描述一份工作的组织；GPU/SM/调度器/运算管线描述执行它的机器。把二者画在一起：
 
 ```mermaid
@@ -30,6 +32,8 @@ flowchart LR
 
 实线表示提交、组成或硬件联系，虚线表示软件工作映射到硬件。图只保留入门所需部件，不表示每个 SM 只有一个调度器，也不表示所有架构具有相同的内部连接。
 
+图中的 ALU（Arithmetic Logic Unit）指算术逻辑运算资源，LSU（Load/Store Unit）指加载/存储资源；加载是把内存中的值取来供指令使用，存储是把结果写回内存。寄存器文件是一组为驻留线程保存操作数和中间值的硬件资源，不是磁盘上的文件。
+
 | CUDA 中看到什么 | 由硬件怎样承接 | 直接影响怎样写代码 |
 |---|---|---|
 | grid | blocks 被分配到可用 SM，可能分批执行 | grid 可以比 SM 数多得多，不依赖 block 编号的执行顺序 |
@@ -41,7 +45,7 @@ flowchart LR
 
 **CUDA Core 和 Tensor Core 是运算资源，不是额外一级线程容器。** 指令类型决定使用哪类管线：普通加法、地址计算、加载以及矩阵乘加不会全由同一种“核心”处理。SM 可以划分为多个处理分区；先掌握资源作用域，之后才需要查某代芯片有几个调度器、多少个执行单元。
 
-GPC 是比 SM 更高一级的硬件组织；在本教程的普通 kernel 中不用指定它。支持 thread-block cluster 的新架构提供额外协作机制，但那是显式启用的另一层约束，不能推导出任意两个普通 block 都能共享彼此的 shared。模型与适用范围见 [NVIDIA Programming Model](https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html)。
+GPC（Graphics Processing Cluster，图形处理簇）是比 SM 更高一级的硬件组织；在本教程的普通 kernel 中不用指定它。支持 thread-block cluster 的新架构提供额外协作机制，但那是显式启用的另一层约束，不能推导出任意两个普通 block 都能共享彼此的 shared。模型与适用范围见 [NVIDIA Programming Model](https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html)。
 
 ## 1.2 从一条加法表达式得到线程分工
 
@@ -66,6 +70,8 @@ vector_add<<<blocks, threads>>>(d_a, d_b, d_c, n);
 
 取 n=1000：启动 4 个 block，每块 256 线程、8 个 warp。block 3 的 thread 231 对应 `3*256+231=999`，之后的 24 个线程不读写数据。末尾 warp 仍然存在，只是这条加法语句有些 lane 不活跃。
 
+缩小到 `n=10, B=4` 更容易枚举：block 0 负责下标 0–3，block 1 负责 4–7，block 2 的线程 0/1 负责 8/9，线程 2/3 只做边界判断。需要的块数是 `ceil(n/B)`：先用整数除法得到完整块数，再在余数非零时加一；对正整数，这与 `(n+B-1)/B` 相等。这里 n 的单位是元素，B 的单位是线程/块，且每线程恰好处理一个元素，故商是块数。这个 4 线程的示意启动仍占一个部分活跃的 warp，不会让硬件 warp 宽度变为 4。
+
 线程编号与数据下标由程序决定；线程落在哪个 SM 不应影响它算出的答案。这就是同一份 kernel 可以适配不同 SM 数量 GPU 的基础。
 
 <a id="launch-journey"></a>
@@ -89,6 +95,8 @@ vector_add<<<blocks, threads>>>(d_a, d_b, d_c, n);
 一个 SM 通常能让多个 warp 驻留，但同一时刻能发射多少、到哪些管线，取决于架构与就绪条件。GPU 用其他 warp 的工作遮住等待时间，这叫隐藏延迟；它没有把一次显存访问本身变成零延迟。切换这些已驻留 warp，不需要每次先把它们的全部寄存器搬回显存。
 
 同一 warp 的 lane 可以走不同分支，硬件通过活跃 mask 等机制执行相应路径。不要因此认为 32 个 lane 永远在每一步自动同步；涉及跨线程数据交换时仍要使用正确的同步原语。执行与调度的细节见 [Advanced Kernel Programming](https://docs.nvidia.com/cuda/cuda-programming-guide/03-advanced/advanced-kernel-programming.html)。
+
+例如偶数 lane 做乘法、奇数 lane 做加法，同一 warp 要处理两条路径的活跃线程集合；它并没有因此变成两个可随意独立同步的 warp。分歧不一定产生错误，但可能减少每条指令真正工作的 lane 数。隐藏延迟也有边界：假设 warp A 等待输入时，B 有独立的加法可执行，调度 B 就有用；若所有驻留 warp 都在等同一轮输入或 barrier，再多“已驻留”状态也没有可发射指令。这里分别对应延迟（单次操作多久完成）和吞吐（单位时间完成多少工作），两者不能混为一谈。
 
 <a id="memory-paths"></a>
 
@@ -118,6 +126,10 @@ spill（寄存器溢出）指寄存器资源不足等情况下，编译器把部
 
 global/local/shared 是编程可见的存储概念，HBM/GDDR、SRAM、cache、寄存器文件是物理实现概念。global 不能直接等同于“每次都读 HBM”；一个 C++ 局部变量也不保证一定放在寄存器。
 
+DRAM 是动态随机存取存储器，HBM（高带宽内存）和 GDDR（图形用双倍数据率内存）是 GPU 常见的外部存储类型；SRAM 是常用于片上缓存等结构的静态存储器。L1/L2 是一级/二级缓存的简称。记住这些位置，是为了追踪一次读操作要走多远，而不是把某个变量名固定等同于某块物理器件。
+
+生命周期也由作用域决定：global 分配可以跨多个 kernel 保留，直到最后一个使用者结束后释放；shared 按 block 提供，只在该 block 执行期间有效，下一块不会继承其合法内容；线程私有值只由该线程使用。缓存里的副本何时被替换由硬件决定，程序不能把“上次命中了缓存”当成下一次同步或容量保证。
+
 许多现代架构的 L1 与 shared 使用可配置的片上资源，但它们的**使用语义不同**：cache 由硬件管理命中和替换，shared 的内容、布局与协作时序由程序显式安排。把它们写作“shared/L1”时，不能理解成程序里可互换的同一种数组。具体架构可查 [Ampere Tuning Guide](https://docs.nvidia.com/cuda/ampere-tuning-guide/index.html)。
 
 以普通同步加载的 tiled GEMM 为例，数据路径是：
@@ -137,6 +149,8 @@ A/B 的 global 数据 → 加载到线程临时值 → 存入 shared tile
 行优先矩阵 A[M,K] 的 `(row,col)` 在 `A[row*K+col]`。K=5 时 `(2,3)` 的元素偏移为 13，FP32 字节偏移为 52。PyTorch 的非连续 view 则使用 `row*stride_row+col*stride_col`，stride 以元素为单位。
 
 如果 warp 的 lane t 读 `a[base+t]`，32 个 FP32 数连续覆盖 128 字节；读 `a[base+128*t]` 则将地址分散开。硬件以 warp 的请求集合组织内存事务，前者通常更容易合并。128 字节是这里的有效数据量，不是在所有对齐条件下固定只发一次事务；实际访问粒度与缓存行为需按架构核对。
+
+用现代设备常见的 32 字节 sector（访存统计中的数据段）模型手算一次，假设 a 的起点按 32 字节对齐，32 个 lane 各读 4 字节。读 `a[t]` 涉及字节 0–127，覆盖 4 个 sector；读 `a[t+1]` 涉及 4–131，覆盖 5 个；读 `a[128*t]` 时相邻 lane 相隔 512 字节，共触及 32 个 sector。三者有效数据都是 128 字节，但请求覆盖分别为 128、160、1024 字节。这个模型说明连续且对齐为什么有利；它不等于实测 HBM 流量，缓存复用、指令和架构仍会改变下游请求。相关模型见 [合并访问说明](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#coalesced-access-to-global-memory)。
 
 二维 block 的线程编号先让 x 增长：
 
@@ -169,6 +183,8 @@ shared 的访问还要考虑 bank，即内部存储分区；global 合并访存�
 
 stream 是软件的有序工作队列，**不独占一个 SM**；一个 kernel 可使用多个 SM，不同 stream 的工作也可能竞争同一组 SM。`cudaGetLastError()` 检查启动等错误，异步执行错误还需在同步点检查。
 
+可以用两个显式创建的 stream 理解不同等待的作用：s0 启动生产者写 x，随后在 s0 记录 event e；s1 先执行 `cudaStreamWaitEvent(s1,e,0)`，再启动消费者读 x。e 在设备执行到记录位置时完成，因此消费者不会读到尚未产生的结果。这个 wait 给设备队列建立依赖，通常无需让 CPU 停在那里。若 CPU 要读取消费者的结果，则还需等待消费者完成或完成相应 D2H 拷贝。只在 host 端按顺序调用两个不同 stream 的 launch，不能一般地建立上述依赖；入门时也不要依靠默认 stream 的隐式行为来推断任意多 stream 程序。
+
 <a id="residency"></a>
 
 ## 1.7 为什么改变 block 大小或 tile 大小会改变并行度
@@ -188,6 +204,16 @@ block 槽位限制：16 blocks
 ```
 
 寄存器单位是 32-bit 个数，不是字节。这里暂时忽略分配粒度、每 block 限制、SM 分区以及架构保留量；真实结果要用编译产物和 occupancy API 核对。
+
+预算的通式是“每类资源的总容量除以每块消耗，向下取整，再取最小值”。令 W=ceil(T/32) 为每块 warp 数，C_T/C_W/C_R/C_S/C_B 分别是 SM 的线程、warp、寄存器、shared 字节和 block 容量，在 R、S 均非零的简化模型里：
+
+```text
+blocks_per_SM = min(floor(C_T/T), floor(C_W/W),
+                    floor(C_R/(T*R)), floor(C_S/S), C_B)
+occupancy = blocks_per_SM * W / C_W
+```
+
+例如 `65536/(256*96)=2.666…` 只能容纳 2 个完整 block，不能把剩余寄存器拼成三分之二个 block。occupancy 是无量纲比值；乘 100% 后才是百分数。若还受 grid 工作量不足限制，实际驻留量会低于这个资源上限。
 
 | 只修改一个条件 | 粗略 blocks/SM | resident warps/SM | 理论 occupancy |
 |---|---:|---:|---:|
