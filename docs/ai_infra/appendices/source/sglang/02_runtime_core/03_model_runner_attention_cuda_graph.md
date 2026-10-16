@@ -3,12 +3,16 @@
 相关基础：[Transformer 与 KV](<../../../../05_Inference/19_生成执行与采样.md#s1>)。
 
 
+调度器得到的还是“请求 A 计算一个 token、B 计算两个 token”的逻辑计划。GPU kernel 需要的是数组地址、形状、长度和读写位置；它不会查 Python 请求对象或 HTTP 连接。本章解释这次转换，以及为什么同一组张量还需要 Attention metadata 和执行图。
+
+Backend（后端）是实现同一执行契约的具体算子方案；eager 指每次沿程序调用逐个提交算子；CUDA Graph 指先捕获一组设备操作及依赖，再重放这张图。二者应实现相同逻辑输入到输出的映射，差异主要在提交方式和适用形状。
+
 ## 1. 调用链
 
 ```text
 Scheduler.run_batch
   → TpModelWorker.forward_batch_generation
-  → ForwardBatch.from_schedule_batch(...)
+  → ForwardBatch.init_new(...)
   → ModelRunner.forward
   → model.forward
   → attention backend / MoE / kernels
@@ -40,6 +44,10 @@ Scheduler 拥有请求对象；ModelRunner 应消费张量化执行描述。这�
 - multimodal、LoRA、speculative、DP/PP metadata。
 
 它不是普通 `(input_ids, attention_mask)`。paged attention 不构造巨大 dense mask，而依靠每请求长度与物理 KV mapping 找历史。
+
+例如 A 本轮算 1 个 token、B 算 2 个，`input_ids` 是 `[3]`，而长度、请求索引是 `[2]`。若每个 token 有 2 个 Query 头、1 个 KV 头、每头维度 2，则本轮 `Q:[3,2,2]`、`K/V:[3,1,2]`；Attention 输出为 `[3,2,2]`，展平为 `[3,4]` 再进入输出投影。GQA 中两个 Query 头都访问同一个 KV 头；并不是把 K/V 多复制一份才算“形状匹配”。
+
+`positions` 属于逻辑序列；`out_cache_loc` 属于物理池。把 token 搬到另一个 slot 不改变它的位置编码，反之位置增加也不意味着物理地址连续。后台索引结构正是把这两套编号连接起来。
 
 ## 3. attention backend 的职责
 
@@ -93,6 +101,19 @@ decode 每轮 kernel 多而小，Python/CPU launch 开销显著。CUDA Graph 把
 - capture sizes 稀：内存低、padding/额外计算多；
 - 超过最大 capture size：eager fallback。
 
+### 用启动成本推导何时值得捕获
+
+DAG 是 Directed Acyclic Graph（有向无环图）：节点是设备操作，有向边表示“前者完成后后者才能执行”。设一次 eager forward 有 K 个小 kernel，每次提交造成的有效开销为 `t_l`，设备工作总耗时为 `T_gpu(B)`，B 是真实 batch 大小。无重叠的简化模型为：
+
+```text
+T_eager(B) ≈ K × t_l + T_gpu(B)
+T_graph(B) ≈ t_replay + t_copy + T_gpu(B_cap)
+```
+
+所有 T/t 的单位是微秒或毫秒，必须统一；`B_cap≥B` 是选中的捕获尺寸，`t_copy` 是把新输入放到固定 buffer 的开销。假设 K=20、`t_l=3 μs`、`T_gpu(5)=100 μs`，eager 约 160 μs。若 batch=5 用捕获尺寸 8，`T_gpu(8)=125 μs`、重放 5 μs、拷贝 4 μs，总计 134 μs；节省 26 μs，而非把模型计算省掉。若 padding 后计算升到 180 μs，则图路径反而更慢。
+
+捕获本身还有一次性成本 `T_capture`。若每次净省 `ΔT>0`，至少重放约 `T_capture/ΔT` 次才摊回；capture 的显存也要常驻。现实中提交与计算可重叠，不能把 trace 上所有 launch 时间直接相加预测收益，要以关键路径验证这个模型。
+
 ## 6. piecewise/breakable graph
 
 模型中某些部分动态（MoE routing、structured/spec 状态），完整 graph 难 capture。piecewise graph 只捕获稳定片段；breakable graph 在条件处切开。读 trace 时不要以为“启用 CUDA Graph”意味着整个 forward 都无 CPU launch。
@@ -103,7 +124,7 @@ decode 每轮 kernel 多而小，Python/CPU launch 开销显著。CUDA Graph 把
 
 sampler 必须处理每请求不同的：
 
-RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+RNG（Random Number Generator，随机数生成器）为概率采样提供随机数；请求重排后，随机状态仍应与正确的请求对应。
 
 - temperature/top-k/top-p/min-p；
 - repetition/frequency/presence penalty；
@@ -188,34 +209,29 @@ self.spec_algorithm = SpeculativeAlgorithm.from_string(...)
 
 ### 静态显存预算
 
-逻辑近似：
+先把所有量统一为字节。设设备可用预算为 M、权重 W、运行时非 KV 峰值 A、图与通信等额外保留 G、安全余量 H，则规划层面的上界是 `M_KV≤M-W-A-G-H`。这是一份容量账本，不是 `mem_fraction_static` 的逐字源码公式；实际预算还取决于模型布局、预留策略以及是否在 graph capture 后调整 KV pool。
 
-```text
-total GPU memory
-- model weights
-- non-KV runtime peak/workspace
-- CUDA graph capture pool
-× mem_fraction policy
-= KV pool
-```
+例如 M=16 GiB，W=8、A=2、G=1、H=1 GiB，剩下 4 GiB 给 KV。若每 token 128 KiB，则上界为 `4×2^30/(128×2^10)=32768` 个物理 token 位置，再扣除页取整和其他元数据。本例没有说“可同时接 32768 条请求”：每条请求占用许多位置。
 
-系统通常通过一次 profile forward 估计非 KV 峰值，再把剩余换算成可缓存 token 数。profile shape 若不能代表最坏路径（VLM、spec verify、MoE），运行时仍可 OOM。
+本快照 `model_runner_components/kv_pool_runtime.py:compute_post_capture_kv_resize()` 的一种路径会先同步设备，再读取剩余显存、扣除 headroom，并计入已有 KV backing 后重新配置池。其 headroom 包含 `pre_model_load_memory×(1-mem_fraction_static)`；因此不能先随意减完所有项再统一乘一次比例。应观察启动日志中最终的 token 容量。若预算未覆盖 VLM（视觉语言模型）、spec verify 或 MoE（Mixture of Experts，混合专家模型）的峰值，运行时仍可 OOM（Out Of Memory，内存不足）。
 
 ## 11. attention metadata 例子
 
-两个 decode 请求：
+两个请求进入本轮前各已有 3/5 个历史 KV；本轮各输入一个新 token。令 page size=1，分配位置 12/32，准备完成后的 metadata 应是：
 
 ```text
-seq_lens=[3,5]
+历史长度（本轮前）=[3,5]
+seq_lens（本轮可见总长）=[4,6]
+positions=[3,5]
 req_pool_indices=[7,9]
-req_to_token[7,:3]=[20,4,11]
-req_to_token[9,:5]=[2,8,6,30,31]
+req_to_token[7,:4]=[20,4,11,12]
+req_to_token[9,:6]=[2,8,6,30,31,32]
 out_cache_loc=[12,32]
 ```
 
-attention backend 根据 block/page table 读取各自历史 KV，并把新 K/V 写到 12、32。逻辑序列连续不要求 physical indices 连续。
+`input_ids`、`positions`、`out_cache_loc` 均为 `[2]`。每层先计算本轮 K/V，并由 backend 的写入与 Attention 依赖保证新值在被读取前有效；有的实现将相关操作融合。`seq_lens=[4,6]` 在准备阶段是正确的，它描述本轮执行范围，不能误写成只含旧 KV 的 `[3,5]`。
 
-若把 `seq_lens` 写成 `[4,6]` 但新 slot 尚未写完，attention 会读取未初始化/别的请求 KV。
+错误发生在没有依赖保证就读取 12/32，或长度增长却没有更新映射，而不是“CPU 提前写了本轮长度”本身。逻辑位置与物理 slot 分离让碎片和共享变得可管理，也把正确性责任转移到了 metadata 与执行顺序。
 
 ## 12. CUDA Graph buffer 安全
 
@@ -254,6 +270,8 @@ replay 前通常把动态输入 copy 到固定地址。若 CPU/GPU overlap 在 c
 - streaming payload 增大。
 
 因此 logprob API 不应与普通 generation 用同一容量假设。
+
+设隐藏维度 d=4、词表大小 V=6，两条请求只需要各自末位置的分布，则 `H_last:[2,4]` 乘 `W_head:[4,6]` 得 `logits:[2,6]`，12 个数。若输入分别有 3/2 个位置，并为全部位置计算 logits，中间结果会是 `[5,6]`，30 个数；实际 logprob 还要按“位置 i 预测位置 i+1”的位移取值。长 prompt、大词表时差距很大，即使最终只返回每个位置一个概率，也可能增加 LM head 的工作。
 
 ## 15. 本章延伸阅读
 

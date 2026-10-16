@@ -17,7 +17,7 @@
 
 attention 接收的 `dO` 同样来自后面的计算。测试中可以直接指定 `dO=G`，等价于选择一个简单损失 `loss=sum(O*G)`，方便独立检查这个算子。
 
-LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，其中 m=max(xᵢ)。它把指数归一化的分母放到对数域计算，减最大值可避免大正数的指数溢出。
+为避免梯度记号与长度混淆，下面用 $\mathcal L$ 表示标量 loss，$dX$ 是 $\partial\mathcal L/\partial X$ 的简写；偏导符号 ∂ 表示只改变指定元素、暂时固定其他独立输入，观察 loss 的变化率。若 X 有物理单位，则 dX 的单位是“loss 单位/X 单位”；本例学习到的数值按无量纲量处理。LSE 仍指第 01 篇定义的逐行对数归一化分母，不表示 loss。
 
 第 02 节已展开 [`FlashAttnFunc.forward`](<../../../../../flash-attention/flash_attn/flash_attn_interface.py>) 的 `ctx.save_for_backward(...)`：当需要梯度时保存 Q、K、V、O、LSE、随机数状态。这里没有保存一张完整的 P。问题于是变成：反向需要概率时从哪里获得它？
 
@@ -28,6 +28,8 @@ LSE（log-sum-exp）是 log(∑exp(xᵢ))，可写成 m+log(∑exp(xᵢ−m))，
 $$P_{ij}=e^{S_{ij}-LSE_i}.$$
 
 重新算当前 tile 的 $Q_iK_j^T$，做与前向一致的 scale/mask，再减去保存的逐行 LSE，就能还原这一 tile 的概率。只要当前 tile 用完就释放，不需要在显存里保存完整 P。
+
+以 `S=[0,ln(3)]` 为例，保存的 LSE 为 `ln(4)`。即使反向一次只重算第二个 score，也能得到 `exp(ln(3)-ln(4))=3/4`；若把这一小块单独 Softmax，却会错误地得到 1。LSE 携带的是**前向整行**的归一化信息，因此重算不能换成局部归一化，也不能换用另一套 mask 或 scale。这里的“还原”指同一数学概率，有限精度下并不保证恢复某次前向临时值的每一位。
 
 在 [`flash_bwd_kernel.h`](<../../../../../flash-attention/csrc/flash_attn/src/flash_bwd_kernel.h>) 的 `compute_dq_dk_dv_1colblock` 中，先用 `gemm` 重算 `acc_s`，再调用：
 
@@ -44,19 +46,59 @@ FLASH_NAMESPACE::scale_apply_exp2</*scale_max=*/false>(
 
 先从 $O=PV$ 传播：
 
+固定一个 batch/head，令 `dO` 形状为 `[N_q,d_v]`。从元素式 $O_{it}=\sum_jP_{ij}V_{jt}$ 看，改变 $V_{jt}$ 会影响所有 query 的第 t 个输出，每条路径贡献 $P_{ij}dO_{it}$；改变 $P_{ij}$ 会影响该 query 的所有输出特征，每条路径贡献 $V_{jt}dO_{it}$。把这些贡献相加：
+
+$$dV_{jt}=\sum_iP_{ij}dO_{it},\qquad dP_{ij}=\sum_t dO_{it}V_{jt}.$$
+
+整理为矩阵式就是：
+
 $$dV=P^TdO,\qquad dP=dOV^T.$$
 
 它们都是矩阵乘。接着通过逐行 softmax：
+
+先固定一行、略去行下标 i，写 $Z=\sum_k e^{S_k}$、$P_j=e^{S_j}/Z$。每个 score 都影响分母，因此不能只对自己的分子求导。用商的求导规则，对第 k 个 score 有：
+
+$$\frac{\partial P_j}{\partial S_k}
+=\frac{\delta_{jk}e^{S_j}Z-e^{S_j}e^{S_k}}{Z^2}
+=P_j(\delta_{jk}-P_k).$$
+
+$\delta_{jk}$ 在 j=k 时为 1，否则为 0：自己的 score 同时影响分子和分母，别人的 score 只影响分母。链式法则要求把经由所有 $P_j$ 的影响相加：
+
+$$\begin{aligned}
+dS_k&=\sum_j dP_j\frac{\partial P_j}{\partial S_k}\\
+&=\sum_jdP_jP_j\delta_{jk}-P_k\sum_jP_jdP_j\\
+&=P_k\left(dP_k-\sum_jP_jdP_j\right).
+\end{aligned}$$
+
+恢复行下标，并把括号里的公共和记作 D，便得到：
 
 $$D_i=\sum_jP_{ij}dP_{ij},\qquad dS_{ij}=P_{ij}(dP_{ij}-D_i).$$
 
 D 是每行一个数。展开 dP 后得到一个实用恒等式：
 
-$$D_i=\sum_t dO_{it}\left(\sum_jP_{ij}V_{jt}\right)=\sum_t dO_{it}O_{it}.$$
+$$\begin{aligned}
+D_i&=\sum_jP_{ij}\left(\sum_t dO_{it}V_{jt}\right)\\
+&=\sum_t dO_{it}\left(\sum_jP_{ij}V_{jt}\right)\\
+&=\sum_t dO_{it}O_{it}.
+\end{aligned}$$
 
-所以 D 可以直接由 O 与 dO 求点积，无需先保存整行 P 或 dP。最后回到 Q/K：
+中间一步只是交换有限求和的次序，再把与 j 无关的 dO 提到内层求和外；括号内恰好是前向输出 O。实现因而可以在主 kernel 之前，用 O/dO 做一次按特征的点积，得到形状 `[N_q]` 的 D。
+
+这样无需先保存整行 P 或 dP。最后回到 Q/K：
 
 $$dQ=\alpha\,dSK,\qquad dK=\alpha\,dS^TQ.$$
+
+这里 alpha 来自 $\partial S_{ij}/\partial Q_{it}=\alpha K_{jt}$ 和 $\partial S_{ij}/\partial K_{jt}=\alpha Q_{it}$。因此元素式为 $dQ_{it}=\alpha\sum_jdS_{ij}K_{jt}$、$dK_{jt}=\alpha\sum_idS_{ij}Q_{it}$。检查形状可以及时发现转置错误：
+
+| 计算 | 两侧输入形状 | 输出形状 |
+|---|---|---|
+| dV | `[N_k,N_q] @ [N_q,d_v]` | `[N_k,d_v]` |
+| dP | `[N_q,d_v] @ [d_v,N_k]` | `[N_q,N_k]` |
+| dS | `P*(dP-D[:,None])`，逐元素运算 | `[N_q,N_k]` |
+| dQ | `[N_q,N_k] @ [N_k,d]` | `[N_q,d]` |
+| dK | `[N_k,N_q] @ [N_q,d]` | `[N_k,d]` |
+
+`D[:,None]` 在这里表示将一行一个数用于该行的全部列，这叫广播；不必真的复制成一整张数组。对被遮蔽的配对，概率和相应 score 梯度为 0。整行完全遮蔽时，Softmax 本身没有普通概率定义，教学参考按零输出、零输入梯度约定处理。
 
 ### 3.1 把这些矩阵式接回一个能手算的例子
 
@@ -94,6 +136,23 @@ $$dQ=\alpha\,dSK,\qquad dK=\alpha\,dS^TQ.$$
 
 重计算的意义是用局部矩阵乘换掉巨大的中间显存读写。FA1 的训练设计和当前反向代码都能帮助理解这种取舍，但不能由“少保存 P”推断 backward 完全没有临时缓冲区。
 
+### 4.1 从前向结束到梯度可用，哪些数据不能提前释放
+
+| 阶段 | 执行者与输入 | 产出与下一位读者 |
+|---|---|---|
+| 前向结束后等待 backward | 框架保留 Q/K/V/O/LSE 的显存引用 | backward 将读它们，不能原地改成其他值 |
+| 预处理 | GPU 线程读 O/dO，准备逐行 D 与累加区 | 主 kernel 读 D，向已初始化的 dQ 累加区加贡献 |
+| 主计算 | 各 K 块的线程重算当前 P，算 dS 和梯度贡献 | dK/dV 写结果，dQ 部分和留在显存工作区 |
+| 后处理 | GPU 线程读全部 dQ 部分结果，合并、缩放、转换类型 | 前一层获得 dQ/dK/dV；相关工作区在消费者结束后可复用 |
+
+这些阶段按同一 stream 的依赖顺序执行，不需要 CPU 读取中间 D。局部 P/dS 的寄存器或 shared 片段在该 tile 的最后一个消费者结束后可复用；显存中的 dQ 累加区要一直保留到后处理读取完成。框架是否保留整张求导图还受 `retain_graph` 等设置影响，所以一次 backward 返回不总意味着所有保存张量都已无引用。
+
+### 4.2 dropout 为什么需要保存随机状态
+
+前面的推导关闭了 dropout。若丢弃概率为 p、保留概率为 $u=1-p>0$，令 $M_{ij}$ 是取值 0/1 的随机掩码，则用于 PV 的权重是 $\widetilde P_{ij}=P_{ij}M_{ij}/u$。因 $E[M_{ij}]=u$，有 $E[\widetilde P_{ij}]=P_{ij}$；这里 E 表示对随机抽样结果取平均。但一次实际抽样的行和不必为 1，不能继续套用“输出在 V 的最小值与最大值之间”的检查。
+
+例如 `P=[1/4,3/4]`、`u=1/2`，若本次掩码为 `[1,0]`，实际 PV 权重是 `[1/2,0]`。反向必须复用这次掩码，才能对这次前向求导；重新抽成 `[0,1]` 就对应另一个函数。保存随机生成器的种子与计数位置等状态，并按一致的索引规则再生成掩码，可以避免保存完整的布尔矩阵。源码会把 `1/u` 等尺度放到不同阶段，因此含 dropout 的中间变量应按实际约定追踪，不能把上面的无 dropout 公式逐句机械替换。
+
 ## 5. 变长样本：用前缀和找到起点
 
 两条序列分别有 2 和 3 个 token。padding 方式把它们都补到 3；varlen（variable length，变长）方式把有效 token 串接为 5 行：
@@ -110,11 +169,17 @@ Python `FlashAttnVarlenFunc` 走 `varlen_fwd/varlen_bwd`。[`block_info.h`](<../
 
 “把样本接起来”只改变存储方式。每条序列的 attention 范围仍独立，样本 1 不能看到样本 0 的 K。这个约束由样本偏移、实际长度和 block 范围共同保证。
 
+若取 `H=1,d=2`，padding 张量形状为 `[2,3,1,2]`，压紧后为 `[5,1,2]`，分别存 12 和 10 个数。两条序列的有效自注意力配对数是 `2²+3²=13`；一律按长度 3 算要覆盖 `2×3²=18` 个位置，而错误地将全部 5 个 token 当成一条序列会产生 `5²=25` 个配对，包含跨样本的信息混合。变长优化减少 padding 工作，但仍有按 tile 向上取整、元数据寻址和不同长度导致的负载差异，不保证耗时正好按 13/18 缩放。
+
+调用者需要保证前缀和从 0 开始、非递减，末项与扁平数据的有效总行数一致，并提供足够大的 `max_seqlen`。`[0,2,5]` 是起点边界，不是两条样本的长度列表 `[2,3]`；混用这两种表示会改变地址，而不仅仅影响性能。
+
 ## 6. causal mask 的右下对齐
 
 等长的 **causal 自注意力**中，query i 只能看 key `j <= i`；关闭 causal 的主线例子则没有这个限制。**decode（逐步生成）**阶段常常只有几个新 query，却有很长的历史 K。FA2 用右下对齐规则：
 
 $$j\le i+N_k-N_q.$$
+
+这个偏移来自把 Q 视为 K 所覆盖时间轴的最后 $N_q$ 个位置。若 K 的位置是 `0...N_k-1`，Q 的第 i 行对应绝对位置 `i+(N_k-N_q)`，因果条件就是 key 的位置 j 不超过它。例如 5 个历史/当前位置中只给最后两个位置生成 Q，它们的绝对位置为 3、4，而不是 0、1。对于任意交叉注意力，这种时间解释未必成立；此时应依据接口的 mask 定义选择调用方式。
 
 `N_q=2,N_k=5` 时，允许矩阵是：
 
@@ -135,11 +200,17 @@ $$j\le i+N_k-N_q.$$
 
 前 3 行完全被遮蔽，输出为零。若用普通左上角 `tril` 作非方阵参考，会得到不同答案。这是接口 docstring 明确规定、初学者最容易在测试中弄错的地方。
 
+局部窗口也围绕同一个对齐位置 $c_i=i+N_k-N_q$ 定义。若左右窗口大小为非负整数 $w_L,w_R$，允许的 key 需满足 $c_i-w_L\le j\le c_i+w_R$，再与真实范围 $0\le j<N_k$ 取交集；causal 还要求不超过当前位置。窗口大小的单位是 token 位置，包含中心本身，所以内部位置最多允许 $w_L+w_R+1$ 个 key。`N_q=2,N_k=5,w_L=1,w_R=0` 时，query 0 对齐到 3，只允许 key 2、3；query 1 对齐到 4，只允许 key 3、4。接口的 `-1` 等特殊参数是关闭某侧窗口约束的约定，不能代入这个非负窗口算例当作普通宽度。
+
 ## 7. GQA：多个 Q head 共享同一组 K/V
 
 MHA 是多头注意力；GQA 是分组查询注意力；MQA 是只有一个 KV head 的情况。假设 Q 有 6 个 head，KV 有 2 个，那么 Q head 0、1、2 使用 KV head 0；Q head 3、4、5 使用 KV head 1。
 
 前向源码选择 K/V head 时使用 `bidh / params.h_h_k_ratio`，这里比例为 3，是整数除法。由此能看出该路径根据 head 编号寻址，而不必把全部 K/V 真正复制三份。反向时共享 KV 的多个 Q head 对同一 KV 梯度的贡献也需要合并，不能照搬一对一的 head 假设。
+
+完整英文分别为 Multi-Head Attention、Grouped-Query Attention、Multi-Query Attention。设 $H_q/H_{kv}=g$ 为整数，则 Q 的形状为 `[B,N_q,H_q,d]`，K/V 为 `[B,N_k,H_kv,d]`，每个 Q head 仍独立产生自己的权重和输出。以 `B=1,N_k=4,d=2`、FP16 为例，6 个 KV head 要 `2×1×4×6×2×2=192` 字节存 K 和 V；2 个 KV head 只要 64 字节，少了 2/3。公式最前面的 2 表示 K、V 两份，最后面的 2 才是每元素字节数。
+
+共享 KV 不表示三个 Q head 得到相同 O，因为它们的 Q 不同，产生的 P 也不同。节省的是 KV 表示和潜在读取量，QK/PV 的 query-head 工作仍存在；实现是否把共享 KV 的物理读取充分复用，取决于布局和调度。GQA 也是模型架构选择，不能随意删掉已训练 MHA 模型的 K/V head 并声称只是等价内核优化。
 
 ## 8. KV cache 与分页是存储管理
 
@@ -149,7 +220,13 @@ MHA 是多头注意力；GQA 是分组查询注意力；MQA 是只有一个 KV h
 
 连续 cache 的形状为 `(batch_cache, capacity, H_kv, d)`。分页 cache 改为 `(num_blocks, page_block_size, H_kv, d)`，另有 `block_table` 把每条序列的逻辑页映射到物理页。
 
+先用连续 cache 手算一次追加。取 `B=H_kv=d=1`、容量 4，已有长度为 2，cache 的有效内容是 `K=[0,ln(2)]、V=[1,2]`；剩余两个位置只是容量，不能参与 attention。现在提供 `q=1、k_new=ln(4)、v_new=3`：kernel 将新 K/V 写到下标 2，本次有效长度变为 3，score 为 `[0,ln(2),ln(4)]`，输出为 `(1+4+12)/7=17/7`。调用者下一次应传已有长度 3；若仍传 2，下一次追加会把下标 2 当作待写位置。
+
+这个 `d=1` 例子只解释语义。真实调用中，先准备好新 K/V 和 cache 的写入位置，再由 kernel 完成更新和 attention；后续 stream 读取 cache 也必须有完成依赖。运行时负责分配容量、维护长度及页表，kernel 负责按给定地址读写。仍被在途请求引用的 cache 区间不能交给另一个请求覆盖。KV cache 避免重新计算旧 token 的 K/V，但新 query 通常仍要读取所有允许的历史 K/V，历史越长，这部分工作仍会增加。
+
 取 FA2 接口允许的 `page_block_size=256`，某序列 `block_table=[7,3,...]`。它的逻辑 token 300 位于逻辑页 `300//256=1`，页内偏移 `300%256=44`，因此访问物理页 3 的第 44 行。页可以不连续，但数学上的 token 顺序没有改变。
+
+分页解决的是“增长中的序列怎样获得可复用的存储”，不要求一次分配容纳整个最长序列的连续大区间。它增加了页表、地址转换和尾页未用容量，也没有把有效 K/V 压缩得更小。此处的页是运行时管理的一段 token 存储，不是 CUDA thread block，也不是一次 QK 的矩阵 tile；三个名字都可能含 block，职责却完全不同。
 
 ## 9. split KV 的结果怎样合并
 
@@ -159,11 +236,21 @@ MHA 是多头注意力；GQA 是分组查询注意力；MQA 是只有一个 KV h
 
 $$L=\log\sum_r e^{L_r},\qquad O=\sum_r e^{L_r-L}O_r.$$
 
+公式可从分子分母直接推出。令 split r 对当前 query 的加权分子为 $A_r=\sum_{j\in r}e^{S_{ij}}V_j$，局部输出 $O_r=A_r/Z_r$。由于各 split 覆盖互不重叠的 key，完整结果为：
+
+$$O=\frac{\sum_r A_r}{\sum_r Z_r}
+=\sum_r\frac{Z_r}{\sum_sZ_s}O_r
+=\sum_r e^{L_r-L}O_r.$$
+
+这里 s 只是遍历 split 的求和下标，$L_r$ 和 L 都是自然对数，$e^{L_r-L}$ 是无量纲权重，对有效 split 求和为 1。此推导要求每个局部 $O_r$ 已经除以自己的分母；若输入的是未归一化 a，就不能直接套这组权重。
+
 用[第 01 章](<01_algorithm_and_online_softmax.md>)四个 key 的手算例子：第一块输出为 `5/3`，分母 Z 为 3；第二块输出为 `11/3`，分母 Z 为 12。合并权重应为 `3/15` 和 `12/15`，最终仍得 `49/15`；直接平均会出错。
 
 这不与第 01 章的 `l=1.5` 矛盾：l 使用减去局部最大值后的基准，`Z_r=exp(m_r)*l_r`。两个 split 各自的 l 都是 1.5，但 m 分别是 `ln(2)`、`ln(8)`，所以 Z 分别为 3、12，LSE 分别为 `ln(3)`、`ln(12)`。只比较 l 会丢掉基准信息；保存 LSE 才能正确合并。
 
 源码在 `flash_api.cpp` 决定 split 数，在 `flash_fwd_launch_template.h` 启动局部计算和 combine，具体合并在 `flash_fwd_kernel.h` 的 `combine_attn_seqk_parallel`。split 带来临时结果和第二次合并的成本，因此不是分得越多越好。
+
+例如一个 query、一个 head，K 有 8 个 tile。普通前向只有一个负责该 query 的任务依次扫 8 块；分成 4 个 split 后，可由 4 个任务各扫 2 块，再启动合并。若逻辑部分输出都用 FP32，工作区的输出与 LSE 元素数为 `R×B×H×N_q×(d_v+1)`，其中 R 为 split 数；字节数再乘 4，实际分配还可能有 padding。每增加 split，既增加可调度任务，也增加局部结果的写入、读取和合并工作。局部 kernel 完成后 combine 才能读取，combine 结束后工作区才可复用；小 K 或原本已有很多 Q/batch/head 并行时，这笔额外成本可能抵消收益。
 
 ## 10. 源码精读：一次反向传播的中间值如何变化
 
@@ -224,7 +311,7 @@ FLASH_NAMESPACE::gemm</*A_in_regs=*/false, /*B_in_regs=*/Kernel_traits::Is_V_in_
 
 // Reshape acc_dp from (MMA=4, MMA_N, MMA_N) to (row=(2, MMA_N), col=(2, MMA_N))
 Tensor dS = make_tensor(acc_dp.data(), scores.layout());
-auto pointwise_mult = [](<../../../13_Source_Analysis/flash_attention/float p, float dp, float d>) {
+auto pointwise_mult = [](float p, float dp, float d) {
     return p * (!Is_dropout || p >= 0 ? dp - d : d);
 };
 #pragma unroll

@@ -30,6 +30,10 @@ TP=2, PP=2, DP=2, world=8, order="tp-pp-dp"
 
 真实配置还可能有 CP、EP、embedding group、position embedding group、data-modulo-expert group。必须用实际 `order` 和代码验证。
 
+为什么 DP group 是 `{0,4}`，而不是相邻的 `{0,1}`？因为 rank0 和 rank4 持有相同层、相同 TP 切片，只是读取不同样本，参数梯度才可以相加。rank0 和 rank1 持有不同权重切片，它们合作计算同一层；把这两个参数梯度直接当 DP 梯度平均，就会把不同参数的位置混为一谈。
+
+上表的展平公式为 `rank=tp+2×pp+4×dp`，每一项都是无单位的整数索引。例如 rank5=`1+2×0+4×1`，坐标是 `(tp=1,pp=0,dp=1)`；其 TP group 是 `{4,5}`，PP group 是 `{5,7}`，DP group 是 `{1,5}`。固定坐标再枚举，比凭 rank 相邻关系猜通信组更可靠。
+
 ### `RankGenerator` 的核心思想
 
 多维坐标展平：
@@ -66,6 +70,23 @@ Y1 = X A1
 
 代码中的 autograd mapping 会把这些通信隐藏在 copy/gather/reduce primitive 后面。例如 `copy_to_tensor_model_parallel_region` 是 forward copy、backward all-reduce；不能只检查 forward 函数体来判断通信次数。完整正反向表见[源码问题详解第 7 节](<../06_reference/03_source_questions.md>)。
 
+### 列切分的完整手算
+
+以下使用数学约定 `Y=XA`，`X:[m,k]`、`A:[k,n]`；PyTorch Linear 的 weight 通常存成 `[n,k]` 并计算 `X weightᵀ`，因此“列切”指逻辑输出维，不应机械对应存储的第 1 轴。令 `m=1,k=2,n=4,TP=2`：
+
+```text
+X = [1,2]
+A = [[1,0,2,0],
+     [0,1,0,2]]
+A0 = [[1,0],[0,1]]    A1 = [[2,0],[0,2]]
+Y0 = [1,2]           Y1 = [2,4]
+逻辑 Y = concat(Y0,Y1) = [1,2,2,4]
+```
+
+设下游传回 `dY=[1,1,1,1]`，两卡各收到自己的 `[1,1]`。由矩阵链式法则，`dA=XᵀdY`，所以两个 `dA_i:[2,2]` 均为 `[[1,1],[2,2]]`；它们属于不同列，只应按列拼回 `dA:[2,4]`。而 `dX₀=[1,1]`、`dX₁=[2,2]` 是同一个 X 的两份贡献，必须 SUM 得 `[3,3]`。如果把 dX 拼成四个元素，形状就错；如果只留一份，梯度数值就错。
+
+本地 wgrad（权重梯度）计算需要前向 X，dgrad（输入梯度）需要权重 A。异步提交 dX 的归约后，可以在依赖允许时计算 dA；返回上游 dX 前必须等归约完成。不能因为本地 GEMM 已结束，就复用仍被通信读取的 dX 缓冲区。
+
 ## 3. Row Parallel Linear
 
 `RowParallelLinear` 位于 `layers.py:1142`。按 A 的输入行切，同时 X 按最后一维切：
@@ -79,6 +100,10 @@ Y = X0 A0 + X1 A1
 各 rank 算 partial output，随后 all-reduce（或与 sequence parallel 配合的 reduce-scatter）得到结果。
 
 Column→激活→Row 的组合避免在 MLP 中间巨大维度上收集完整 tensor。
+
+沿用上例的 `[1,2,2,4]` 作为下一层输入 Z，令下一层矩阵 `B:[4,2]` 的四行分别是 `[1,0]、[0,1]、[1,0]、[0,1]`。rank0 用 `Z₀=[1,2]` 乘前两行，得 partial output `[1,2]`；rank1 用 `Z₁=[2,4]` 乘后两行，得 `[2,4]`；SUM 后输出 `[3,6]`。两个 partial 都是 `[1,2]` 的形状，但都不是最终值。
+
+若上游梯度为 `[1,1]`，两个输入 shard 的梯度各为 `[1,1]`，按输入维拼接才是 `dZ=[1,1,1,1]`。这与列并行的 dX 求和形成对照：要做哪种通信，取决于“同一变量的贡献”还是“不同变量的切片”。bias 也不能随 partial output 重复相加：`P₀+P₁+b` 才是原式，`(P₀+b)+(P₁+b)` 会多一份 b。
 
 ## 4. Vocab parallel
 
@@ -223,6 +248,12 @@ loss = log(denom) + m - target_logit
 5. TP all-reduce SUM 得全局 target logit。
 
 这避免收集全词表 logits。若 target id 没减本 rank vocab start，读到的就是错误位置。
+
+把公式从普通 softmax 推出来。目标类别 t 的概率为 `p_t=exp(z_t)/Σ_j exp(z_j)`，故 `-ln p_t=lnΣ_j exp(z_j)-z_t`。为了不让很大的 z 溢出，令 `m=max_j z_j`，则 `Σexp(z_j)=exp(m)Σexp(z_j-m)`；取对数后得到 `m+lnΣexp(z_j-m)-z_t`。每个 rank 只负责其中一段 j，全局 SUM 正好恢复分母。
+
+取两个 shard `z₀=[0,ln2]`、`z₁=[ln3,ln4]`，目标是全局 ID 3。全局 m=ln4，减 m 后的指数为 `[1/4,1/2,3/4,1]`，分母 2.5；目标 logit=ln4，因此 loss=`ln2.5≈0.9163 nat`，与直接计算 `-ln(4/10)` 一致。若 rank1 只按自己的两类归一化，会得到 `-ln(4/7)≈0.5596`，即使目标就在本卡，loss 也错了。
+
+对每个 token，跨卡只需合并 max、sum-exp、目标值等标量统计，而不是 V 个 logits。可减少通信和完整词表 buffer，但保留本地 logits 及反向所需状态；其收益随词表大小和 batch 而变，不代表消除了所有通信。
 
 ## 11. 进程组观测脚本
 

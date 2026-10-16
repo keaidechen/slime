@@ -280,6 +280,12 @@ self.rid_to_state[rid] = state
 
 重复 `rid` 会在 `_init_req_state()` 中直接报错。因为 `rid` 同时存在于多个进程，允许两个 active request 复用它会把输出路由到错误的 coroutine。
 
+#### Event 是通知，列表才是数据
+
+协程是可以在 `await` 处让出执行权的函数，不等于一个独立操作系统线程。假设后台先收到 A 的 token `20`，把它放入 `out_list` 并 `set()`；HTTP 协程尚未恢复时又收到 `21`，列表里便有两项。`asyncio.Event` 仍只有“已置位”这一状态，不会累计成两个通知。因此消费者要检查并消费队列中的实际数据，不能把一次 `wait()` 返回理解为恰好收到一个 token。
+
+这里至少有三个不同的“完成”：IPC 发送已入队、GPU 生成完成、HTTP 客户端已收到字节。前一项不能证明后一项。慢客户端会积压输出，CPU 侧的等待时间也不能算作 GPU forward 时间。
+
 ### 7.2 tokenization 与参数校验
 
 `_tokenize_one_request()` 位于 `tokenizer_manager.py:834`：
@@ -494,6 +500,24 @@ new_batch.prepare_for_extend()
 
 `req_pool_idx` 不是 KV index；它是请求映射表的 slot。`out_cache_loc` 才描述本轮新 token 写入哪些物理 KV 位置。
 
+#### 从两个请求手工构造一次 EXTEND
+
+先令 page size 为 1、无并行。A=`[10,11,12]` 命中前两个 token，B=`[30,31]` 无命中；A/B 的 request slot 分别为 7/9。假设已有 A 的 KV 位置 `[20,4]`，allocator 给新 token 分配 `[11,2,8]`。
+
+| 字段 | 值 | 形状与含义 |
+|---|---|---|
+| `input_ids` | `[12,30,31]` | `[3]`，只拼接本轮待算 token |
+| `positions` | `[2,0,1]` | `[3]`，各请求内部从 0 开始的位置 |
+| prefix lengths | `[2,0]` | `[2]`，已复用历史长度 |
+| extend lengths | `[1,2]` | `[2]`，本轮各请求计算量 |
+| `seq_lens` | `[3,2]` | `[2]`，包含本轮新位置的可见总长度 |
+| `req_pool_indices` | `[7,9]` | `[2]`，映射表行号 |
+| `out_cache_loc` | `[11,2,8]` | `[3]`，新 K/V 写入位置 |
+
+更新映射后，行 7 的有效区为 `[20,4,11]`，行 9 为 `[2,8]`。隐藏维度若为 4，embedding 后的输入是 `[3,4]`，不是 `[2,3,4]`：变长请求在 token 维打平，由长度和边界元数据隔开。A 的 Query 可以读行 7 的三个位置，B 的 Query 只能读行 9 的相应因果前缀，不能因为数组中相邻就读到 A。
+
+GPU 写完各层 KV 后，prefill 末位置分别产生 A/B 的下一 token。这个例子把逻辑位置、batch 行号和物理地址分成了三套编号；后续 Attention 和缓存章节都沿用这一区分。
+
 
 ## 11. 第六段：从 `ScheduleBatch` 到模型 forward 和采样
 
@@ -598,6 +622,8 @@ self.output_streamer.stream_output(...)
 - `seq_lens += 1`；
 - 输入 token 是上轮刚采样的最后一个 output token；
 - 更新 penalty/sampling metadata。
+
+这些是提交 forward 前的准备动作。本快照在 `prepare_for_decode()` 内就增加 `kv_committed_len`，因此该字段的名称不能作为“GPU 已写完”的独立证据。正常循环靠执行顺序、overlap 靠 stream/event 与结果队列保证真正的消费者不会提前读取；异常和清理路径还要使用有效提交边界。
 
 随后再次走：
 
@@ -812,7 +838,7 @@ EOS 是 decode 2 的采样结果，因此 EOS 自己还没有 KV，也不需要�
 | TokenizerManager | 每次 event 都 yield | `finished` 前不 yield 用户结果 |
 | HTTP | SSE delta + `[DONE]` | 一个 JSON response |
 
-RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+RNG（Random Number Generator，随机数生成器）的状态会随抽样推进。相同 seed 只是相同起点；逐 token 对齐还要求随机数消费规则、采样分支与数值条件相容。
 
 所以如果相同 seed、sampling 参数和运行模式下 streaming/non-streaming 的 token ids 不同，应优先怀疑请求参数、batching/RNG、grammar/tool parser 或实现 bug，而不是把差异归因于 HTTP 格式。
 
@@ -855,6 +881,8 @@ iteration t:
 - grammar/stop/finish 仍按实际返回 token 推进。
 
 因此调试 overlap 时，日志中的“当前 batch”和“当前处理 result”可能相差一轮。关闭 overlap 是建立主链路心智模型的好方法，但不能用关闭后的 timing 推断生产性能。
+
+可以用一个反例检查理解：CPU 为第 `t+1` 轮准备同一地址的长度数组，GPU 第 `t` 轮尚未读完它；即便 Python 赋值早已返回，GPU 也可能读到新长度配旧 token。WAR 是 Write After Read（读后写）依赖，要求“旧读完成 → 新写发生”。只需等待旧读完成的事件时，就不必等待整轮矩阵计算结束；这正是细粒度 barrier 能保留重叠收益的原因。若旧 batch 的副本仍引用同一张量，浅复制 Python 对象也不能自动解决这个问题。
 
 
 ## 23. 高级功能插入主链路的位置

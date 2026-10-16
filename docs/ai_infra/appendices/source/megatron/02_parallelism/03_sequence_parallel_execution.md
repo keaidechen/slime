@@ -22,6 +22,12 @@ SP 将这段激活沿 token/sequence 切开，复用 TP group。它没有新增�
 
 FC1 输出和 FC2 输出在这个例子里 shape 相同，但前者是不同 feature，后者是相同 feature 的 partial sum。shape 必须和 placement 一起记录。
 
+S 是全序列位置数，B 是本批样本数，H 是 hidden 宽度，F 是普通前馈层的中间宽度；FC1/FC2 分别是第一/第二个全连接层。AG（all-gather）在这里沿 sequence 拼接，RS（reduce-scatter）先对相同位置求和，再沿 sequence 分发。表里的 FC1 使用普通激活；若换成 SwiGLU，激活前还有 gate/up 两路，不能照抄其临时 tensor 大小。
+
+取更小的 `S=4,B=1,H=1`，两卡 norm 输出分别是 `[1,2]` 和 `[3,4]`。AG 后各卡都看到 `[1,2,3,4]`。假设各自 TP 子图最终给出 partial output `[1,2,3,4]` 与 `[10,20,30,40]`，SUM 得 `[11,22,33,44]`，RS 让 rank0 保存 `[11,22]`、rank1 保存 `[33,44]`。若只 scatter 第一个 partial，就得到 `[1,2]` 和 `[3,4]`，虽然 shape 正确，却丢掉了另一卡的贡献。
+
+norm 输出的本地 shard 要保存到相应反向完成；FC1 前的 gather buffer 可以在本次所有消费者完成后复用。有些实现反向重新 gather 输入以计算 wgrad，避免长期保存 full input；有些 backend 有自己的缓存策略。不能仅由前向画出一张 full tensor 就断言它会一直驻留到迭代结束。
+
 ## 3. 到源码里找三处责任边界
 
 1. [tensor_parallel/layers.py](<../../../../../../Megatron-LM/megatron/core/tensor_parallel/layers.py>)：从 `ColumnParallelLinear.forward` 的 `sequence_parallel` 分支追到线性层 autograd 实现，观察输入 AG 与反向 dgrad RS。Row 路径追 `RowParallelLinear.forward` 的 sequence RS。
@@ -51,6 +57,10 @@ dBeta_local  = [2,2]
 
 跨 SP 切分合并后应该是 `dGamma=[-4,4]`、`dBeta=[4,4]`。只同步 DP 组不能补上 TP ranks 之间缺失的 token 贡献。
 
+这个例子的“norm 输出”准确地说是仿射变换前的归一化值 x̂，或 γ=1、β=0 时的输出。LayerNorm 的 `y_tj=γ_j x̂_tj+β_j` 对参数求导，得到 `dγ_j=Σ_t dy_tj·x̂_tj`、`dβ_j=Σ_t dy_tj`。t 遍历本地 token，j 遍历特征；γ、β 均为 `[H]`。每卡只有两个 t，所以先得到 `[-2,2]`、`[2,2]`；全序列四个 token 的总梯度必须把两卡的 t 求和。
+
+这里不是再算一遍数据副本平均：SP ranks 共同完成一个样本的不同 token。若对两份局部 norm 梯度取 AVG，就会少一半贡献；若其他地方已经做了正确归约又手工 SUM 一次，又会多一倍。求和的位置和目标函数最终平均分母要分开核对。
+
 当前 `_allreduce_non_tensor_model_parallel_grads` 区分两个列表：带 `sequence_parallel` 标记的参数走 SUM；带 `average_gradients_across_tp_domain` 标记的参数走 AVG，并有独立优先级。不要把所有非 TP 参数都统一 SUM，也不要自己在 optimizer 前重复规约一次。
 
 调试入口记录 `(param_name, sequence_parallel, average_gradients_across_tp_domain, grad_norm, tp_group_members)`。先在 finalize 前后比较，再看 optimizer 读取的是 `main_grad` 还是包装后的 local gradient。
@@ -63,6 +73,8 @@ TP 中某些 AR 可以拆成匹配的 RS/AG，SP 因而不必等价于把一整�
 
 与 CP 组合时，norm 入口常可理解为 `[S/(CP×TP),B,H]`；进入 TP 子图 gather 后恢复的是本 CP rank 的 `[S/CP,B,H]`，不是全局 `[S,B,H]`。attention 仍需 CP 协议处理远端上下文。
 
+
+按表中的 BF16 例子，完整 norm activation `[8,1,4]` 为 `8×1×4×2=64 bytes`，SP 后本地 `[4,1,4]` 为 32 bytes。但 FC1 的临时输入仍可占 64 bytes，反向还会有梯度与 workspace。如果两个缓冲区同时活跃，峰值不能用 32 bytes 代表。SP 省的是某些长期复制的激活，真实收益取决于它们与临时缓冲区重叠的时间。
 
 ## 7. 等价性与失效边界
 

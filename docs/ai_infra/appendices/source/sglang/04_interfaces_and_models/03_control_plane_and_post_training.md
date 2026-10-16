@@ -26,6 +26,10 @@
 控制面请求会改变整个服务的共享状态，不能按普通 inference request 理解。本章重点回答：换权时在途请求怎样隔离、哪些路径能回滚、KV/Graph 为什么要失效、LoRA 如何安全上下线，以及 RL 系统应如何建立 policy version 闭环。
 
 
+先定义“控制面”：普通请求读取模型并生成结果，控制请求则改变许多请求共同依赖的模型、缓存或运行状态。数据面负责前者，控制面负责后者。比如训练器刚把 policy（生成策略模型）从版本 7 更新到 8，服务必须决定旧请求何时结束、新请求何时开始、旧 KV 何时失效。只把新参数复制到 GPU，尚未回答这些问题。
+
+本章区分三种保证：隔离表示推理与更新不在不安全时段并发；原子性表示更新要么全成功要么完全未发生；发布表示让后续请求可见新版本。锁可能提供隔离，却不自动提供跨 rank 原子性；读完下列源码边界后，再讨论上层怎样发布。
+
 ## 1. 先纠正三个常见误解
 
 ### 误解一：控制面 API 成功返回，就等于跨 rank 事务提交
@@ -81,6 +85,10 @@ normalize request
 reader lock 覆盖的不只是入队瞬间，而是请求的 tokenization、scheduler 执行和 response 等待过程。因此正常换权请求取得 writer lock 前，会等待已经进入该区域的 inference 完成；writer 持有期间，新 inference 也无法进入。
 
 这提供了重要的**单请求版本隔离**：正常路径中的一个请求不会在生成一半时被原地换权。
+
+例如 t0 时 A/B 都以 reader 身份读取版本 7；t1 来了换权 U，它申请 writer；t2 时 A 完成、B 仍在生成，U 还不能写；t3 B 完成并释放 reader，U 才能进入更新区；t4 更新成功后后续请求才可读取版本 8。具体是否让新 reader 插队由读写锁实现和 pause 协议决定，但“仍有旧 reader 时不能获得 writer”是不变量。
+
+GPU kernel 提交是异步的，因此 reader 的退出边界不能仅绑定“CPU 发完最后一个 forward”。它必须覆盖 runtime 确认该请求不再使用旧状态的过程。代价是长请求或未正确结束的 reader 会拉长换权等待；`abort_all_requests` 改变的是如何结束旧工作，不是取消同步需求。
 
 ### 3.2 pause 与锁如何配合
 
@@ -192,6 +200,10 @@ Disk 和 IPC 路径在 target 成功且存在 draft worker 时会继续更新 dr
 
 KV cache 是旧权重对历史 token 计算出的派生状态。权重改变后，即使 token IDs 完全相同，旧 KV 通常也不再代表新模型。
 
+用一层线性投影看得更清楚。固定隐藏向量 `x=[1,2]`，旧 `W_K` 为 2×2 单位矩阵，则旧 key=`[1,2]`；新 `W_K=2I`，则应为 `[2,4]`。若 Query=`[1,0]`，对这一个位置的未缩放内积从 1 变为 2。对于含多个 key 的 Attention，这会改变 softmax 相对权重。token ID 虽然相同，旧 key 已不再代表新计算。
+
+即便只改后层或输出头，也应证明所有被复用状态都不受影响，才可有选择地保留。一般策略更新会改变隐藏层，因此默认失效更容易维持正确性。Flush cache 使旧结果不能再被新请求命中，但不等于把静态显存池释放给驱动。
+
 各 update request 的 `flush_cache` 默认是 `True`。`SchedulerWeightUpdaterManager.flush_cache_after_weight_update()` 在成功后调用 scheduler flush，并断言成功。
 
 ### 6.1 flush 的前置条件
@@ -258,10 +270,16 @@ Disk update request 有 `recapture_cuda_graph`，ModelRunner 只在该值为真�
 
 版本号必须与 readback/checksum、health 和部署状态结合使用。
 
+设 TP 两个 rank 各持一半参数：rank 0 写入版本 8 成功，rank 1 失败仍保留 7，总体 API 返回失败，版本标签仍为 7。此时标签“不前进”是正确的发布行为，但设备已经是混合参数，不能继续宣称服务执行的就是完整版本 7。Checksum 是按约定算法计算的数据校验值；不同 rank 持有不同 shard，校验的是各自是否匹配预期 shard，而不是要求它们的 checksum 数值全相同。
+
 
 ## 9. LoRA 动态加载为什么是另一套协议
 
 LoRA 不替换整个 base model，而是在共享模型上管理多个 adapter。其并发安全由 tokenizer 进程中的 `LoRARegistry` 和 backend adapter slots 协同完成。
+
+LoRA 是 Low-Rank Adaptation（低秩适配）。以列向量约定，基础权重 `W:[d_out,d_in]`，增量写为 `BA`，其中 `A:[r,d_in]`、`B:[d_out,r]`，r 是较小的秩；输出 `Wx+B(Ax)` 的形状仍为 `[d_out]`。若 `d_in=d_out=4,r=1`，增量只需 `4+4=8` 个参数，而完整增量矩阵需 16 个。实际还可带缩放系数。
+
+共享 W 减少重复存储，但不同 adapter 的有效权重不同，所以不能只按同名 prompt 共享 KV。卸载也不是删除一个 Python 字典项就结束：后端 GPU 仍可能持有 A/B 的地址，必须先停止新增引用，再等已有请求退出。
 
 ### 9.1 `LoRARef` 为什么需要独立 `lora_id`
 
@@ -355,6 +373,10 @@ policy version N
 ### 10.2 on-policy 边界
 
 reader/writer lock 能防止单个正常请求跨换权，但训练 batch 是否混入 N 与 N+1 是上层数据管道问题。必须按返回的 version/metadata 分组或过滤，并在 timeout/retry 后重新确认请求实际服务版本。
+
+RL 是 Reinforcement Learning（强化学习），rollout 是按某个策略实际采样得到的交互序列。On-policy 要求数据与正在优化的策略符合算法约定的版本关系，并非“来自同一个服务地址”就足够。假设缓冲区里有版本 7 的两条轨迹和版本 8 的一条，升级模型不会把前两条自动变成版本 8。
+
+若算法使用重要性比率 `r_t=π_new(a_t|s_t)/π_behavior(a_t|s_t)=exp(logπ_new-logπ_behavior)`，s 是已见历史、a 是本步 token，两个概率均无单位。例如旧行为概率 0.25、新概率 0.5，比率为 2；误把旧 logprob 当作新 logprob 会得到 1，改变训练信号。具体算法是否使用过滤、截断或校正由训练系统决定，但行为版本、token 和 logprob 口径必须可追踪。
 
 ### 10.3 安全发布建议
 

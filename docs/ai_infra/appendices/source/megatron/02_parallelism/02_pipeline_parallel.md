@@ -3,6 +3,10 @@
 相关基础：[通信与 tensor 基础](<../../../communication/两卡通信与torchrun.md>)。
 
 
+先看为什么需要 schedule（调度）。把模型拆成两半后，第二半必须等第一半的 activation，第一半的反向又必须等第二半的梯度。只有一个 batch 时，两张卡会交替等待。把一次更新拆成多个 microbatch，才有机会让“后一半计算旧批”和“前一半计算新批”同时进行。调度器决定这个次序，网络本身不会自动安排。
+
+本章用 P 表示物理流水阶段数，M 表示一次更新的 microbatch 数，`Fᵢ/Bᵢ` 表示第 i 批的前向/反向。下标是批次身份，不能与物理 rank、层号或 VPP chunk 号互换。
+
 ## 1. schedule 选择
 
 `get_forward_backward_func()` 位于 `megatron/core/pipeline_parallel/schedules.py:48`，按 PP/VPP 状态返回：
@@ -34,6 +38,23 @@ rank 越靠前，warmup microbatch 越多。最后 stage 最早获得 loss 并�
 
 理论 bubble 的粗略比例可看作 `(PP-1)/(M+PP-1)`，M 是 microbatch 数。它忽略通信、stage 不均和重叠，但足以解释为什么 M 太小会很差。
 
+### 两个阶段、两批数据的时间表
+
+假设每个 stage 的一次 F 或 B 都占一个时间单位，通信耗时忽略，两个阶段使用固定的一版参数。以下是一种同步 1F1B 的合法时序：
+
+| 时隙 | stage0 | stage1 | 关键依赖 |
+|---:|---|---|---|
+| 0 | F₀ | 等待 | stage1 尚未拿到第 0 批输入 |
+| 1 | F₁ | F₀ | stage0 保留两批反向所需数据 |
+| 2 | 等待 | B₀ | 末 stage 从 loss 开始反向 |
+| 3 | B₀ | F₁ | 第 0 批梯度回到 stage0 |
+| 4 | 等待 | B₁ | stage1 完成第 1 批梯度 |
+| 5 | B₁ | 等待 | 两批都完成后才更新参数 |
+
+每个 stage 做 4 个有效任务，历时 6 个单位，空闲比例为 `2/6=1/3`。一般理想均衡模型中，每 stage 有 `M(t_f+t_b)` 有效计算，填充和排空合计约 `(P-1)(t_f+t_b)`，所以总时长约 `(M+P-1)(t_f+t_b)`；相除后气泡比例是 `(P-1)/(M+P-1)`。这里 t_f/t_b 是每个 stage、每个 microbatch 的时间，单位相同。stage 不均、通信和 VPP 会改变这个模型。
+
+1F1B 的重要收益是较早结束旧批的反向，降低同时保留的 saved activations 数；在理想均衡模型里，它不必比 all-forward-all-backward 拥有更小的气泡。两阶段两批这个极小例子也未必体现显存差距，M 较大时在途批次数的差别才明显。
+
 ## 3. P2P 的 tensor 语义
 
 相邻 stage 交换：
@@ -52,6 +73,10 @@ rank 越靠前，warmup microbatch 越多。最后 stage 最早获得 loss 并�
 - packed sequence；
 - pipeline layout 中相邻模块的接口。
 
+以无 TP/SP 的 `S=4,B=1,H=2` 为例，stage0 发送 `[4,1,2]` 的 activation，stage1 接收后作为自己计算图的输入。stage1 反向得到同形状的 `dActivation` 再发回；它不是 stage1 的参数梯度。stage0 用它继续链式法则，最终得到 stage0 自己参数的梯度。每个进程只保存本地计算图，跨进程连起来的是显式发送的数值。
+
+一次异步发送要区分 CPU 提交、设备传输、接收方可读三个时刻。send 的 source storage 在传输读取结束前不可覆写；recv buffer 在完成事件前不可给模型计算。完成通信不等于反向所需数据都可丢弃：本地 autograd 可能还保存了输入、非线性输出或 mask。
+
 ## 4. activation 的“伪释放”
 
 schedule 中的 `deallocate_output_tensor()` 会在 activation 发出后把 tensor 的 `.data` 缩成 scalar，但保留 `.grad_fn`。普通 `torch.autograd.backward` 会检查 output 和 grad shape 相同，因此代码用 `custom_backward()` 直接调用 C++ autograd engine。
@@ -65,6 +90,10 @@ schedule 中的 `deallocate_output_tensor()` 会在 activation 发出后把 tens
 ```
 
 风险：如果自定义代码在 send 后仍读取 output data，就会看到被缩小的 tensor。不能把“保留 Python Tensor 对象”误解为“数据仍在”。
+
+例如 `y=xW` 的反向需要 x 和 W，而不需要重新读取 y 的数值，因此发送完成后可以释放 graph head 的 y payload。若后面是 `a=sigmoid(y)`，其反向可能使用 a；保存 a 的引用仍必须有效。伪释放只回收不再需要的那一份 output storage，不会神奇地清空所有中间激活。源码也限制 view 的处理，不能把共享底层内存的 view 当成独占分配直接释放。
+
+“可释放”应以调度器已经建立安全的传输/消费者依赖为准，不能把“刚调用 send”作为自定义代码随意改写 `.data` 的许可。保留 graph head 解决的是如何进入反向图，saved tensors 或重计算解决的是反向计算需要什么数值。
 
 ## 5. virtual pipeline / interleaving
 
@@ -226,6 +255,8 @@ PP=2 时逻辑前向相邻关系为 `(rank0,chunk0) → (rank1,chunk0) → (rank
 
 不要直接照抄 layout：先对目标 GPU 和实际 seq/batch profile，因为 attention、MoE、MTP 的相对成本会随 shape 改变。
 
+例如四层的每批前反向时间分别为 `[1,1,1,3] ms`。按层数平分为前两层/后两层，stage 时间是 2 和 4 ms；若容量允许，改成前三层/最后一层，就成为 3 和 3 ms。理想稳态吞吐由较慢 stage 限制，瓶颈由 4 降到 3 ms，而总工作量仍是 6 ms。新的 stage0 多存一层参数和中间状态，所以时间均衡也要重新检查显存；这正是 layout 必须和状态账本一起评审的原因。
+
 ## 13. 调度目标、数值等价与关键路径
 
 PP 用不同 stage 承担不同层，解决层数累积的容量问题；microbatch 流水提高并发，1F1B 改变激活生命周期。同步 flush 调度应在该次 update 的所有 microbatch 梯度积累完成后更新，不能把 F/B 交错误解为使用不同参数版本。
@@ -237,6 +268,6 @@ PP 用不同 stage 承担不同层，解决层数累积的容量问题；microba
 ## 14. 本章延伸阅读
 
 - [Pipeline Parallel API](https://docs.nvidia.com/megatron-core/developer-guide/latest/api-guide/core/pipeline_parallel.html)：查 schedule 与 P2P communicator。
-- [高效大规模流水线训练论文](https://arxiv.org/abs/2104.04473)：interleaved 1F1B 与 sequence parallel 的理论来源。
+- [高效大规模流水线训练论文](https://arxiv.org/abs/2104.04473)：interleaved 1F1B 及多种并行组合的来源；sequence parallel 另见[激活重计算论文](https://arxiv.org/abs/2205.05198)。
 - [自定义 Pipeline Layout 官方指南](https://docs.nvidia.com/megatron-core/developer-guide/latest/user-guide/features/pipeline_parallel_layout.html)：包含 DeepSeek-V3 PP16/VPP2 的完整布局表。
 - [GPipe 论文](https://arxiv.org/abs/1811.06965)：作为 all-forward/all-backward baseline 理解 bubble 与 activation。

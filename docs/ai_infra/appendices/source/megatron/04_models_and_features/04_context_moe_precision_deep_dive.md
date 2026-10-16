@@ -30,6 +30,8 @@ o = Σ exp(score - m) V
 
 排查 CP 错误重点检查 causal mask 在“全局 token 坐标”上是否正确，而不是本地 shard 坐标。
 
+m 是每行 score 的最大值，无物理单位；l 是减去 m 后指数的和；o 是以这些指数为权的 value 向量和，与 V 有相同数值尺度。某些 backend 保存 `LSE=m+ln(l)`（log-sum-exp，对数指数和）与已经归一化的 output，数学上等价。不能把保存的 output 再除一次 l。完整的 `0,ln3` 两块手算与反向归属见 [CP 执行篇](<../02_parallelism/04_context_parallel_execution.md>)。
+
 ## 2. MoE 数据流
 
 `MoELayer` 位于 `megatron/core/transformer/moe/moe_layer.py:213`，`TopKRouter` 位于 `moe/router.py:141`。典型流程：
@@ -61,6 +63,16 @@ router 不只是 `topk(softmax(xW))`：
 - deterministic routing 与 tie-breaking。
 
 配置中关闭或错误缩放 auxiliary loss 可能让 expert 负载塌缩。当前实现通过 `MoEAuxLossAutoScaler` 把 auxiliary loss 自动挂到 activation 的 autograd 边上，并由 schedule 设置 accumulation scale；任务 closure 再手工相加会双计。完整调用链见[源码问题详解第 15 节](<../06_reference/03_source_questions.md>)。
+
+### load balancing 与 z-loss 各约束什么
+
+先看 top-1、无 padding 的简单负载均衡目标。T 个 token、E 个专家，令 `f_e=选中专家e的token数/T`，`P_e=Σ_t p_te/T` 为该专家在 router softmax 中的平均概率。一种常见辅助项为 `L_bal=α E Σ_e f_e P_e`，α 是无单位系数。f 是离散计数，通常作为不求导的路由统计；P 来自可微分数。
+
+取 E=2、T=4，计数 `[3,1]`，平均概率 `[0.75,0.25]`，则 `L_bal/α=2(0.75²+0.25²)=1.25`；均衡计数和概率各 `[0.5,0.5]` 时为 1。这个比较解释它怎样惩罚概率与实际路由同时集中到少数专家，但不能承诺每个 batch 的计数完全均衡。top-k 时计数总和是 T×K，分母与统计域应对应调整；序列级、全局级等实现必须看实际公式。
+
+z-loss 则针对 router 分数尺度，例如 `L_z=(β/T)Σ_t (lnΣ_e exp(z_te))²`。z_te 是未归一化 router logit，β 是系数。给一行所有 logits 加常数 c，softmax 概率不变，但 log-sum-exp 增加 c，z-loss 随之改变。因此 z-loss 与均衡计数不是同一个目标。主 loss、两类辅助项与累积缩放应只接入一次。
+
+capacity 是每个专家容纳的路由行数上限。用常见的 `C=ceil(c·T·K/E)` 估算，c 为 capacity factor；T=4、K=2、E=4、c=1 时 C=2。实际计数 `[3,2,1,2]` 会让专家0超出一行，其他专家即使空闲也不能直接替它计算不同权重的函数。drop 减少工作但丢弃路径贡献；padding 为固定形状补空行，增加无效计算；dropless 则保留变长负载。
 
 ### token permutation 为什么难
 
@@ -109,6 +121,14 @@ scale 通常来自 amax 历史或 current scaling recipe。工程关键：
 - checkpoint 是否保存 scale/amax state。
 
 只比较最终 loss 不够。应监控 activation/gradient amax、overflow/underflow、层级误差，并用短程 BF16 baseline 做权重或 logits 对齐。
+
+### 用玩具量化器解释 scale，而不把它当 FP8 编码
+
+为便于手算，先用只能表示整数 `[-7,7]` 的量化器：`q=clip(round(x/s),-7,7)`，恢复 `x̂=sq`。这里 s 是“每个编码单位代表的原数值大小”，与上文除以 scale 的约定一致。取 x=`[0.2,1.0,3.0]`，s=0.5，则 q=`[0,2,6]`，恢复 `[0,1,3]`：小值损失精度，但大值没饱和。若 s=0.25，q=`[1,4,7]`，恢复 `[0.25,1,1.75]`：小值更准确，3 却超过范围。
+
+为了容纳最大值 amax=3，需满足 `amax/s≤7`，即 `s≥3/7`。实际 FP8/FP4 用浮点编码，有指数、尾数及不同缩放粒度，不是这个均匀整数网格，但“动态范围与精度需要折中”的原因相同。某些库将 scale 定义为乘法系数 `q≈x·scale`，那是本文 s 的倒数；调试时必须先确认约定。
+
+张量级缩放让所有元素共用 s；分块缩放可给不同块各自尺度，减少一个异常大值牵连整张量，却增加尺度 metadata 与布局要求。低精度 GEMM 能减少输入字节并利用相应硬件，代价包括量化、统计、格式转换和误差；很小矩阵或 fallback 情形可能无法抵消这些成本。
 
 ## 6. recompute 与 activation offload
 
@@ -245,10 +265,12 @@ step t+1: history 滑动，再算 scale
 假设每层要 offload 256 MiB activation，forward 到对应 backward 之间有 20 ms 可隐藏，单向最低有效带宽：
 
 ```text
-256 MiB / 20 ms ≈ 12.8 GiB/s
+256 MiB / 0.020 s = 12800 MiB/s = 12.5 GiB/s ≈ 13.42 GB/s
 ```
 
 还要完成 D2H 和之后 H2D，并与其他 microbatch 竞争 PCIe。若 NUMA 远端或 pinned pool 不足，理论窗口无法实现。
+
+这里 MiB=`2²⁰ bytes`、GiB=`2³⁰ bytes`、GB=`10⁹ bytes`，所以不能把 12800 MiB/s 直接写成 12.8 GiB/s。12.5 GiB/s 只是一次单向传输在 20 ms 内完成所需的有效带宽下限，未计入启动、排队和依赖。如果往返两次都必须在同一个 20 ms 窗口中串行完成，下限变为 `512 MiB/0.020 s=25 GiB/s`；若有不同的发送和预取窗口，则应分别核算，不能凭“链路双向”省略依赖。
 
 当前官方实现由 `PipelineOffloadManager`、每 microbatch `ChunkOffloadHandler` 和 module interface 三层组成；这与 PP/VPP 的 chunk 生命周期直接耦合。
 

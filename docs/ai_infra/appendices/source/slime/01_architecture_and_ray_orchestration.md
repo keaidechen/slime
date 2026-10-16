@@ -33,7 +33,7 @@
 | `SGLangEngine` | `slime/backends/sglang_utils/sglang_engine.py` | 共享 GPU | 每个 actor 包装一个 SGLang HTTP server 子进程，暴露热更新权重、释放显存等 RL 专用端点 |
 | `MegatronTrainRayActor` | `slime/backends/megatron_utils/actor.py:51` | 每 rank 1 GPU（colocate 时共享） | 一个 Megatron 训练进程（一个 rank） |
 
-外加一个"短命"的角色：**driver 进程**（你执行的 `python train.py ...` 那个进程），它负责搭好以上三者，然后跑主循环。
+外加一个贯穿任务生命周期的角色：**driver 进程**（你执行的 `python train.py ...` 那个进程），它负责搭好以上三者，然后跑主循环。
 
 调用关系（谁调用谁）：
 
@@ -51,10 +51,25 @@ driver (train.py)
                           └────► 训练 rank 经 NCCL/IPC/磁盘 把权重推给 SGLangEngine
 ```
 
-注意：**driver 不做任何计算**，它只发号施令并 `ray.get` 等待结果。这与 verl 的"单控制器"神似，但 slime 的控制器逻辑极简（不到 100 行），重逻辑都在各 actor 内部。
+注意：**driver 不执行模型前向与反向计算**，它只发号施令并 `ray.get` 等待结果。这与 verl 的"单控制器"神似，slime 将主要计算与状态管理逻辑放在各 actor 内部。
 
 ---
 
+
+### 1.1 一次远程调用有三个不同的“完成”
+
+单进程函数返回时，我们习惯认为工作做完了；分布式程序必须区分提交、远端返回和设备完成。`handle.method.remote()` 首先返回 Ray `ObjectRef`，它表示未来结果的引用，不是结果本身。`ray.get(ref)` 等远端方法完成并取回结果；远端方法如果只把 CUDA 操作排进 stream（设备执行队列）便返回，设备计算仍可能未完成，所以需要方法内部的同步点或完成事件保证协议。
+
+本例里，driver 提交 `generate.remote(0)`，RolloutManager 在 CPU 上维护四条 `Sample`，SGLang 子进程在 GPU 上生成。生成方法返回的是训练数据引用列表，driver 再将它交给训练 rank。driver 不必把所有 token 解包到自己的 Python 堆上；跨节点取数和 CPU→GPU 搬运仍可能发生，引用传递不等于数据全程零复制。
+
+| 对象 | 主要驻留位置 | 谁消费 | 何时可释放或复用 |
+|---|---|---|---|
+| prompt、`Sample`、分组列表 | RolloutManager 的 CPU 内存 | 生成、奖励和 batch 转换 | 相关转换/调试保存结束，且无 buffer 继续引用 |
+| 训练 batch 的对象存储数据 | Ray object store；具体 transport 可不同 | 各训练 rank | 所有消费者结束且引用不再保留；不能只看 driver 已返回 |
+| 参数、激活、梯度 | 训练 rank 的 GPU | forward、backward、optimizer | 激活在最后一次反向使用后可回收；参数须保留/备份到后续发布 |
+| 推理 KV cache | SGLang GPU 内存 | 后续 decode 或前缀复用 | 请求和共享前缀引用释放后；换权时还需按协议失效 |
+
+rank 是通信组内的进程编号；同一进程在世界组、TP 组和权重广播组内可能有不同 rank。`rank=0` 必须说明属于哪个组，不能把它当物理 GPU 编号。
 
 ## 2. 入口 `train.py` 全链路解读
 
@@ -90,7 +105,7 @@ def train(args):
 4. **`actor_model.update_weights()`**（train.py:27）：训练侧加载完 checkpoint 后，先做一次全量权重同步，保证推理引擎与训练侧一致再开始产数据。
 5. 可选的 `check_weights(action="compare")`（train.py:29-30）：**正确性校验**——把推理引擎里的权重和训练侧逐一比较，用于 CI 和调试（这是"RL bug 不报错只降智"哲学的体现，见 09 篇）。
 
-### 2.1 主循环：一步 RL 的 9 个动作
+### 2.1 主循环：一步 RL 的阶段与依赖
 
 ```49:91:train.py
     for rollout_id in range(args.start_rollout_id, args.num_rollout):
@@ -161,7 +176,7 @@ PG 的 bundle 序号与"哪台机的哪张卡"的对应关系是 Ray 调度决�
     gpu_ids = ray.get([actor.get_ip_and_gpu_id.remote() for actor in info_actors])
 ```
 
-即：往每个 bundle 里临时塞一个占 1 GPU 的 `InfoActor`（placement_group.py:15-18），它报告自己所在节点 IP 和 `ray.get_gpu_ids()`，随后立刻 `ray.kill`。然后按 `(IP, gpu_id)` 排序得到 `reordered_bundle_indices`——**这样训练 rank 0 永远落在 IP 最小的节点的 GPU 0 上**，多机 NCCL 拓扑变得确定。之后所有 actor 都按 `placement_group_bundle_index=reordered_bundle_indices[rank]` 钉在指定 bundle 上（actor_group.py:121-124）。
+即：往每个 bundle 里临时塞一个占 1 GPU 的 `InfoActor`（placement_group.py:15-18），它报告自己所在节点 IP 和 `ray.get_gpu_ids()`，随后立刻 `ray.kill`。然后按 `(IP, gpu_id)` 排序得到 `reordered_bundle_indices`——**这样 rank 0 落在排序后首个已分配 GPU 上（不保证是物理 GPU 0）**，已分配资源到逻辑 rank 的映射因而可预测。之后所有 actor 都按 `placement_group_bundle_index=reordered_bundle_indices[rank]` 钉在指定 bundle 上（actor_group.py:121-124）。
 
 ### 3.3 四种资源布局
 
@@ -189,7 +204,7 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 | `--rollout-external` | 只要 actor 的卡 | 推理引擎在任务外部管理（External Rollout Engines），只留训练资源 |
 | 调试 | `debug_train_only` / `debug_rollout_only` | 只起一半系统，分离调试（见 09 篇） |
 
-**举例**：`actor_num_nodes=2`、`actor_num_gpus_per_node=8`、`rollout_num_gpus=8`、非 colocate → 创建 24 个 bundle；`"actor"` 拿前 16 个，`"rollout"` 拿后 8 个（placement_group.py:127-132）。critic 与 actor 共用同一段（`result["critic"] = result["actor"]`，placement_group.py:135）——因为 critic 与 actor 从不同时占满显存。
+**举例**：`actor_num_nodes=2`、`actor_num_gpus_per_node=8`、`rollout_num_gpus=8`、非 colocate → 创建 24 个 bundle；`"actor"` 拿前 16 个，`"rollout"` 拿后 8 个（placement_group.py:127-132）。critic 与 actor 共用同一段（`result["critic"] = result["actor"]`，placement_group.py:135）。共用资源声明并不自动保证显存互斥，仍需检查 critic/actor 的执行依赖、offload 配置和实际峰值。
 
 ---
 
@@ -208,6 +223,10 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 ```
 
 这是 Ray 的**分数 GPU**机制：声明每个训练 actor 只用 0.4 张卡，于是 colocate 时同一张物理卡上可以再放一个 SGLangEngine（也声明小于 1 的份额），Ray 才不会认为"这张卡已被占满"。它不改变 CUDA 可见性——actor 实际看到的是整张卡，只是调度层面的"拼房许可"。
+
+用两张卡手算：每个 bundle 预约 1 GPU，训练进程声明 0.4、另一个角色声明 0.2，在 Ray 账本上总共 0.6，调度器可以允许它们共置。但在一张假设容量 24 GiB 的卡上，若训练实际申请 18 GiB、推理申请 12 GiB，$18+12>24$，仍会 OOM（out of memory，内存不足）。分数不是显存限额，也不是算力按比例硬切分。
+
+真正的复用顺序是“推理请求结束 → 推理释放相应显存 → 训练唤醒并执行 → 训练保存必要状态并让出显存 → 推理恢复”。PG 解决资源能否被分配，offload 协议解决资源何时可用，CUDA/NCCL 完成条件解决资源能否安全复用，三者缺一不可。
 
 ### 4.2 actor 创建与初始化
 
@@ -233,14 +252,14 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
             return ray.get([actor.update_weights.remote() for actor in self._actor_handlers])
 ```
 
-即"对所有 actor 发同一个远程调用，`ray.get` 全部等齐"。`async_train` 是唯一例外：它**不等待**，直接返回 ref 列表（actor_group.py:130-148），这样 critic 可以先异步开训、driver 再把 value 结果喂给 actor（对应 train.py:62-67 的流水）。
+即“对所有 actor 发同一个远程调用，`ray.get` 全部等齐”。`async_train` 则返回 ref 列表，不在这个方法中等待。PPO 的 critic 路径先计算更新前的 values，再完成 critic 训练；driver 等待返回后把这些 values 交给 actor。因此“先启动 critic”不意味着 actor 使用的是 critic 更新后的重新评分，也不意味着两者必然同时训练。
 
 ---
 
 
 ## 5. 同步 vs 异步：`train.py` 与 `train_async.py`
 
-`train_async.py` 实现的是 **one-step-async**（比同步版重叠"下一步 rollout"与"当前步训练"）：
+**版本边界：当前工作区没有 `train_async.py`；本节代码是历史入口的时序示意，不是当前可执行脚本。** 它展示 **one-step-async**（比同步版重叠"下一步 rollout"与"当前步训练"）：
 
 ```32:40:train_async.py
     rollout_data_next_future = rollout_manager.generate.remote(args.start_rollout_id)
@@ -256,7 +275,7 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 
 关键技巧：`generate.remote()` 立即返回 future，不等结果。于是"第 N+1 步数据生成"与"第 N 步训练"并行。两个约束：
 
-- **不能用 colocate**（train_async.py:11 直接 assert）——同一张卡不能既训练又推理；
+- **不能用 colocate**（train_async.py:11 直接 assert）——这条流水路径依赖独立资源，并未实现同卡同时执行的显存与算力调度；
 - **权重更新前必须等生成收尾**：
 
 ```66:70:train_async.py
@@ -271,6 +290,10 @@ def _get_placement_group_layout(args) -> tuple[int, int]:
 
 ---
 
+
+把版本标出来就容易看懂：`D0 ← W0` 表示用权重版本 0 生成数据 0。同步时序为 `D0←W0 → train(D0):W1 → 发布W1 → D1←W1`。一步流水可以是 `train(D0):W1` 与 `D1←W0` 同时发生；于是训练 D1 时，行为策略仍是 W0。即使 D1 恰好训练前才完成，它的策略也不会自动变新。
+
+这里“异步”指时间重叠，“off-policy”指采样分布与训练所用策略不同。一个 `.remote()` 调用在语法上异步，紧接着 `ray.get()` 等它后再训练，系统仍可能完全串行。反过来，同步训练中若推理用量化权重、训练用另一精度，也需要检查概率分布是否一致。
 
 ## 6. 参数体系速览
 
@@ -309,7 +332,7 @@ class InfoActor:
 
 流程是：`placement_group(bundles, strategy="PACK")` 申请 N 个 `{"GPU":1,"CPU":1}` bundle → 对每个 `bundle_index` 起一个绑定到该 bundle 的 `InfoActor` → `ray.get([actor.get_ip_and_gpu_id.remote() ...])` 收集 `(ip, gpu_id)` → 立刻 `ray.kill` 全部探测 actor（它们只是"侵入式体检"，用完即弃）→ 按 `(ip, gpu_id)` 排序得到 `reordered_bundle_indices` 和 `reordered_gpu_ids`。
 
-**两机 8 卡的具体例子**：假设 Ray 调度把 `bundle_index 0~3` 放到节点 `10.0.0.2`（GPU id 分别是 4,5,6,7，因为该节点其它任务先占了 0-3），`bundle_index 4~7` 放到节点 `10.0.0.1`（GPU id 0-3）。排序前 `bundle_index` 顺序是"调度器分配到的顺序"（不确定、可能犬牙交错）；排序后（先按 IP 字符串排序，`10.0.0.1 < 10.0.0.2`）：
+**两机 8 卡的具体例子**：假设 Ray 调度把 `bundle_index 0~3` 放到节点 `10.0.0.2`（GPU id 分别是 4,5,6,7，因为该节点其它任务先占了 0-3），`bundle_index 4~7` 放到节点 `10.0.0.1`（GPU id 0-3）。排序前 `bundle_index` 顺序是"调度器分配到的顺序"（不确定、可能犬牙交错）；排序后（`sort_key` 先按 IP 各段的整数排序，再按 GPU ID；此例中 `10.0.0.1 < 10.0.0.2`）：
 
 ```
 逻辑顺序 i :        0    1    2    3    4    5    6    7
@@ -317,7 +340,7 @@ reordered_bundle_indices: 4    5    6    7    0    1    2    3   （节点1的4�
 reordered_gpu_ids:        0    1    2    3    4    5    6    7   （每个节点内部再按gpu_id排序）
 ```
 
-这样一来，"逻辑顺序里的前 N 个"永远对应"IP 排序最小、GPU 编号最小"的一段连续资源——训练 rank 0 稳定落在 `10.0.0.1` 的 GPU 0 上，是 NCCL rendezvous、`nvidia-smi topo` 拓扑规划的前提。
+这样一来，逻辑 rank 可按已分配资源的节点和设备顺序映射。在这个例子中，rank 0 落在 `10.0.0.1` 的 GPU 0；若可用设备从 GPU 4 开始，它就会落在 GPU 4。排序固定的是当前分配集合的映射，不会改变物理互联，也不保证另一轮作业拿到相同设备；NCCL rendezvous 需要可达的 master 地址，并不要求物理 GPU 0。
 
 ### 7.2 `_allocate_gpus_for_actor` 的完整环境变量清单
 
@@ -337,7 +360,7 @@ if self.args.use_routing_replay and self.role == "actor":
     env_vars["ENABLE_ROUTING_REPLAY"] = "1"   # critic 不做 routing replay
 ```
 
-- `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`（`slime/ray/utils.py`）：与 rollout 侧 `SGLangEngine` 同款技巧（见 02 篇 §4.2）——训练进程也**绕开 Ray 的自动 GPU 重映射**，资源隔离完全靠 `placement_group_bundle_index` 精确指定的 bundle，`num_gpus`（下面会看到实际是 `0.4`）只是记账数字。
+- `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`（`slime/ray/utils.py`）：与 rollout 侧 `SGLangEngine` 同款技巧（见 02 篇 §4.2）——训练进程也**绕开 Ray 的自动 GPU 重映射**，资源预约和放置靠 `placement_group_bundle_index` 指定 bundle，实际设备选择还依赖 rank/device 映射，显存互斥依赖执行协议，`num_gpus`（下面会看到实际是 `0.4`）只是记账数字。
 - `NVTE_FP8_BLOCK_SCALING_FP32_SCALES`：Transformer Engine 的 FP8 blockwise scale 用 FP32 存储（避免 scale 本身精度不足），与 04 篇的 FP8 权重传输链路相关。
 - `ENABLE_ROUTING_REPLAY` 只给 `role=="actor"` 设置，是因为**critic 没有推理引擎产生的路由数据可供回放**（critic 不参与 rollout 生成）。
 
@@ -388,7 +411,7 @@ for rank in range(world_size):
 
 ## 8. 机制回顾与源码索引
 
-- driver（`train.py`）搭台：PG 分资源 → RolloutManager 起推理 → RayTrainGroup 起训练 → 首轮权重同步 → 主循环 9 动作。
-- 三类 actor 通过 Ray handle 互相直连，无中心控制器；数据经 object store 流动，权重经 NCCL/IPC/磁盘流动。
+- driver（`train.py`）搭台：PG 分资源 → RolloutManager 起推理 → RayTrainGroup 起训练 → 首轮权重同步 → 主循环各阶段。
+- driver 作为控制器驱动阶段顺序，三类 actor 通过 Ray handle 协作；数据经 object store 流动，权重经 NCCL/IPC/磁盘流动。
 - placement group 的"探测重排"、`num_gpus` 分数声明与 `CUDA_VISIBLE_DEVICES` 解耦、rank0 rendezvous 协商，是理解 slime 资源调度确定性的三把钥匙；这些机制在 02 篇 §4.1-4.2 有更详细的 rollout 侧对应版本，建议对照读。
 - 相关资料（02）钻进 `RolloutManager` 内部，看 server 模式的 rollout 是如何生成数据的。

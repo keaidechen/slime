@@ -1,434 +1,189 @@
-# 09 工程化与可观测性：调试、容错、Profiling、CI 与可复现
+# 09 工程化与可观测性：从现象定位到可验证的原因
 
-<details>
-<summary>文章导航</summary>
+相关基础：[权重发布、异步与资源调度](<../../../06_Post_Training/27_权重发布异步与资源调度.md>)。
 
-- [1. 分离调试：把 RL 拆成两个可独立运行的半系统](<#1-分离调试把-rl-拆成两个可独立运行的半系统>)
-- [2. 正确性校验设施](<#2-正确性校验设施>)
-- [3. 容错](<#3-容错>)
-- [4. Trace 与 Profiling](<#4-trace-与-profiling>)
-- [5. CI：把"正确性"变成回归测试](<#5-ci把正确性变成回归测试>)
-- [6. 可复现性](<#6-可复现性>)
-- [7. 从局部观测回到一轮 RL](<#7-从局部观测回到一轮-rl>)
+训练可以不报错却逐渐变差：模型在正常反向，输入的 reward、token 对齐或权重版本却不正确。可观测性要回答“哪条数据、哪个版本、哪个阶段出了什么问题”，而不是仅展示 GPU 利用率。本篇按隔离问题、核对数值、理解容错、分析时间与内存的顺序展开。
 
-</details>
+实现以当前工作区为准：计时、trace、指标与 profiler 位于 `slime/observability/`。当前 `TrainProfiler` 只有整体训练 profiler，**没有旧稿中的 `--profile-target train_actor/train_log_probs` 分支**，不要将历史参数直接加入启动命令。
 
-相关基础：[Ray、队列与前置系统](<../../../06_Post_Training/27_权重发布异步与资源调度.md#s4>)。
+## 1. 先固定输入：把随机闭环拆成两个实验
 
+如果每次排查都重新生成，输出内容、长度和奖励一起变化，很难判断 loss 改变来自代码还是样本。把 rollout 落盘后重复训练同一批，能固定一半变量。
 
-> 对应综述（`00_rl_infra_survey.md`）§2.10「工程化」。
-> README 里有句纲领："RL bug 往往不会立刻报错"——权重没同步、logprob 对不上、数据错位，训练照跑，只是模型悄悄变差。slime 把正确性设施当一等公民。本篇盘点这些设施及对应代码，并把 profiling 部分写得足够细（这是训练慢时最需要区分证据层次的部分）。
+| 入口 | 执行什么 | 适合验证 | 不能据此证明什么 |
+|---|---|---|---|
+| `--debug-rollout-only` | 生成、评分、样本整理 | 任务数据、token、mask、reward | backward 和优化器正确 |
+| `--save-debug-rollout-data` | 保存 rollout 数据 | 固定输入，之后重放 | 外部环境/RNG 全部已快照 |
+| `--debug-train-only` 与 `--load-debug-rollout-data` | 用已保存的数据训练 | loss、归约、梯度、checkpoint | 线上换权、生成和训练接口全部正常 |
+| `slime.rollout.forge_load.generate_rollout` | 重放数据且保留 SGLang 生命周期 | 共置显存、换权、offload | 真实工具/生成长尾已覆盖 |
+| `--save-debug-train-data` | 训练侧调试快照 | 核对实际消费字段与评分 | 完整训练恢复状态已保存 |
 
----
+文件路径模板按参数帮助配置，rollout dump 与 train dump 应使用不同路径，当前参数校验会拒绝两者相同。`--dump-details` 是另一类详细记录开关，不能替代明确的可回放数据路径。实现入口是 `slime/observability/rollout_data_utils.py` 和 `train_data_utils.py`。
 
+一个最小实验使用 2 个 prompt×2 条回答。先逐条确认 `len(tokens)=P+R`、`len(loss_mask)=R`、reward 与任务对应，再重放同一批算旧概率、当前概率和 loss。最后恢复完整系统，只增加换权与生成这两个变量。这样“固定数据能训对、在线却出问题”会把调查范围缩到生成记录、版本发布、数值对齐与动态调度。
 
-## 1. 分离调试：把 RL 拆成两个可独立运行的半系统
+## 2. 数值正确性：先对齐语义，再比较误差
 
-最常用的调试手段（`slime/ray/placement_group.py:100-117` 的资源布局分支）：
+### 2.1 权重检查与版本检查各证明什么
 
-| 参数 | 效果 |
-|---|---|
-| `--debug-rollout-only` | 只起 rollout 侧（SGLang + 数据流），不建训练 actor——验证数据生成、reward、partial rollout |
-| `--debug-train-only` | 只起训练侧，rollout 数据从落盘的 dump 读——验证 loss、梯度、checkpoint |
+`--check-weight-update-equal` 在启动过程中请求引擎 snapshot/reset，完成首次同步后再 compare，目标是验证加载与传输路径。磁盘发布还有 `get_weight_version` 对账。它们并不等价：版本号一致说明两端声称同一次发布；张量一致性才能进一步检查实际内容。即使张量相同，训练和推理的采样处理、算子精度也可能不同。
 
-配套机制：
+对量化权重不应无条件要求与 BF16 原值逐位相等；应比较约定格式下的数值、反量化误差或同输入输出。检查对象、精度与容差要明确，不能只写“权重一致”。
 
-- **rollout 数据落盘**：`_save_debug_rollout_data`（`slime/ray/rollout.py:663`）把每轮 rollout 数据 dump 到磁盘（`--dump-details` 等参数控制）；train-only 模式回放这份数据，实现"rollout 一次、训练调一百遍"；
-- **`forge_load.py`**（`slime/rollout/forge_load.py`）：加载落盘数据但**不跳过 SGLang**——server、router、权重更新、offload 照常运行，专门用来测真实显存占用；
-- **`sleep_rollout.py`**：rollout 侧彻底占位（死循环打日志），纯训练侧联调；
-- **save/load 对称**：`MegatronTrainRayActor.save_model`（`slime/backends/megatron_utils/actor.py:542-564`）在 `debug_rollout_only` 时直接跳过；`update_weights`（actor.py:567-569）在两种 debug 模式下都短路。
+### 2.2 用三项误差定位概率不一致
 
-**工作流建议**：新任务先 `--debug-rollout-only` 把数据和 reward 跑对并落盘 → 再 `--debug-train-only` 回放数据把训练跑对 → 最后全链路小规模 → 放量。
+设同一条轨迹三个可训练 token 的训练 logprob 为 `[-0.7,-1.1,-0.2]`，推理记录为 `[-0.69,-1.15,-0.2]`。逐项绝对差为 `[0.01,0.05,0]`，平均为 0.02 nat，最大为 0.05 nat。若中间 token 的上下文或 token ID 不同，这组误差没有可比意义，应先修对齐。
 
----
+`train_rollout_logprob_abs_diff` 提供这种偏差观测，但“同参数”不是由指标名字自动保证的前提。排查顺序是：
 
+1. 对齐 token ID、shifted target、mask 和实际上下文。
+2. 对齐行为权重版本、训练评分快照、tokenizer、temperature 和 top-p 支持集合。
+3. 再对照精度、kernel、packing、MoE 路由和并行归约。
 
-## 2. 正确性校验设施
+若概率比率为 `[1,1.1,3]`，TIS 上限为 2，则截断后 `[1,1.1,2]`，有效三项中截断率为 `1/3`。它提示修正强度变大，不直接说明模型退化；若拒采后只在剩余 token 上算“被拒比例”，分母会漏掉被拒项而得到误导性的 0。当前 loss 为 mismatch 指标保留修正前的 reducer，正是在维护统计口径。
 
-### 2.1 权重同步对账
+### 2.3 长度相同也可能语义错误
 
-`--check-weight-update-equal`（train.py:29-30）：
+两条回答的概率数组都是长度 3，把它们交换后长度断言仍会通过。需要同时核对 `index/group_index/rollout_id`、版本与字段归属。全局排序也只能固定已选集合的顺序，不能修复采样集合本身改变。形状断言、数值对账和端到端任务结果提供不同层次的证据。
 
-- 启动时 `check_weights(action="snapshot")` + `reset_tensors`（placement_group.py:246-248）在引擎侧记录基准；
-- 首轮权重同步后 `check_weights(action="compare")` 逐张量比对训练侧与引擎侧；
-- disk 模式还有**版本号对账**（`slime/ray/actor_group.py:254-265`）：CI 中校验每个引擎的 `get_weight_version` 必须等于训练侧发布的版本，不匹配直接 `RuntimeError`。
+## 3. 容错：进程恢复只是第一步
 
-### 2.2 训推数值监控（持续）
+推理引擎有权重、KV、在飞请求和通信组状态。健康检查发现引擎异常后，不能仅重启 HTTP 端口便宣布恢复；新进程必须重新加入部署、加载目标权重并恢复通信拓扑，才能参与下一轮发布和采样。
 
-不是一次性校验，而是每步记录（05 篇 §5）：
+当前主要链路是 `RolloutHealthMonitor` 检测/标记故障，部署层 `RolloutServer.recover` 重建空位，训练侧换权时重新连接新引擎。一个逻辑 TP 引擎跨多个 actor 时，要按逻辑引擎处理故障，不能留下半套 rank 继续参与 collective。
 
-TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与行为策略的概率比进行截断或限制，以控制大权重。它可降低权重波动，但截断可能引入偏差，不能自动修复动作或上下文错位。
+### 3.1 为什么探活必须理解维护窗口
 
-- `train_rollout_logprob_abs_diff`：同参数下训练侧与推理侧 logprob 的绝对差，是 FP8、kernel 差异、routing 差异的"体温计"（loss.py:1073-1077）；
-- `tis / tis_clipfrac / tis_abs / ois`：TIS 修正的强度与截断比例；
-- `examples/train_infer_mismatch_helper/`：专门的离线诊断工具。
+`slime/utils/health_monitor.py` 用两个 `threading.Event`：`_stop_event` 表示退出，`_pause_event` 表示暂停检查。正常主循环为：暂停时等待 → 恢复后先等待预热 → 发健康请求 → 等下一检查周期。`Event.wait(timeout)` 可被 stop 唤醒，比固定 `sleep` 更便于停止；正在执行的网络请求仍受自身超时约束，不能保证任意时刻瞬间退出。
 
-### 2.3 不变量断言
+假设探活超时为 3 秒，正常权重加载要 8 秒。若换权期间照常探活，系统可能每次都把正常加载误判成崩溃，触发反复重启。`health_monitoring_pause/resume` 将计划内不可用与真正故障分开；恢复后的 first-wait 给引擎预热留出时间。增加超时减少误杀，也延长发现真实故障的时间，是检测延迟与误报之间的取舍。
 
-`Sample` 的长度校验（03 篇）、`add_samples` 的组长度断言（data_source.py:206-209）、`start_rollout_id` 全组一致断言（placement_group.py:216）——把"数据错位"这类 bug 尽量变成启动即报的错误。
+### 3.2 三份状态如何一起恢复
 
----
+训练 checkpoint 保存模型、优化器等可用状态，数据源保存取数游标，推理端需要匹配的新权重发布。若训练恢复到版本 7，数据游标却恢复到版本 5 对应位置，就可能重复训练旧样本；若引擎仍服务版本 6，接下来又产生策略滞后。
 
+外部工具的订单状态、沙盒文件和未完成会话还可能在这三份状态之外。一次请求超时并不证明远端没执行：重试前要按任务协议识别重复操作。框架能重建引擎，不意味着任意 agent 轨迹都具有 exactly-once（恰好执行一次）的保证。CI 中的故障注入只能验证所覆盖的故障窗口。
 
-## 3. 容错
+## 4. 先看墙钟，再看 GPU 时间线
 
-- **健康监控**：`RolloutManager.__init__` 可选启动 `RolloutHealthMonitor`（`slime/ray/rollout.py:470-477`），定期检查 SGLang server 存活；`health_monitoring_pause/resume`（rollout.py:620-627）在权重同步等敏感窗口暂停监控避免误判；
-- **故障恢复**：`RolloutServer.recover`（rollout.py:346）重建挂掉的引擎；训练侧下次 `update_weights` 时 `recover_updatable_engines`（rollout.py:601）+ 检测到 `num_new_engines > 0` 后把新引擎加进 NCCL 组（`slime/backends/megatron_utils/actor.py:597-607`）——**引擎热替换不断训**；
-- **故障注入测试**：`_try_ci_fault_injection`（rollout.py:479）在 CI 里故意制造故障，验证恢复路径真的可用——"未经测试的容错等于没有容错"的实践；
-- **checkpoint 恢复**：训练侧 `start_rollout_id` 对齐 + 数据源游标恢复（03 篇）+ `rollout_manager.load.remote(start_rollout_id - 1)`（placement_group.py:221-222），三层状态一起回到断点。
+### 4.1 timer、trace、profiler 分别回答什么
 
-详细运维文档见 `docs/zh/advanced/fault-tolerance.md` 与 `docs/zh/advanced/reproducibility.md`。
+- timer 记录命名区间的耗时，例如 `train`、`data_preprocess`、`update_weights`。
+- trace 记录请求/阶段的起止与父子关系，适合追踪某个慢样本。
+- profiler 记录 CPU 算子、CUDA kernel、内存复制等执行活动，适合解释某区间为何慢。
 
-### 3.1 深入拆解：`RolloutHealthMonitor` 的双 `Event` 状态机（`slime/utils/health_monitor.py`）
+`slime/observability/timer.py` 使用 host `time()`，本身不插入 CUDA 同步。CPU 提交 kernel 可能仅用 1 毫秒，GPU 5 毫秒后才完成；若区间内没有等待，timer 可能更接近提交时间。已有 Ray 等待、张量回 CPU 或同步点会改变测量边界，所以读数必须连着代码解释。不要为了每个小区间计时都插全局同步，那会破坏本来存在的重叠。
 
-这是一个教科书式的"用两个 `threading.Event` 实现可暂停后台线程"的实现，值得拆开看：
+### 4.2 等待比例不是瓶颈判决书
 
-```python
-self._stop_event = threading.Event()    # 一旦 set，线程彻底退出
-self._pause_event = threading.Event()   # set=暂停巡检，clear=正常巡检
-self._pause_event.set()                 # 初始状态：先暂停（引擎还没就绪，不该立刻探活）
-```
+`train_metric_utils.log_perf_data` 由 `train_wait_time` 和 `train_time` 形成：
 
-`_health_monitor_loop`（105-135 行）的主循环结构：
+$$
+T_{step}=T_{wait}+T_{train},\qquad f_{wait}=T_{wait}/T_{step}.
+$$
 
-```python
-while not self._stop_event.is_set():
-    while self._pause_event.is_set() and not self._stop_event.is_set():
-        self._stop_event.wait(timeout=0.5)     # 暂停期：0.5s 轮询一次是否该醒来/退出
-    ...
-    if self._need_first_wait:                   # 每次从暂停恢复后，先等一段"预热期"
-        if self._stop_event.wait(self._check_first_wait):
-            break
-        ...
-    if not self._pause_event.is_set() and not self._stop_event.is_set():
-        self._run_health_checks()
-    if self._stop_event.wait(self._check_interval):   # 用 wait() 代替 sleep()，可被 stop 立即打断
-        break
-```
+两项单位为秒，比例无量纲。若分别为 6 秒、4 秒，则等待比例 60%。这表明训练区间之外的时间较大；它可能包含生成、奖励、换权、checkpoint、offload 和 driver 调度，不能直接断言“GPU decode 慢”。也不能把嵌套的 `actor_train`、`log_probs` 再与整个 `train` 相加，否则会重复计时。
 
-三个值得注意的细节：
-
-1. **用 `Event.wait(timeout)` 代替 `time.sleep(timeout)`**：`wait()` 在等待期间如果 event 被其他线程 `set()`，会立刻返回 `True` 并结束等待；`sleep()` 则必须等满整个时长。这让 `stop()` 能让巡检线程在 5 秒内（`_check_timeout + _check_interval + 5`）就退出，而不必等到下一个巡检周期。
-2. **`_need_first_wait`**：每次 `resume()` 后先等 `rollout_health_check_first_wait` 秒（注释"for large MoE models to be ready"）——大 MoE 模型刚从 sleep 恢复、权重刚广播完时，SGLang 引擎需要一点时间才能真正响应推理请求；如果不等这段"预热期"直接探活，会把"正常的启动延迟"误判成"引擎挂了"，进而触发不必要的 `_kill_engine`。
-3. **`pause()`/`resume()`**：由 `RolloutManager` 在权重同步、offload/onload 这些"引擎注定短暂不可用"的窗口主动调用（rollout.py 里 555/571/585/607 行的调用点）——**巡检窗口与"引擎正常状态变化窗口"必须错开**，否则健康监控会把"我们自己主动让引擎休眠"误诊为"故障"，反而触发误杀。这是分布式系统里"维护窗口"与"故障检测"必须协调的典型例子。
-
-**`_check_engine_health` → `_kill_engine` 的连锁**：一旦某个引擎的 `health_generate` 请求超时或抛异常，直接 `ray.kill(engine)` 杀掉整组（`nodes_per_engine` 决定一个"引擎"横跨几个 Ray actor/节点，TP>1 的引擎需要连坐杀掉所有 TP rank，否则残留进程会占着 GPU 且状态不完整）；被杀掉的 slot 在 `all_engines` 数组里置 `None`，等下一次 `update_weights` 时由 `recover_updatable_engines`（§3 提到的 rollout.py:601）检测到空位并重建——**"杀死->留空->下次同步时重建"是一套完全解耦的三段式容错**，`RolloutHealthMonitor` 只负责第一步，完全不关心如何恢复。
-
----
-
-
-## 4. Trace 与 Profiling
-
-### 4.1 内置埋点：trace 与 timer
-
-- **trace**：`slime/utils/trace_utils.py` 提供 `trace_function` / `trace_span` 装饰器与上下文管理器。rollout 链路的关键节点都埋了点——`generate_and_rm`（sglang_rollout.py:223）、`generate_and_rm_group`（289）、`sglang_generate`（201）、`reward_model`（273/283）——导出后可用 Chrome trace viewer 这类工具可视化"一步里每个样本的时间线"，定位长尾的利器；`build_sglang_meta_trace_attrs` 把 SGLang 返回的 meta（排队时间、prefill/decode 耗时）也纳入 trace。文档：`docs/zh/developer_guide/trace.md`；
-- **timer**：`@timer` 装饰器（如 actor.py:566 的 `update_weights`）自动记录各阶段耗时；
-- **性能指标**：`_log_rollout_data` / `compute_perf_metrics_from_samples`（rollout.py:1292-1359）计算 token 吞吐、按 `non_generation_time` 拆分"生成耗时 vs 环境耗时"（agentic 场景归因工具执行开销），以及 SGLang 请求级性能指标（`_compute_sglang_request_perf_metrics`）。
-
-下面 §4.2-§4.6 是这套内置埋点之外，定位性能问题的完整分层分析（从零成本指标逐级放大到系统级 profiler）。
-
-### 4.2 第一步（零成本）：内置的 `perf/*` 计时器
-
-slime 有一个极简的计时器单例 `Timer`（`slime/utils/timer.py:15`），用法是：
-
-```python
-with timer("train"):
-    ...  # 会被计时并累加到 Timer().timers["train"]
-```
-
-它在训练侧（`slime/backends/megatron_utils/actor.py`）的关键位置都埋了点：
-
-| 计时名 | 代码位置 | 覆盖范围 |
+| 观察 | 仍需排除的原因 | 下一条证据 |
 |---|---|---|
-| `train_wait` | `actor.py:52, 423` | 训练进程等待下一次 rollout 数据到达的时间（**越大说明训练在等 rollout，即 rollout 是瓶颈**） |
-| `data_preprocess` | `actor.py:371` | 把 Ray object store 里的 rollout 数据反序列化/搬到 GPU 的时间 |
-| `train` | `actor.py:423` | 整个训练阶段（log_probs + 反向 + 记录）的总时间 |
-| `log_probs` / `ref_log_probs` / `teacher_log_probs` | `actor.py:353`（`compute_log_prob` 内） | actor/ref/teacher 模型算 log_probs 的前向时间 |
-| `actor_train` | `actor.py:507` | 真正的前向+反向+optimizer step（`train()` 函数）时间 |
-| `ref_model_update` | `actor.py:534` | 定期把 actor 权重同步给 ref 模型的时间 |
-| `save_model` | `actor.py:541`（`@timer` 装饰器） | 存 checkpoint 的时间 |
-| `update_weights` | `actor.py:566`（`@timer` 装饰器） | 训练权重同步到 SGLang 推理引擎的时间 |
+| 等待比例高 | 工具等待、RM 慢、换权或保存，而非纯生成 | rollout 请求 trace 与换权区间 |
+| `actor_train_time` 高 | token 变多、重计算、DP 不均、通信等待 | 长度分布及训练 profiler |
+| `data_preprocess_time` 高 | 主机反序列化、H2D、外部路由文件读取 | CPU/拷贝时间线与数据大小 |
+| 同步耗时上升 | 桶大小、拓扑、序列化、接收端处理 | 各阶段字节数、调用次数与事件 |
 
-每个 rollout step 结束时，`log_perf_data()`（`slime/backends/megatron_utils/data.py:497`）会：
-1. 把 `Timer().log_dict()` 里累计的所有耗时取出来，`reset()` 清零（下一轮重新累计）；
-2. 加上 `perf/` 前缀（例如变成 `perf/actor_train_time`），派生出更多指标：
-   - `perf/actor_train_tflops`、`perf/actor_train_tok_per_s`（用 `calculate_fwd_flops` 估算算力/吞吐）
-   - `perf/log_probs_tflops`、`perf/ref_log_probs_tflops`
-   - `perf/step_time` = `train_wait_time + train_time`（一整个 rollout 的墙钟时间）
-   - `perf/wait_time_ratio` = `train_wait_time / step_time`（**训练侧空等占比，非常关键的一个指标**）
-3. 通过 `logging_utils.log()`（`slime/utils/logging_utils.py:45`）写到 wandb / tensorboard，同时也会 `logger.info(f"perf {rollout_id}: {log_dict}")` 直接打印到 stdout/日志文件（哪怕不开 wandb 也能看到）。
+`--max-tokens-per-gpu` 和 `--use-dynamic-batch-size` 控制训练组批，不是直接加速 SGLang decode 的开关。指标归因应先找到对应进程和配置层。
 
-Rollout（生成）侧的耗时在 `slime/ray/rollout.py:1292` 的 `_log_rollout_data` 里统计，核心函数 `compute_perf_metrics_from_samples`（`rollout.py:1325`），产出的指标带 `perf/` 前缀，例如：
+### 4.3 吞吐的分子与分母
 
-| 指标 | 含义 |
-|---|---|
-| `perf/rollout_time` | 一次 rollout 生成阶段的总墙钟时间 |
-| `perf/tokens_per_gpu_per_sec` | 平均每张推理 GPU 每秒吐出的 token 数（吞吐） |
-| `perf/longest_sample_tokens_per_sec` | 最长样本的生成速度（长尾请求的瓶颈参考） |
-| `perf/non_generation_time/*` | 生成过程中"非生成"时间（例如工具调用、等待调度）的统计 |
+若 2 张推理卡在 4 秒内产生 80 个计数 token，吞吐为
 
-**怎么看**：不需要额外加任何 profiling 开关，只要正常起训练——直接 `grep perf` 训练日志（stdout），每个 rollout 都会打一行 `perf {rollout_id}: {...}` 的 dict；或加 `--use-wandb`/`--use-tensorboard` 在面板里搜索 `perf/` 前缀曲线看趋势。
+$$
+80/(2\times4)=10\ \text{token/(GPU·秒)}.
+$$
 
-**怎么判断"卡点"（举例）**：
+但 response 区间可能含工具 token，计数函数采用哪些字段必须看 `rollout_metrics.compute_perf_metrics_from_samples`；它不总等于模型实际生成数。单条最长样本的 token/秒与全池 token/(GPU·秒) 的分母也不同，不能直接用二者的数值差断言性能差距。
 
-- `perf/wait_time_ratio` ≈ 0.6，训练进程 60% 时间在等 rollout 数据 → **瓶颈在 Rollout 生成侧**，去看 `perf/rollout_time`、`perf/tokens_per_gpu_per_sec` 是否偏低，考虑加大 `--rollout-num-gpus`、调大 `--max-tokens-per-gpu`、检查是否开了 `--use-dynamic-batch-size`、response 长度是否有极端长尾；
-- `perf/wait_time_ratio` 很低（<0.1），但 `perf/actor_train_time` 本身很大且 `perf/actor_train_tflops` 远低于该 GPU 型号的理论算力 → **瓶颈在训练侧的计算效率**，需要用 §4.3 的 PyTorch Profiler 细看；
-- `perf/log_probs_time` 占 `perf/train_time` 比例异常高 → 可能是 `--log-probs-max-tokens-per-gpu` 设置不合理（micro-batch 切太碎，launch overhead 主导）；
-- `perf/data_preprocess_time` 偏高 → Ray object store 序列化/搬数据慢，考虑 `--rollout-data-transport nixl`。
+假设总共生成 100 token，只有 60 token 留在有效训练样本，实际用了 10 秒，则生成吞吐为 10 token/s、有效 token 吞吐为 6 token/s。超投让生成吞吐增加而接受率下降时，成本未必改善。应将质量、长度、接受率、总 GPU 数一起记录。
 
-这一步不需要装任何额外依赖，是**永远第一个该看的东西**。
+### 4.4 时间线上的重叠要按区间并集算
 
-### 4.3 第二步：PyTorch Profiler —— 抓训练侧 kernel 级别 trace
+两条工具请求分别占 `[0,3]` 秒和 `[1,4]` 秒，单条耗时之和为 6 秒，墙钟跨度只有 4 秒。把 `non_generation_time` 相加后从总 rollout 时间中扣除，可能得到负数，不能据此解释 GPU 工作时间。
 
-`torch.profiler` 是 PyTorch 官方自带的 profiler，记录每个 CPU 算子/CUDA kernel 的起止时间、Python 调用栈（`with_stack=True`）、显存分配时间线（`profile_memory=True`）、FLOPs 估算（`with_flops=True`）。产出是一份 trace 文件，可用 TensorBoard 插件或 Chrome/Perfetto 打开，图形化看"时间轴上每个 GPU stream 在做什么"。
+同理，一次训练耗时 5 秒，其中通信 3 秒、计算 4 秒且重叠 2 秒，总计是 `3+4-2=5` 秒。优化掉已经完全被计算覆盖的 1 秒通信未必缩短 step；优化关键路径上暴露的 1 秒等待才会直接改变端到端时间。
 
-**涉及的开关**：
+## 5. 逐层采集：当前可用的入口
 
-| 参数 | 来源 | 默认值 | 作用 |
-|---|---|---|---|
-| `--use-pytorch-profiler` | Megatron 原生（`common_config.py:41` 的 `ProfilingConfig.use_pytorch_profiler`） | `False` | **总开关**，不开则下面所有 profile-target 都不生效 |
-| `--profile-step-start` | Megatron 原生（`profile_step_start`） | `10` | 从第几个 rollout step 开始抓（之前是 warmup，不计入 trace） |
-| `--profile-step-end` | Megatron 原生（`profile_step_end`） | `12` | 到第几个 rollout step 结束抓；`active = end - start` 步会被真正记录 |
-| `--profile-target` | slime 自定义（`slime/utils/arguments.py:1296-1302`） | `["train_overall"]`，可多选 `train_overall / train_actor / train_log_probs` | 决定"在哪个粒度"抓 trace |
-| `--tensorboard-dir` | Megatron 原生 | 无默认，需要显式传 | trace 文件的输出目录（同时也是 tensorboard 日志目录） |
+### 5.1 PyTorch Profiler：训练进程内的证据
 
-`--profile-target` 三个可选值对应三种不同粒度（实现在 `slime/observability/profile_utils.py`）：
-
-- `train_overall`：以 **rollout step** 为最小单位推进 profiler 的 schedule。适合看"训练侧在多个 rollout 之间"的整体波动（比如某次权重同步特别慢、某次显存 GC 卡顿）。代码：`TrainProfiler.__init__`（`profile_utils.py:19-24`）创建 profiler，`TrainProfiler.on_init_end()`（26-28，在 `actor.py:199` 模型初始化完后调用）启动它，`TrainProfiler.step()`（30-39，在 `actor.py:518` 每次 `train_actor` 结束后调用）推进一步；
-- `train_actor`：以 **micro-batch** 为最小单位，只抓 `train_actor` 里真正跑 forward+backward 的那部分循环（`TrainProfiler.iterate_train_actor()`，41-42），更细，适合看单次训练反向内部各 micro-batch 之间的 kernel 情况；
-- `train_log_probs`：同理，但抓的是算 log_probs 的前向循环（`iterate_train_log_probs()`）。
-
-三者共享同一套 schedule 参数（`wait/warmup/active`），由 `_create_torch_profiler()`（`profile_utils.py:60-78`）统一构造：
-
-```python
-torch.profiler.profile(
-    schedule=torch.profiler.schedule(
-        wait=max(args.profile_step_start - 1, 0),
-        warmup=1 if args.profile_step_start > 0 else 0,
-        active=args.profile_step_end - args.profile_step_start,
-        repeat=1,
-    ),
-    on_trace_ready=torch.profiler.tensorboard_trace_handler(
-        args.tensorboard_dir,
-        worker_name=f"{name}_rank_{torch.distributed.get_rank()}",
-        use_gzip=True,
-    ),
-    record_shapes=True,
-    with_stack=True,
-    profile_memory=True,
-    with_flops=True,
-)
-```
-
-**重要坑点**：
-
-1. 这里**没有**读取 Megatron 原生的 `--profile-ranks`（那是 Megatron 自己 `training.py` 里训练循环用的过滤，slime 用的是自己的训练循环 `actor.py`，没有复用这个过滤）。也就是说 **一旦开启，所有 rank 都会各自生成一份 trace 文件**——大规模 TP/PP/DP 训练下目录文件数=rank 数，单个文件可能几百 MB～几 GB，且 `with_stack=True`+`profile_memory=True` 有不小的额外开销，会拖慢被 profile 的那几步。**建议**：先在小规模（单机 1~2 张卡、小模型）复现问题再开 profiler；或只跑很短的区间（3~5 步）。
-2. `profile_step_start=0` 时 `warmup=0`，意味着从第 0 步就是"正式记录"，没有 warmup 步，第一步数据可能包含 CUDA context 初始化等噪声，一般建议 `profile-step-start` 至少设成 2~3。
-
-**依赖安装**：`pip install torch-tb-profiler`（`torch.profiler` 本身随 PyTorch 自带；`tensorboard` 已在 `requirements.txt`）。
-
-**观测入口**：以 `scripts/run-qwen3-4B.sh` 为模板，加一组参数：
+当前 `slime/observability/profile_utils.py::TrainProfiler` 在初始化结束后启动 profiler，在训练完成时推进 schedule。可给现有训练命令加入：
 
 ```bash
-PROFILE_ARGS=(
-   --use-pytorch-profiler
-   --profile-step-start 3
-   --profile-step-end 5          # 只抓第 3~4 个 rollout（active = 5-3 = 2 步）
-   --profile-target train_overall train_actor
-   --tensorboard-dir /root/slime_profile_out
-)
+--use-pytorch-profiler \
+--profile-step-start 3 \
+--profile-step-end 5 \
+--tensorboard-dir /root/slime_profile_out
 ```
 
-正常提交训练，训练跑到第 5 个 rollout后，每个 rank 会在 `/root/slime_profile_out/` 下生成形如 `train_overall_rank_0.<hostname>_<pid>.<timestamp>.pt.trace.json.gz` 的文件。
+这些是命令参数片段，需要放入已配置好的训练命令。当前 schedule 的 `wait=max(start-1,0)`、`warmup=1 if start>0 else 0`、`active=end-start`，因此该例 wait=2、warmup=1、active=2。单位是 profiler 的 `step()` 推进次数；从 checkpoint 恢复时，不要未经检查把它等同于日志中的绝对 rollout ID。
 
-**查看方式一（推荐，图形化）**：`tensorboard --logdir /root/slime_profile_out --port 6006`，浏览器打开后选 "PYTORCH_PROFILER" 标签页——Overview（GPU利用率/Kernel/Memcpy/Communication 占比饼图，一眼看出算子慢/通信慢/GPU空闲）、Kernel（耗时排序的 CUDA kernel 列表）、Trace（完整时间轴，"卡点"就是出现大段 GPU 空白的地方）。
+当前实现记录 shape、stack、memory、FLOPs，所有参与的 rank 各自产生 gzip trace，没有本地 `profile_ranks` 过滤分支。它带来额外开销，适合在已复现问题的小规模运行中截取短窗口。输出可解压后用 [Perfetto](https://ui.perfetto.dev/) 读取，或用兼容的 TensorBoard profiler 插件。
 
-**查看方式二（无需装插件）**：`gunzip xxx.pt.trace.json.gz` 后，在 `chrome://tracing` 或 https://ui.perfetto.dev/ 打开解压后的 `.json`。
+看 trace 时，把 GPU 空白区与 CPU 调度、H2D、NCCL（NVIDIA Collective Communications Library，集合通信库）和其它 rank 对齐。一个 `ncclAllReduce` 区间很长，可能在等迟到的 rank，也可能是真正传输慢；仅按 kernel 时间排序无法区分两者。
 
-**怎么定位卡点（举例）**：某 rank 的 GPU 轨道长时间空白、同一时刻其他 rank 却在跑——典型 **PP/DP 负载不均衡**（某 micro-batch 序列长度特别长），配合 `--balance-data` / `--balance-by-flops` 解决；大量 `ncclAllReduce`/`ncclBroadcast` kernel 占比很高——通信瓶颈，检查网络拓扑（`nvidia-smi topo -m`，是否有 NVLink）、TP size 是否过大；CPU 侧 launch 间隔很大、GPU 却空——**launch overhead 主导**，常见于 micro-batch 切太碎，考虑调大。
-
-### 4.4 第三步：显存分析（定位 OOM / 显存碎片 / offload 卡顿）
-
-**涉及的开关**：
-
-| 参数 | 来源 | 默认值 | 作用 |
-|---|---|---|---|
-| `--record-memory-history` | Megatron 原生，slime 用 `reset_arg` 改成 `action="store_true"`（`arguments.py:1309`） | `False` | 总开关 |
-| `--memory-recorder` | slime 自定义（`arguments.py:1303-1308`） | `torch`，可选 `torch`/`memray` | 选择显存记录后端 |
-| `--memory-snapshot-dir` | slime 自定义（`arguments.py:1286-1290`） | `.`（当前目录） | dump 文件存放目录 |
-| `--memory-snapshot-path` | Megatron 原生（`ProfilingConfig.memory_snapshot_path`） | `snapshot.pickle` | dump 文件名后缀 |
-| `--memory-snapshot-num-steps` | slime 自定义（`arguments.py:1291-1295`） | `None` | 跑够这么多个 rollout 后主动 dump 一次（不设的话只在 OOM 时自动 dump） |
-
-只在 `--profile-target` 包含 `train_overall` 时才会启用（`TrainProfiler.__init__` 里 `if args.record_memory_history and ("train_overall" in args.profile_target)`，这是默认值，一般不用改）。
-
-**两种后端的区别**（`slime/observability/profile_utils.py:81-147`）：
-
-- **`torch`（`_TorchMemoryProfiler`）**：调用 PyTorch 原生 `torch.cuda.memory._record_memory_history(...)`，同时用 `torch._C._cuda_attach_out_of_memory_observer` 挂一个 **OOM 自动 dump 回调**——一旦这张卡真的 OOM，会自动把当前的显存分配历史 dump 成 pickle 文件，并打印堆栈。这是**排查 OOM 最有效的手段**，几乎零心智负担：开着它训练，等它自己 OOM 的时候自动留证据。如果设置了 `--memory-snapshot-num-steps`，跑到第 `N-1` 个 rollout 时也会主动 dump 一次（即使没有 OOM）；
-- **`memray`（`_MemrayMemoryProfiler`）**：Python 级别的内存分析器（不止 GPU，也能看 CPU 端 Python 对象的内存），`native_traces=True` 表示同时记录 C/C++ 层调用栈。**必须**设置 `--memory-snapshot-num-steps`（代码里有 `assert`），因为 memray 没有 OOM 回调机制，只能按步数主动停止记录。
-
-**依赖安装**：`pip install memray`（已写在 `requirements.txt`）；`torch` 后端不需要额外依赖。
-
-**观测入口**：
-
-场景 A（怀疑 OOM，想留证据）：
+### 5.2 显存与主机内存：两种账本
 
 ```bash
-DEBUG_ARGS=(
-   --record-memory-history
-   --memory-recorder torch
-   --memory-snapshot-dir /root/slime_mem_snapshot
-)
+--record-memory-history \
+--memory-recorder torch \
+--memory-snapshot-dir /root/slime_mem_snapshot \
+--memory-snapshot-num-steps 5
 ```
 
-某 rank OOM 时日志会打印 dump 路径，文件已自动生成。打开 https://docs.pytorch.org/memory_viz 把 `.pickle` 拖进去，可以看显存占用曲线，鼠标悬停能看到当前时刻每块已分配显存对应的 **Python 调用栈**（`stacks="all"`），直接定位是哪一行代码申请的、是否有"越攒越多"的泄漏。
+当前 `record_memory_history` 独立于 PyTorch profiler 开关，不依赖已删除的 `profile-target`。torch 后端在支持的设备 API 上记录分配历史，按配置步数 dump；CUDA OOM observer 可在异常时留快照，不支持该 API 的设备会跳过并记录说明。
 
-场景 B（不 OOM，看正常训练时的显存分布）：加 `--memory-snapshot-num-steps 5`，跑完第 5 个 rollout 自动 dump，同样用 memory_viz 查看。
+假设 PyTorch 活跃 tensor 占 12 GiB、allocator reserved 16 GiB，设备层看到 20 GiB：`16-12=4` GiB 是 PyTorch 保留而未被活跃 tensor 使用的部分；其余 4 GiB 可能来自 NCCL、CUDA context 或其它进程，不能仅靠 PyTorch 快照全部归因。`empty_cache` 释放的是可回收缓存，不会删除活跃 tensor。
 
-场景 C（memray 看 Python/C 层内存）：`--memory-recorder memray` + `--memory-snapshot-num-steps`，生成的文件用 `memray flamegraph xxx.pickle` 生成 html 火焰图，或 `memray tree xxx.pickle` 看命令行调用树。
+torch 快照可用 [PyTorch memory visualizer](https://docs.pytorch.org/memory_viz) 查看。`memray` 后端主要分析主机 Python/native 内存分配，不能把它当 CUDA 显存分配器快照；当前实现要求指定 `--memory-snapshot-num-steps` 来主动结束记录。CPU backup、队列与 Python 对象膨胀适合在主机账本中检查。
 
-### 4.5 第四步：Rollout（SGLang 推理引擎）侧 profiling
+### 5.3 SGLang：生成进程要单独抓取
 
-**为什么单独拿出来**：训练侧 profiling 走 `train.py` 的 CLI 参数，但 Rollout 生成是**独立的 HTTP 服务进程**，它的 profiling 不走 CLI 参数，而是**训练过程中实时通过 HTTP 请求控制**。
-
-调用链：`slime/backends/sglang_utils/sglang_engine.py:485` 的 `SGLangEngine.start_profile()` / `sglang_engine.py:516` 的 `stop_profile()`，本质是往每个 SGLang 引擎发 `POST /start_profile` / `POST /stop_profile`（引擎自己实现了这两个 admin 接口，见 11 篇 §2 的服务端调用链）。slime **没有**把这两个方法接到 `train.py` 的任何 CLI 开关上，需要训练跑起来后另开终端手动触发。仓库提供了现成工具 `tools/profile_rollout.py`：先请求 router 的 `/workers` 拿所有推理 worker 地址，再对每个 worker 分别发 `/start_profile`/`/stop_profile`。
-
-**观测入口**：
+训练 profiler 不会自动覆盖独立 SGLang 进程。`tools/profile_rollout.py` 从 router 查询 worker，再向实际服务发送 `/start_profile` 或 `/stop_profile`：
 
 ```bash
 python tools/profile_rollout.py \
-    --router-url http://127.0.0.1:30000 \
-    --action start \
-    --output-dir /root/sglang_profile_out \
-    --num-steps 5 \
-    --activities GPU \
-    --with-stack \
-    --record-shapes
+  --router-url http://127.0.0.1:30000 \
+  --action start \
+  --output-dir /root/sglang_profile_out \
+  --num-steps 5 \
+  --activities GPU
 ```
 
-`--num-steps 5` 表示自动抓 5 个 forward step（prefill/decode 各算一步）后自动停止（源码注释："If it is set, profiling is automatically stopped after this step"）。不传的话需要再手动执行一次 `--action stop`。每个 worker 各自把 trace dump 到配置的目录，格式同样是 `.pt.trace.json.gz`，**查看方式跟 §4.3 完全一样**。
+地址应换成实际 router 地址，输出目录位于引擎所在主机。这里的 step 是推理引擎 forward 步数，既可能是 prefill，也可能是 decode，和训练 rollout 轮数不同。若使用自动停止参数，应确认有足够请求推进这几个 forward；没有负载时不会凭空产生完整采集窗口。
 
-NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线上的操作更容易对应业务阶段，标记区间本身不会自动等待 GPU 完成。
+### 5.4 Nsight Systems：先确认采到了哪个进程
 
-**进阶**：`--profile-by-stage` 让 SGLang 按"prefill 阶段"和"decode 阶段"分别落盘 trace，适合区分"长 prompt 处理慢"还是"逐 token 生成慢"。`--sglang-enable-layerwise-nvtx-marker`（转发给 SGLang 引擎）让每层 Transformer layer 打一个 NVTX marker，配合 §4.6 的 `nsys` 能精确看到"第几层"、"attention 还是 MLP"耗时多少。
-
-### 4.6 第五步（全局视角）：NVIDIA Nsight Systems（`nsys`）
-
-`torch.profiler` 只能看到"PyTorch 能感知到"的东西；`nsys` 是**系统级**的 profiler，可以同时看到多进程/多 GPU 时间线对齐、CPU 侧系统调用/线程调度/锁等待、CUDA driver API/NCCL 通信/显存拷贝、NVTX marker 语义化区间。**什么时候用它**：怀疑瓶颈不是某个算子本身慢，而是"进程之间互相等"（colocate 模式下训练等推理 offload 显存、多机 NCCL 通信被网络打满、CPU 侧调度导致 GPU 空闲）。
-
-**重要说明**：Megatron 原生的 nsys 开关（`--profile`/`use_nsys_profiler`、`--nvtx-ranges`、`--record-shapes`）在 slime 里**不生效**（slime 用自己写的训练循环 `actor.py`，没有调用 Megatron 那套 nsys 相关代码）。因此对 slime 做 `nsys` 分析要用**整进程包裹**方式。
-
-**依赖**：`nsys` 是 CUDA Toolkit 附带的命令行工具（`which nsys` 检查是否已装），推荐装桌面版 Nsight Systems GUI 在本地机器打开 `.nsys-rep` 文件。
-
-**单进程观测入口**：脱离 Ray，用最小复现脚本单进程运行：
+NVIDIA Nsight Systems 的 `nsys` 可从系统视角观察 CUDA、NVTX（NVIDIA Tools Extension，语义区间标记）及操作系统线程。需检查运行环境中工具是否已安装，不能假定任意 CUDA 环境都有它。
 
 ```bash
-nsys profile \
-    -t cuda,nvtx,osrt \
-    -s none \
-    -o /root/nsys_out/train_trace \
-    --force-overwrite true \
-    python3 train.py --debug-train-only --load-debug-rollout-data /root/dump/{rollout_id}.pt ...
+nsys profile -t cuda,nvtx,osrt -s none \
+  -o /root/nsys_out/train_trace \
+  python3 YOUR_MINIMAL_GPU_REPRO.py
 ```
 
-`-t cuda,nvtx,osrt` 采集 CUDA API/NVTX 区间/系统调用调度；`-s none` 不用 CPU 抽样，产出文件更小；`--debug-train-only --load-debug-rollout-data` 跳过真实 SGLang 推理，专注训练侧。
+这里明确要求一个**实际执行 GPU 工作的最小复现程序**。只包裹 `python train.py` 可能仅捕获 driver；Ray worker 可能由已有 Ray 服务另行启动，即使 `--debug-train-only` 也不会自动变成单进程训练。多进程分析必须通过受当前环境支持的 Ray runtime profiling/进程启动配置覆盖实际 worker，并检查报告是否包含目标 PID、CUDA context 与 GPU。
 
-**方式二**（Ray 多进程场景）：通过 `RAY_worker_process_setup_hook` 或把 Ray runtime env 里的 Python 可执行文件替换成 `nsys profile ... python3 "$@"` 的 wrapper 脚本，让每个 Ray worker 自动被 nsys 包裹（配置略复杂，建议先用方式一定位大致范围）。
+同机时间线容易对齐，多机还需时钟与事件对齐依据。NVTX 标记本身不等待 GPU，区间末尾不能直接当最后一个 kernel 完成时刻。
 
-**怎么看结果**：`nsys stats /root/nsys_out/train_trace.nsys-rep` 命令行看摘要统计（CUDA kernel/NVTX 区间/CUDA API 调用耗时 Top N）；真正定位卡点建议用 Nsight Systems GUI 打开 `.nsys-rep`——每个 CUDA stream/进程一条时间轴纵向对比，一眼看出哪些 GPU 在空闲，放大空白区间看紧邻的是什么 API/区间。
+## 6. 可复现：固定种子、固定顺序、固定集合是三件事
 
+设种子固定后四个任务仍因网络抖动以不同顺序完成，一次超投收下 A/B，另一次收下 A/C。最后按 index 排序只能把 `[B,A]` 变成 `[A,B]`，不能把 `[A,C]` 变成 `[A,B]`。fully async、动态过滤和 early stop 都会增加这种时间相关选择。
 
-### 4.7 跨层分析示例：一次完整的"定位卡点"流程
+更强的复现需固定模型/依赖版本、数据与模板、随机数状态、采样配置，以及必要时重放实际轨迹和环境响应。初始 seed 不等于已推进到某一步的 RNG（随机数生成器）状态；相同 seed 也不保证不同并行拓扑/精度的逐位一致。
 
-假设 Qwen3-4B GRPO 训练感觉比预期慢，按下面顺序排查：
+当前 `slime/utils/staleness.py` 报告的 age 是 `current_weight_version + 1 - min(sample.weight_versions)`，所以同版本新样本的 age 为 1。文中通常说的版本差 d 则从 0 起算，age=d+1。无法解析或包含未来版本时计为 unknown，不能当作最新样本静默填 0。
 
-**Step 1 —— 先看免费的 perf 指标（5 分钟）**：跑几十个 rollout，观察 `perf/wait_time_ratio`：持续 >0.4~0.5 说明训练大部分时间在等 rollout，下一步分析 rollout 侧（跳到 Step 3）；很低说明训练本身计算量大，下一步分析训练侧（Step 2）。
+## 7. 将证据变成回归检查
 
-**Step 2 —— 训练侧慢：开 PyTorch Profiler**：
+CPU 检查适合字段形状、token delta、分组归约、参数映射；GPU 集成检查覆盖训练/推理同输入评分、换权、并行通信、offload 和故障恢复。每种检查应对应一个可解释的不变量。例如改变 micro-batch 划分后，固定数据的归一化梯度应在数值容差内一致；若只是验证函数返回形状，无法发现重复平均导致的学习率变化。
 
-```bash
-PROFILE_ARGS=(
-   --use-pytorch-profiler
-   --profile-step-start 3
-   --profile-step-end 5
-   --profile-target train_actor
-   --tensorboard-dir /root/slime_profile_out
-)
-```
-
-跑到第 5 个 rollout 后 `tensorboard --logdir /root/slime_profile_out`，看 Kernel 面板定位耗时最长的算子/通信，针对性调整并行策略（TP/PP/CP/EP）、`--recompute-*`、`--use-dynamic-batch-size`+`--max-tokens-per-gpu`。
-
-**Step 3 —— Rollout 侧慢：开 SGLang profiler**：
-
-```bash
-python tools/profile_rollout.py --router-url http://127.0.0.1:<router端口> \
-    --action start --output-dir /root/sglang_profile_out --num-steps 5 --activities GPU
-```
-
-用 tensorboard/perfetto 打开产出的 trace，看是 prefill 慢还是 decode 慢（配合 `--profile-by-stage`），检查显存是否够（`--sglang-mem-fraction-static`）、是否长尾请求拖慢了整批（`perf/longest_sample_tokens_per_sec` vs `perf/tokens_per_gpu_per_sec` 的差距）。
-
-**Step 4 —— 怀疑显存问题：开显存 snapshot**：加 `--record-memory-history --memory-recorder torch --memory-snapshot-dir /root/slime_mem_snapshot`，跑着等它 OOM 自动落盘，用 memory_viz 打开分析。
-
-**Step 5 —— 想看更全局的"进程间互相等待"：上 `nsys`**：先在最小复现场景（`--debug-train-only`+dump 数据）跑一遍 `nsys profile`，GUI 打开看整体空闲情况，尤其关注 colocate 模式下 offload/onload 的那几段时间。
-
-### 4.8 参数速查表
-
-| 参数 | 来源 | 类型/默认值 | 作用简述 |
-|---|---|---|---|
-| `--use-pytorch-profiler` | Megatron 原生 | bool, `False` | 训练侧 PyTorch Profiler 总开关 |
-| `--profile-step-start` / `--profile-step-end` | Megatron 原生 | int, `10`/`12` | 训练侧 profiler 起止 rollout step |
-| `--profile-target` | slime (`arguments.py:1296`) | list, `[train_overall]` | 训练侧 profiler 抓取粒度 |
-| `--tensorboard-dir` | Megatron 原生 | 需显式指定 | trace / tensorboard 日志输出目录 |
-| `--record-memory-history` | Megatron 原生（slime reset 为 flag） | bool, `False` | 显存历史记录总开关（含 OOM 自动 dump） |
-| `--memory-recorder` | slime (`arguments.py:1303`) | str, `torch`/`memray` | 显存记录后端 |
-| `--memory-snapshot-dir` / `--memory-snapshot-path` | slime / Megatron 原生 | str | 显存 dump 文件目录/文件名 |
-| `--memory-snapshot-num-steps` | slime (`arguments.py:1291`) | int, `None` | 跑够 N 个 rollout 后主动 dump 一次（memray 模式下必填） |
-| （无 CLI 开关，运行时 HTTP 控制） | `sglang_engine.py:485` `start_profile()` / `tools/profile_rollout.py` | - | Rollout（SGLang）侧 PyTorch Profiler，训练跑起来后手动触发 |
-| `--sglang-enable-layerwise-nvtx-marker` | 转发给 SGLang 引擎 | bool | 逐层打 NVTX marker，配合 nsys 看层级耗时 |
-| `--profile`（Megatron `use_nsys_profiler`）、`--nvtx-ranges`、`--record-shapes` | Megatron 原生 | - | **在 slime 里目前不生效**，需用整进程包裹方式（§4.6） |
-| `--debug-train-only` + `--load-debug-rollout-data` / `--debug-rollout-only` | slime | - | 分离调试，方便单独 profile 一侧 |
-
-依赖：`pip install torch-tb-profiler memray`；`nsys` 是 CUDA Toolkit 自带工具，需单独装 Nsight Systems。
-
-### 4.9 常见问题 / 踩坑提示
-
-1. **开了 `--use-pytorch-profiler` 但目录下什么都没有？** 检查是否跑到 `--profile-step-end`（`on_trace_ready` 只在 `repeat` 完成后触发写盘），或进程是否异常退出导致 profiler 没走完 schedule。
-2. **trace 文件特别大，tensorboard 打开很卡？** 调小 `profile-step-end - profile-step-start`，或 `--profile-target` 只留一个值；`with_stack=True` 是主要体积来源，目前硬编码打开（`profile_utils.py:75`）。
-3. **多 rank 一起开 profiler 会不会互相干扰或拖慢训练？** 会有一定开销，且因为没有 `profile_ranks` 过滤，所有 rank 都会各自产生开销和文件。生产训练 debug 时建议先在小规模复现问题。
-4. **SGLang 侧的 `--num-steps` 是"多少个 rollout"还是"多少个 forward step"？** 是 SGLang 引擎自己的 forward step（prefill 一次算一步，decode 每个 token 也算一步），跟训练侧"rollout step"是不同的计数单位。
-5. **想同时对齐训练侧和 rollout 侧的 trace 时间轴？** 目前两边分别产出各自的 trace 文件，没有自动合并工具；需要严格对齐时序建议用 `nsys` 全局采样（前提是各进程时钟同步，同机训练天然满足）。
-6. **colocate 模式下怎么区分"这段时间是训练在跑"还是"推理在跑"？** 看 `perf/wait_time_ratio` 结合训练日志里 `offload/onload` 相关的 log，或在 `nsys` timeline 上直接看某一时刻是哪个进程的 CUDA context 活跃。
-
----
-
-
-## 5. CI：把"正确性"变成回归测试
-
-README 概括了 CI 的三层：
-
-1. **CPU 单测**：数据流、参数、转换逻辑的纯 CPU 测试（`tests/` 下大量 `test_*.py`）；
-2. **customization hook contract test**：保证 07 篇那些 `--*-path` 钩子的签名契约不被破坏；
-3. **GPU e2e 测试**：真实 Megatron + SGLang 跑通 dense/MoE、checkpoint、数值精度、async rollout、OPD、PPO workflow、debug rollout-then-train replay。
-
-CI 里的特色设施：`--ci-test` 参数触发严格断言（如 generate 里 `assert isinstance(sample.prompt, str)`，sglang_rollout.py:155-156）、磁盘权重更新的版本对账（04 篇）、故障注入（§3）。文档：`docs/zh/developer_guide/ci.md`。
-
----
-
-
-## 6. 可复现性
-
-- **种子链路**：`--rollout-seed` 驱动数据集 shuffle（`Dataset.shuffle` 用 `seed + epoch_id`，保证同 epoch 同排列，03 篇）；`sglang_enable_deterministic_inference` 时组内每个采样用 `rollout_seed + i` 的固定采样种子（sglang_rollout.py:110-112、317-319）；
-- **确定性排序**：rollout 收集结果按 `sample.index` 排序（sglang_rollout.py:451-454），fully async 同样按 index 排序（fully_async_rollout.py:233-241）——乱序完成 ≠ 乱序训练；
-- **调试文档**：`docs/zh/developer_guide/debug.md`、`docs/zh/advanced/reproducibility.md`。
-
----
-
-
-## 7. 从局部观测回到一轮 RL
-
-主线 00–09 连接了领域问题、资源编排、生成、数据、换权、算法、训练后端、定制、奖励与工程化。第 10 篇用 TransferQueue 比较独立数据平面，第 13 篇解释 slime 内建格式转换；它们补充不同层次的设计选择。
-
-`--debug-rollout-only` 与 `--dump-details` 暴露生成端的 Sample，`--debug-train-only` 将训练端与生成波动隔离。这些入口之所以有用，是因为同一个 loss 异常既可能来自样本，也可能来自归一化或优化器，端到端曲线无法单独区分它们。
-
-算法层的 `--advantage-estimator`、TIS 开关改变目标或校正方式；`--custom-generate-function-path` 则改变生成控制流。前者需要连到行为概率与训练指标，后者需要连到多轮 token、mask 和 reward 的归属。`examples/search-r1`、`examples/fully_async`、`examples/coding_agent_rl` 分别展示工具交互、阶段解耦和复杂 agent 轨迹带来的约束。
-
-与综述中的 verl HybridEngine/AgentLoop、AReaL staleness-aware 机制比较时，关键区别落在资源复用、执行粒度与陈旧度管理。性能时间线只有与这些设计条件放在一起，才足以解释某段等待为什么存在，以及消除它是否会改变训练语义。
+排查时先保存最小输入与预期值，再逐层引入并行、异步和低精度，记录第一次偏离的位置。这样测试、指标与 profiler 才能互相印证：测试说明应当发生什么，指标说明哪里偏离，时间线解释偏离发生在什么执行依赖上。

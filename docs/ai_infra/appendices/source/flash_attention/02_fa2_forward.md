@@ -3,6 +3,8 @@
 
 ## 1. 我们追踪的调用与执行链
 
+上一章已经证明“每块计算后只留下 m/l/a”足以得到输出。现在还有一个实现问题：谁拥有这些状态，怎样保证它们在扫描下一块 K 时仍然存在？本篇选一个配置，从 Python 数组一路追到负责某段输出的线程块。先认清数据形状，再读每个调用对数据做了什么。
+
 下面是 GPU 环境中的完整调用片段，Q/K/V 的轴顺序为 `[batch, token, head, feature]`：
 
 ```python
@@ -36,6 +38,8 @@ out = flash_attn_func(q, k, v, dropout_p=0.0, causal=False)
 矩阵乘中两边的中间维度要相等：QK 沿 64 个特征求和，PV 沿 128 个 key 求和。表中的逻辑形状属于**整块协作结果**，每条线程只拥有其中的 fragment（片段）。CuTe 是帮助表达这些布局和分工的库；CuTe `Tensor` 可以表示视图或线程片段，不能直接按一个新分配的 PyTorch 大张量理解。
 
 Python 包装和 C++ 分发逻辑由 CPU 执行，CUDA kernel 的函数体由 GPU 线程执行。Python 调用的 padding 等张量操作也可能提交自己的 GPU 工作；看到 `.py` 文件不等于其中调用的计算都在 CPU。
+
+本例 Q 有 `2×256×4×64=131072` 个 FP16 元素，共 256 KiB；K、V、O 各有同样大小。LSE 的逻辑形状为 `[B,H,N_q]=[2,4,256]`，每行一个 FP32 数，共 `2048×4=8192` 字节。完整 S 若物化则是 `[2,4,256,256]`，有 524288 个数；源码里的 `acc_s` 只是其中一个 tile 分给当前线程的片段，不能按这个完整形状再次申请。
 
 ```text
 flash_attn_func → FlashAttnFunc.forward → _flash_attn_forward
@@ -126,6 +130,8 @@ return out if not return_softmax else (out, softmax_lse, S_dmask)
 
 `save_for_backward` 保存的是反向需要的张量引用；`ctx.softmax_scale` 等保存非张量配置。若输入被补到 64 维，`out_padded[..., :head_size_og]` 把输出裁回 62 维。`return_softmax` 控制返回形式，但测试用矩阵的生成还受上游 `return_softmax and dropout_p > 0` 的条件约束；不要把它当成始终可用的标准概率矩阵。
 
+这里有两个容易混淆的“返回”。C++ 返回 O 等张量对象，表示对象及其存储已经安排好；GPU 在同一 stream 上的工作仍可能尚未执行完。Python 最终只返回 O，也不意味着训练时 LSE 已被释放，因为 `ctx` 还持有它供 backward 使用。反向所需状态的寿命跨越两次计算，线程寄存器中的 m/l/a 则只活在一次 kernel 的执行过程中。
+
 ## 4. C++ 把张量拆成地址与步长
 
 `mha_fwd` 先检查 dtype、设备、形状和末维 stride，再分配 O/LSE。随后 `set_params_fprop` 为 GPU 准备参数：
@@ -193,6 +199,16 @@ params.scale_softmax_rp_dropout = params.rp_dropout * params.scale_softmax;
 ```
 
 本例走 `else`，`scale_softmax=0.125`，`scale_softmax_log2=0.125×log2(e)`，用于把自然指数改写成 `exp2`。`params.p_dropout` 是保留概率，值为 1；`rp_dropout` 为其倒数，仍为 1。参数名相似，却与 Python 的“丢弃概率 0”不是同一含义。
+
+### 4.1 关闭的分支在解决什么问题
+
+本篇主线关闭了位置偏置和 softcap，但理解它们可防止把参数名误认为另一种缩放。ALiBi（Attention with Linear Biases，带线性偏置的注意力）为位置距离增加代价。按此接口的数学定义，令对齐后的 query 位置为 $c_i=i+N_k-N_q$，某 head 的斜率为 $\beta$，则在 score 上加 $b_{ij}=-\beta|c_i-j|$。距离按 token 位置数计，beta 表示每隔一个位置增加多少 score 惩罚，最终偏置与 S 同为无量纲量。
+
+例如等长序列中 query 位于 2、`beta=1/2`，key 0、1、2 的偏置为 `[-1,-1/2,0]`。偏置改变有效 key 之间的权重，mask 则将不允许的配对完全排除，两者作用不同。因果分支还可利用“每行同时加常数不改变 Softmax”简化距离表达，所以源码中间值不一定逐项长得与上述公式相同。
+
+softcap 处理的是极大 score。暂不叠加位置偏置，令原缩放分数 $u=\alpha(Q_i\cdot K_j)$，正的 cap 参数为 c，最终分数为 $S=c\tanh(u/c)$。$\tanh(x)=(e^x-e^{-x})/(e^x+e^{-x})$，输出在 -1 与 1 之间，因此 S 平滑地限制在 -c 与 c 之间；c 与 u 使用相同的 score 尺度。取 c=2、u=2，得到 `S=2*tanh(1)≈1.523188`，而直接硬截断仍为 2。它改变了注意力定义，并非对原 score 的等价性能优化。
+
+这也解释 `set_params_fprop` 的另一分支为何令 `params.softcap=alpha/c`、`params.scale_softmax=c`：先在 `apply_softcap` 中算 `tanh(raw_QK*alpha/c)`，再在指数步骤乘 c，合起来才是上式。其变化率为 $dS/du=c(1-\tanh^2(u/c))/c=1-\tanh^2(u/c)$，因此反向还要补这个因子。源码的 `calculate_dtanh` 实际保存 `(1-tanh²)*alpha/c`，后面的梯度输出再乘 `scale_softmax=c`，相乘后才得到对 raw QK 的完整因子 `alpha*(1-tanh²)`。第 04 篇主线关闭 softcap，所以其中 `scale_softmax` 才一直表示 alpha。
 
 ## 5. 分发函数选择哪个实例
 
@@ -276,6 +292,14 @@ const int bidh = blockIdx.z;
 
 我们挑 `(blockIdx.x,blockIdx.y,blockIdx.z)=(1,0,2)`。这个 block 拥有 `out[0,128:256,2,:]`。其他 block 负责不同 Q 行或 batch/head，因此普通前向无需让两个 block 同时累加这个输出 tile。
 
+### 6.1 为什么先按 Q 分工
+
+把逻辑问题缩为 `N_q=N_k=4、d=d_v=1`、每块负责 2 行 Q。线程块 A 负责 query 0、1，线程块 B 负责 query 2、3；两者都扫描 key 0–3，但写出的 O 行互不重叠。A 可以比 B 先结束，不需要等待 B 的分母，因为 Softmax 本来就逐 query 行独立。
+
+如果改为 A 只算 key 0、1，B 只算 key 2、3，它们就都影响所有 query 的输出；必须再合并每行的归一化信息，不能直接把局部 O 相加。这是第 04 篇 split KV 需要 combine kernel 的原因。按 Q 分块增加独立任务，却可能让多个 block 重读同一 K/V；按 K 分块能进一步扩大并行，但引入部分结果和归约成本。[FA2 论文](https://arxiv.org/abs/2307.08691)将更充分的并行与更少的块内通信作为重要优化方向。
+
+本例的 16 个 block 只说明启动的逻辑任务数。是否足以让某块 GPU 忙起来，还要比较 SM 数、每个 block 的资源占用和执行时间；不能由 `128×16` 条逻辑线程直接推出利用率。
+
 ## 7. 先确定本块要读哪些 K 行
 
 源码摘录：[flash_fwd_kernel.h，87–94 行](https://github.com/Dao-AILab/flash-attention/blob/e9cf2c1651d2303191eb40a739a3c135fda00999/csrc/flash_attn/src/flash_fwd_kernel.h#L87-L94)。
@@ -297,6 +321,8 @@ if (Is_causal || Is_local) {
 `n_block_min/max` 表示 K 块范围，max 是**不包含的上界**。普通 non-causal 本例得到 `[0,2)`，即 K 块 0、1。local attention 可以提高下界；causal/local 可以降低上界，从而整块跳过不可能参与的 K。
 
 举一个相同长度的 causal 变体：对 `m_block=0`，Q 是 0～127，最大允许 K 不超过 127，因此上界裁到 1；对 `m_block=1`，Q 是 128～255，上界为 2。块范围只做粗裁剪，仍要在块内对每一行执行精确 mask。
+
+用 `N_q=N_k=4`、tile 高 2 手算这个区别：Q 块 `[0,2)` 可以整块跳过 K `[2,4)`，但它与 K `[0,2)` 的 score tile 仍含 `(query=0,key=1)` 这个未来位置，要在块内屏蔽。整块跳过能省一次 QK/PV tile 工作；在已计算的 tile 内把某个 score 改成负无穷，主要保证语义，未必省掉对应的矩阵乘指令。尾部越界 mask 与 causal mask 也不同：前者保护不存在的输入，后者禁止使用实际存在但不允许看的位置。
 
 ## 8. Q/K/V 的地址视图怎样建立
 
@@ -494,6 +520,19 @@ Tensor rP = FLASH_NAMESPACE::convert_type<Element>(acc_s);
 | 第二轮 PV 后 | 0 | 本轮权重，可丢弃 | K0 与 K1 的合并贡献 |
 
 ## 12. 输出写回：为什么又绕一次 shared memory
+
+在写回之前，先把前面两轮的数据寿命合起来看。下面的“可复用”指满足完成与同步条件后，旧值不再有读者，并非 Python 主动释放张量：
+
+| 数据 | 谁产生、谁消费 | 何时才可覆盖 |
+|---|---|---|
+| shared 中的 Q | 拷贝线程写，各轮 QK 读 | 最后一轮 QK 的全部读取结束后 |
+| shared 中的 K1 | 拷贝线程写，第一轮 QK 读 | 第一轮 QK 完成并完成块内交接后，可写 K0 |
+| shared 中的 V1 | 拷贝线程写，第一轮 PV 读 | 第一轮 PV 结束并完成必要交接后，可写 V0 |
+| 寄存器 `acc_s` | QK 写，mask/Softmax 改写，PV 使用转换后的权重 | 本轮权重已交给 PV 后，下轮可重新建立 score |
+| 寄存器 `acc_o`、m/l | 各轮更新，下一轮和最终归一化读取 | 不能每轮清空；全部 K 扫描结束后才终结 |
+| 显存 O/LSE | 当前 block 写，后续算子或 backward 读 | 相关 GPU 工作完成且上层使用结束后 |
+
+这张表解释了为什么可以复用 sQ 存输出，却不能在第一轮后复用 `acc_o` 存别的临时量：前者已完成最后一次读取，后者还承载所有历史 key 的贡献。
 
 源码摘录：[flash_fwd_kernel.h，440–449 行](https://github.com/Dao-AILab/flash-attention/blob/e9cf2c1651d2303191eb40a739a3c135fda00999/csrc/flash_attn/src/flash_fwd_kernel.h#L440-L449)。
 

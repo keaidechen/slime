@@ -5,7 +5,7 @@
 
 > 衔接 [04_weight_sync_and_memory.md](<04_weight_sync_and_memory.md>)、[06_megatron_backend_and_mbridge.md](<06_megatron_backend_and_mbridge.md>) 与 [Megatron 训练主线](<../megatron/01_foundations/02_training_mainline.md>)。
 >
-> **历史说明**：文件名为兼容旧链接而保留。slime v0.3.1 已删除 `Megatron-Bridge/`、`AutoBridge`、`--megatron-to-hf-mode bridge` 与 bridge iterator。本篇只解释当前仓库内的 `hf_to_megatron/`、`megatron_to_hf/` 和 `HfWeightIteratorDirect`。
+> **历史说明**：文件名为兼容旧链接而保留。slime v0.3.1 已移除运行路径对 Megatron-Bridge 的依赖及 `AutoBridge`、`--megatron-to-hf-mode bridge` 与 bridge iterator。本篇只解释当前仓库内的 `hf_to_megatron/`、`megatron_to_hf/` 和 `HfWeightIteratorDirect`。
 
 ---
 
@@ -21,6 +21,10 @@
 2. **权重支持**：slime 知道 HF 名称/布局与该 Megatron 结构之间如何互转。
 
 只增加 `_LOADERS` 不会让未知结构自动可训；只增加 custom provider 也不会让 HF safetensors 自动对齐。
+
+给“语义正确但 shape 看不出来”一个最小反例。线性层使用 $y=xW^T$，令 `x=[1,2]`、`W=[[1,0],[0,2]]`，输出为 `[1,4]`。将两行交换成 `[[0,2],[1,0]]`，shape 仍是 `[2,2]`，输出却变成 `[4,1]`。名称映射、轴顺序、head/expert 编号都属于权重的语义，不在 safetensors 文件格式的 shape 校验里。
+
+HF（Hugging Face）是这里采用的一套配置、参数命名与 checkpoint 约定；Megatron 是目标模型/并行实现。checkpoint 的 shard 是文件分片，TP shard 是计算用参数分片：一个 HF 文件可以包含多个层，也可只含某层的一部分命名 tensor，文件编号不能直接当 GPU rank。
 
 ### 1.2 为什么既有 `hf_to_megatron/`，又有 `megatron_to_hf/`？
 
@@ -96,7 +100,33 @@ reader 先读 `model.safetensors.index.json` 建立 `tensor name -> filename` �
 
 ---
 
+### 2.4 用 8 行矩阵解释 partition stride
+
+若完整权重 shape `[8,2]`，每行用编号 `0..7` 标记，TP=2、切分轴为 0，普通连续切分给 rank 0 行 `[0,1,2,3]`、rank 1 行 `[4,5,6,7]`。
+
+但融合 gate/up 的权重可能按 `[gate 的4行, up 的4行]` 排列，每个 rank 需要各拿两行 gate 和两行 up。`partition_stride=2` 描述这种分段切分：先把完整参数分成 `TP×stride=4` 个块 `[0,1]`、`[2,3]`、`[4,5]`、`[6,7]`，rank 0 取第 0/2 块，得到 `[0,1,4,5]`，rank 1 取第 1/3 块，得到 `[2,3,6,7]`。本地 shape 都是 `[4,2]`，但朴素连续切片会给错语义。
+
+这里行编号只用于追踪，不是实际模型值。读取目标 parameter 的 `partition_dim/partition_stride`，比依据名字猜“切前半还是后半”更可靠；完整重建时也必须执行对应的逆排列。
+
 ## 3. 一个可验证的 Qwen GQA/QKV 例子
+
+先把大模型缩到纸上：GQA（grouped-query attention，分组查询注意力）让多个 query head 共用一组 key/value head。取 4 个 Q head、2 个 KV head、每个 head dimension=1、输入 hidden size=2。三个 HF 权重分别是 Q `[4,2]`、K `[2,2]`、V `[2,2]`。
+
+```text
+Q 的行标签: q0 q1 q2 q3
+K 的行标签: k0 k1
+V 的行标签: v0 v1
+
+每个 KV 组配 4/2=2 个 Q head：
+组0 = q0 q1 k0 v0
+组1 = q2 q3 k1 v1
+融合后 shape [8,2]
+TP=2 且按组切分时，每 rank shape [4,2]
+```
+
+令各行具体为 `[编号,0]`，编号顺序采用 `q0=1,q1=2,q2=3,q3=4,k0=5,k1=6,v0=7,v1=8`。对输入 `[1,0]`，正确融合输出为 `[1,2,5,7,3,4,6,8]`；若简单 cat(Q,K,V) 则是 `[1,2,3,4,5,6,7,8]`。Megatron 按组解释后会把第三行的 q2 错当 k0，尽管矩阵乘完全不报错。
+
+现在扩大 head 数与维度，下面的真实尺寸公式只是在每个行标签后再展开 `head_dim` 行。
 
 设 `num_attention_heads=32`、`num_key_value_heads=8`、`head_dim=128`、`hidden_size=4096`。HF 有：
 
@@ -154,6 +184,10 @@ linear_qkv = torch.cat((q, k, v), dim=1).reshape(-1, hidden)
 
 单个参数本身超过上限时仍会独占一个超大 bucket；这个参数是软分桶边界，不会切开一个 parameter。
 
+具体算一次内存：本地 shard 为 BF16 `[2,4]`，有 8 个元素、16 字节；TP=2 重建完整 `[4,4]` 为 32 字节。若桶中两个这样的参数，本地统计只有 32 字节，完整值已有 64 字节；转换若产生额外连续副本或 FP32 scale，峰值还要加上这些同时存活的对象。由此可见，分桶控制的是参数处理粒度，不是 GPU allocator 的精确峰值。
+
+collective（集合通信）还依赖共同计划。假设 rank 0 先处理 A `[4,4]` 再处理 B `[2,4]`，rank 1 反过来：即使两端总字节数一致，每次通信的对象和形状都不对应。`ParamInfo` 的对账和稳定排序就是先在小元数据上达成一致，再让大 tensor 按同一顺序流动。
+
 ### 4.3 `_get_megatron_full_params` 做了哪些通信？
 
 对一个 bucket：
@@ -201,6 +235,14 @@ direct 路径先形成全局 `ParamInfo` 计划，适合要统一处理 colocate
 因此磁盘全量同步和“导出一个可被 Transformers/SGLang 读取的 HF checkpoint”复用同一 writer 是合理的：两者都需要完整的 HF 目录语义，而不只是若干 tensor 文件。
 
 ---
+
+### 5.1 导出完成的标志与数值验证
+
+假设两个文件分别保存 `q_proj.weight` 与 `k_proj.weight/v_proj.weight`，index 的 `weight_map` 要准确指向各自文件。writer 写完某个 shard，不代表其他 writer 的文件也已就绪；只有所有数据文件和汇总 index 形成相容目录，才可将它作为完整版本交给加载器。消费者还在加载时，也不能清理它正在读取的旧目录。
+
+双向 round-trip 是必要检查，但也有边界：如果正反两个转换都用了同一套错误排列，错误可能彼此抵消，回到原 tensor 仍能通过。因此还应分别检查中间参数的语义位置，并给两端模型相同小输入做 forward 对账。量化是有损操作，HF→BF16→FP8→HF 不应要求逐位复原，需事先定义误差容差和可比输出。
+
+例如词表真实大小 5，为 TP=2 补到 6，新增第 6 行只是实现对齐。导出时删除 padding 行是恢复逻辑词表；如果 tokenizer 也误把该行当合法 token，问题就超出矩阵 shape，需要同时核对 tokenizer/config 资产。
 
 ## 6. 如何新增一个模型族
 

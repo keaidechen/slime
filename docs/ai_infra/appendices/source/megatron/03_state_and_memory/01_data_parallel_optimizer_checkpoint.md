@@ -25,6 +25,12 @@ optimizer shard
 
 `param.grad` 可能不是你想象的独立 tensor；Megatron 常用 `param.main_grad` 指向连续 buffer。写自定义 gradient 逻辑前必须确认目标字段和 dtype。
 
+### 为什么要分桶，而不是每个参数发一次通信
+
+bucket 是将若干梯度放在一起通信的连续区间。设网络每次调用的固定启动成本 α=10 μs，有效带宽 β=10 GB/s，单个小梯度 1000 bytes。简化耗时 `t≈α+Q/β` 中，Q 为传输字节数；单个约 `10+0.1=10.1 μs`，100 次约 1010 μs。合成 100000 bytes 一次发送约 `10+10=20 μs`。这些是假设值，真实 collective 还受 rank 数与算法影响，但说明了小消息为什么昂贵。
+
+代价是必须等整桶最后一个梯度就绪才能发出；桶越大，开始通信越晚。反向通常先产生靠近输出层的梯度，因此按其产生顺序组织 bucket，可以让先就绪的梯度在后续反向计算期间通信。bucket 不是模型的逻辑层，也不保证与参数边界一致。
+
 ## 2. 从 all-reduce 到 reduce-scatter
 
 普通 DP：
@@ -63,6 +69,12 @@ master weight（主权重）通常是优化器更新使用的较高精度参数�
 
 参数边界不一定与 shard 边界对齐，所以代码维护 model param、main param、group range、world range 等 mapping。阅读 distributed optimizer 最有价值的是画“逻辑一维 buffer 区间图”。
 
+把八元素例子赋上数值：rank0 的本地梯度为 `[1,2,3,4,5,6,7,8]`，rank1 为 `[3,4,5,6,7,8,9,10]`。假设每个 rank 的本地目标已是等样本数的均值，全局目标是两个均值的平均，则目标梯度为 `[2,3,4,5,6,7,8,9]`。SUM RS 可先产生前半 `[4,6,8,10]`、后半 `[12,14,16,18]`，再各除以 2；实际实现也可能预先缩放，不能再重复除。
+
+为了只演示 owner，用无动量 SGD（随机梯度下降）和学习率 0.1，初始参数全为 1。rank0 更新前四个为 `[0.8,0.7,0.6,0.5]`，rank1 更新后四个为 `[0.4,0.3,0.2,0.1]`。AG 后两副本都拿到完整新参数。Adam 换了局部更新公式和历史状态，RS → 本地更新 → AG 的归属关系相同。
+
+若 rank1 跳过更新却仍参与 AG，拼回的模型会混合两版参数；若省略 AG，则每个副本只有自己负责的部分是新值。因此“梯度已同步”和“下一轮参数已同步”是两个独立完成条件。
+
 ## 3. overlap 的时序
 
 - `overlap_grad_reduce`：某个 backward bucket ready 后立即 RS/AR；
@@ -78,6 +90,10 @@ master weight（主权重）通常是优化器更新使用的较高精度参数�
 - conditional computation 让 DP ranks 的 hook 顺序不一致；
 - overlap 增加 buffer，显存估算漏项。
 
+考虑一桶的最小时序：计算 stream 完成最后一次梯度写入 → 通信 stream 等待该事件并启动 RS → optimizer 的 stream 等待 RS 完成 → 更新本地状态 → AG → 下一轮 forward 的消费者等待 AG。CPU 获得异步 work handle 只代表提交成功；相关 wait/event 才建立消费者顺序，不一定意味着整个 GPU 已经全局空闲。
+
+缓冲区复用的条件也是这条依赖链：清零旧梯度必须晚于 optimizer 和仍在读取它的通信；覆盖参数 gather buffer 必须晚于所有用它的算子。单凭 `param.grad is None` 无法判断 `main_grad` 的 storage 已无人使用。
+
 ## 4. mixed precision 状态
 
 BF16/FP16 训练常同时存在：
@@ -88,7 +104,11 @@ BF16/FP16 训练常同时存在：
 - Adam first/second moments；
 - scaler/overflow state。
 
-粗略 Adam、未分片情况下仅模型状态就可能达到每参数 16 bytes 量级，具体取决于参数/grad dtype 与实现。不要用“模型参数量×2 bytes”估算训练显存。
+粗略 Adam、未分片情况下仅模型状态就可能达到每参数 16–20 bytes，具体取决于参数/grad dtype 与实现。不要用“模型参数量×2 bytes”估算训练显存。
+
+低精度为什么还需要 master weight？若计算参数在某个数值范围内的相邻可表示值间距为 Δ，而一次更新仅为 Δ/10，直接在该低精度参数上相减可能舍入回原值。高精度主权重可以先累积这些小更新，再转换为计算参数。FP16/BF16 都占 2 bytes，但指数范围和尾数精度不同，不能据此认为数值行为相同。
+
+loss scaling 则处理另一处损失：令缩放后目标 `L'=sL`，反向得到 `g'=sg`，在更新前用 `g=g'/s` 还原，避免某些小梯度在低精度计算中过早下溢。s 是无单位倍率；若 g' 出现 Inf/NaN，不能继续更新，应按 scaler 规则跳过并调整 s。主权重解决更新精度，loss scaling 解决反向动态范围，两者不是互相替代。
 
 ## 5. 分布式 checkpoint 的核心抽象
 
@@ -217,6 +237,14 @@ rank2 owns [8,12): 不拥有 P
 
 这是 model-state 理论值，不包括 activation、padding、bucket、通信 workspace、allocator 碎片。以 BF16/FP32、d=8 为例是 7.5 bytes/param，而不是 18。
 
+### 把 bytes/parameter 公式拆成实物
+
+BF16 参数、FP32 主梯度这一行最容易手算：计算参数 2 bytes + 完整梯度缓冲 4 bytes + FP32 主权重 4 bytes + Adam 的一阶/二阶矩各 4 bytes，共 `2+4+4+4+4=18`。Distributed Optimizer 只把最后三项按数据分片域大小 d 分开，于是 `2+4+(4+4+4)/d=6+12/d`。d=2 时为 12，d=8 时为 7.5 bytes/param；没有 activation 的含义。
+
+FP16/FP16 行还计入更新所需 FP32 梯度转换空间，分片前为 `2+2+4+4+8=20`；按表中实现的归属，把 FP32 梯度、主权重和 m/v 分片后得到 `4+16/d`。FP32 参数路径不需要额外低精度计算副本/独立主权重，保留参数与梯度的 8 bytes，再分片 m/v 的 8 bytes，得到 `8+8/d`。这些是该公式的 buffer 假设，不能套到任意 optimizer、精度封装或 FSDP 实现。
+
+设本 TP/PP rank 的逻辑参数量为十亿，d=8 的 BF16/FP32 账本是 `7.5×10⁹ bytes≈6.98 GiB`，因为 `1 GiB=2³⁰ bytes`。这还不含 padding、额外 workspace、通信缓冲和激活；不能直接用十亿全局参数量，忽略 TP/PP 已经切分的部分。
+
 ## 12. 分布式 checkpoint 对象模型
 
 从 `megatron/core/dist_checkpointing/` 重点读：
@@ -243,6 +271,12 @@ ShardedTensor(
 
 保存前 validation 应证明所有非 replica shard 对 global tensor 覆盖恰好一次。加载时 target sharded state dict 描述“我现在需要哪些 shard”，backend 再从存储重组。
 
+
+例如全局矩阵 `W:[4,2]` 原先按行分两份，rank0 的 offset=`(0,0)`、shape=`[2,2]`，rank1 的 offset=`(2,0)`、shape=`[2,2]`。目标改为四份时，每份 shape=`[1,2]`，offset 依次为 `(0,0)…(3,0)`；loader 按全局坐标取相应行，无须让旧文件名等于新 rank 号。
+
+若两个 DP replicas 都存同一个 shard，它们的逻辑覆盖相同但 replica 身份不同，验证时不能当成两份互相冲突的主分片。若新模型把 W 的第 0 行从“词 A”改成“词 B”，字节和 shape 完全合法，语义却变了；checkpoint backend 无法只靠 offset 自动修复这种映射。
+
+异步保存还多一条生命周期：先为当前 step 建立稳定快照，再由后台写 shard，最后完成全体结果和 metadata/tracker 的提交。若后台尚在读 GPU/CPU buffer，下一步就改写同一 storage，会保存混合时刻的值；需要复制到独立 staging buffer 或明确等待读完。写函数返回请求对象不代表恢复端已可读。更多提交边界见[源码问题第 14 节](<../06_reference/03_source_questions.md>)。
 
 ## 13. 恢复一致性是一组状态关系
 

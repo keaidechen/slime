@@ -9,6 +9,12 @@
 
 FA2 已有 `cp.async` 搬运流水。Hopper 提供更适合大块张量搬运与异步矩阵乘的硬件接口，FA3 进一步重排协作关系。[FA3 论文](https://arxiv.org/abs/2407.08608)讨论数据搬运与计算重叠、矩阵乘与 Softmax 交错，以及 FP8 低精度下的精度控制。以下通过当前代码解释具体机制，不将论文峰值性能套用于任意输入。
 
+先沿用上一章的时间模型：每个 tile 搬运耗时 $T_L=3$、计算耗时 $T_C=5$，单位可以理解为假想的微秒。处理 n 块时，串行总时间是 $n(T_L+T_C)$；若搬运和计算完全重叠、有足够槽位且没有其他瓶颈，则第一块先加载，之后稳态间隔由较慢阶段决定：
+
+$$T_{\mathrm{pipeline}}\approx T_L+T_C+(n-1)\max(T_L,T_C).$$
+
+n=4 时，串行为 32，流水为 `3+5+3×5=23`。最初的加载叫填充，最后的计算叫排空；块数很少时，这两段成本占比高。n 很大时，这个两阶段理想模型的加速比趋于 `(3+5)/5=1.6`，不会无限增长。真实 attention 还有 QK→Softmax→PV 的依赖、资源共享和同步成本，因此这只是解释收益上限的模型。
+
 ## 2. 先认识四个新词
 
 | 名称 | 这里的含义 | 解决的问题 |
@@ -19,6 +25,10 @@ FA2 已有 `cp.async` 搬运流水。Hopper 提供更适合大块张量搬运与
 | warp specialization | 让不同线程组长期承担不同职责 | 搬运者和计算者可以各自推进工作 |
 
 “异步”意味着发起后无需立即阻塞到完成，**不意味着可以提前读结果**。消费结果之前仍要等待对应操作完成，复用存储之前仍要确认先前读取结束。
+
+TMA 描述符记录张量地址、形状、stride 和相关布局信息，使搬运硬件能按一个张量区域组织传输；发出请求的 GPU 线程不必逐元素重复完成同样的地址工作。WGMMA（Warpgroup Matrix Multiply-Accumulate）则接受协作线程组提交的矩阵乘任务。CPU 负责启动 kernel，kernel 内的线程安排搬运和计算，硬件执行相应操作；三个层次不能混成“Python 调一次函数就已把数据搬完”。
+
+在本章选取的路径中，可以把关键依赖写为 `K 就绪 → 提交 QK → QK 完成 → Softmax → P 就绪`，以及 `P 与 V 都就绪 → 提交 PV → PV 完成`。同一 tile 的 Softmax 不能越过它依赖的 QK 完成点。所谓交错，是让不依赖该结果的其他 tile、其他 warp group 或搬运工作在空隙中前进，而不是删除数学依赖。
 
 ## 3. FA3 的 producer/consumer 代码
 
@@ -46,6 +56,8 @@ FA2 中 `blockIdx.x` 很直接地决定 Q tile；到了带持久化调度的实�
 
 **scheduler（调度器）**分配尚未处理的 tile；“持久化”在这里表示 block 做完一份工作后继续领下一份，从而复用执行资源。
 
+比如总共有 6 个 Q tile，启动 2 个持久化 block，调度器让它们在各自完成当前任务后继续领取剩余 tile。逻辑 tile 编号便不再等于 `blockIdx.x`；输出地址要从领取的工作坐标得到。领取新 tile 时，其 m/l/a 必须重新建立，不能把前一个 query 块的归一化状态带过去。持久化可能改善工作分配，但也增加调度状态；每个 tile 的实际耗时受 causal 范围、长度等影响，不能只按 tile 个数判断负载是否均匀。
+
 ## 4. 环形缓冲区为什么需要阶段信息
 
 假设共享内存只有两个槽，producer 依次装 K0、K1、K2、K3：
@@ -58,6 +70,18 @@ FA2 中 `blockIdx.x` 很直接地决定 Q tile；到了带持久化调度的实�
 | K3 | 1 | 必须等 K1 被消费后才能覆盖 |
 
 只知道“槽 0 就绪”不够，因为它可能表示旧 K0 或新 K2。因此 pipeline 还维护阶段/轮次信息，区分一次次复用。理解这个约束后，再看 barrier（同步对象）和 pipeline state，代码会更具体。
+
+把槽 0 的一生按事件列出来，可以发现有两种不同的“完成”：
+
+| 时刻 | 搬运者/硬件的动作 | 计算者允许做什么 |
+|---|---|---|
+| 槽为空 | producer acquire 获得可写资格 | 不能读取，里面还不是 K0 |
+| 搬运在途 | producer 提交 K0，硬件逐步写入 | 等待本轮数据就绪 |
+| 搬运完成 | 与该轮绑定的完成条件满足 | 可提交读取 K0 的 QK |
+| QK 在途 | producer 可以推进其他空槽 | 不能仅因指令已提交就释放槽 0 |
+| QK 完成 | consumer release 宣告旧读取结束 | producer 才可用同一槽写 K2 |
+
+“已到达”保护读者，“已释放”保护下一位写者。若 producer 太快，槽会全部占满，它必须等待；这叫背压。增加槽数能让它提前准备更多数据，却占用更多 shared memory，可能降低驻留 block 数。若计算阶段已一直繁忙，增加槽数也不会使 Tensor Core 本身算得更快。
 
 在 FA4 的 [`pipeline.py`](<../../../../../flash-attention/flash_attn/cute/pipeline.py>) 中，`PipelineStateSimple` 用 `_phase_index` 推导槽位 `index` 和阶段 `phase`。这是便于阅读的实现例子；Hopper C++ 路径使用自身的 pipeline 类型，不能把 Python helper 当成其直接调用关系。
 
@@ -89,6 +113,24 @@ if constexpr (Is_FP8 && !Has_softcap) {
 
 例如原 `softmax_scale_log2=alpha*log2(e)`，两个 descale 为 0.5 和 0.25，那么新尺度是原来的 0.125。V 的 descale 则在主循环尾声传给 `softmax.finalize(v_descale)`，参与最终输出的尺度恢复。Q/K 的尺度影响概率，V 的尺度影响被加权的向量，两处职责不同。
 
+### 5.1 从存储值到注意力输出的尺度手算
+
+为只观察尺度，取一个 query、两个 key、`d=d_v=1`：存储数 `Q8=[[2]]`、`K8=[[0],[4]]`、`V8=[[2],[4]]`，反量化尺度分别为 `s_Q=1/2、s_K=1/4、s_V=5`。它们对应 `Q=[[1]]、K=[[0],[1]]、V=[[10],[20]]`。暂不考虑进一步的量化舍入，alpha=1，则：
+
+```text
+低精度存储值做点积： Q8 @ K8.T = [0, 8]
+补 Q/K 尺度：        S = [0, 8] * (1/2) * (1/4) = [0, 1]
+Softmax：            P = [1/(1+e), e/(1+e)]
+先汇总存储的 V8：    A = (2+4e)/(1+e)
+恢复 V 尺度：        O = 5*A = (10+20e)/(1+e) ≈ 17.310586
+```
+
+若漏掉 Q/K descale，Softmax 会对 `[0,8]` 归一化，几乎只选第二个 key；这无法靠最后给 O 乘一个常数修复。若只漏掉 V descale，概率仍正确，但 O 少乘了 5。这区分了“影响概率的尺度”和“影响输出向量的尺度”。真实接口需要满足相应 head dimension 等约束，此处是代数算例。
+
+实际量化还包含舍入或饱和：$\widehat Q=s_Q\,\operatorname{cast}_{FP8}(Q/s_Q)$，其中 cast 表示转换到有限的 FP8 表示集合。太小的尺度可能使大值超出范围，太大的尺度又可能使小值难以分辨；乘回 descale 只能恢复尺度，不能撤销这种信息损失。上述理想例子故意选简单存储值，以免把尺度错误与量化误差混在一起。
+
+论文中的 incoherent processing 可从一个保内积变换理解：若正交矩阵 R 满足 $RR^T=I$（I 为单位矩阵），则 $(QR)(KR)^T=QRR^TK^T=QK^T$。适当的共同变换可将集中在少数特征上的大值分散，改善后续低精度表示；但变换、量化和补偿都需要成本，且量化后的误差并不因此严格为零。仅传入 FP8 张量和 descale，不足以证明调用者采用了这套额外方案。
+
 ## 6. FA4 用 Python 写 kernel，代码仍在 GPU 执行
 
 [`flash_attn/cute/interface.py`](<../../../../../flash-attention/flash_attn/cute/interface.py>) 的公开函数接收 PyTorch 张量，内部 `_flash_attn_fwd` 选择架构和配置，然后经 `cute.compile` 编译，结果保存在编译缓存中。**DSL** 是领域专用语言：这里使用 Python 语法描述 GPU 计算，由工具生成 GPU 代码，不是用普通 Python 循环逐元素算 attention。
@@ -114,6 +156,8 @@ if constexpr (Is_FP8 && !Has_softcap) {
 
 FA4 在本系列作为**当前源码演进**讲解；FA1/2/3 论文不能替代对这些具体代码分支的验证。硬件、head dimension、dtype 与功能组合的支持范围应查看固定快照的接口校验与测试。
 
+**CTA（Cooperative Thread Array，协作线程阵列）**在这里就是 CUDA thread block。TMEM 是 Tensor Core 配套的专用片上存储，不能当成另一份可由普通 global 指针随意访问的 HBM。理解它时仍用同一套问题：哪条矩阵乘写 score，哪些线程在完成通知后读取 score 做 Softmax，后续 PV 何时更新 O，哪一步确认旧读者结束后才复用区域。双 CTA 协作还要按该机制约定协调两个参与块；一个块的 `__syncthreads()` 仍只能证明自己块内的会合。
+
 ## 8. 源码精读：Hopper 的搬运者如何与计算者交接
 
 这里选 `Use_TMA_KV=true、PagedKVNonTMA=false、HasQv=false` 理解主干，并使用代码中 `No intra-WG overlap` 分支讲清同步。更激进的交叠分支会把等待进一步后移；不能把下面时序说成所有 Hopper 配置的唯一实现。
@@ -135,6 +179,8 @@ if constexpr (Use_TMA_KV) {
 ```
 
 `role` 告诉 pipeline 当前线程是生产者还是消费者；`transaction_bytes` 告诉搬运完成机制这一阶段预期有多少字节。`is_leader` 选出组内负责相应操作的线程，`num_consumers` 登记消费参与者数量。这些信息用于判断“数据是否到齐”“何时可以重新写槽位”，并不是 attention 的数学参数。
+
+例如一个 `64×64` 的 FP16 K tile 有 `64×64×2=8192` 字节，若这一阶段只搬这一份 tile，完成协议就要与这次 8192 字节的事务匹配。线程到达屏障与异步事务完成是不同条件；少报、漏报或将完成通知绑定到错误轮次，都可能导致过早使用或一直等待。实际 `TmaTransactionBytesK` 应从该配置计算，不能把此教学尺寸直接填到源码中。相关硬件语义见 [PTX mbarrier](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#parallel-synchronization-and-communication-instructions-mbarrier)。
 
 分工以后，两类线程采用不同寄存器额度：
 
@@ -195,7 +241,7 @@ auto load_K = [&] (int const n_block, auto const& smem_pipe_write, auto need_seq
 
 <!-- source: hopper/mainloop_fwd_sm90_tma_gmma_ws.hpp:1053-1056 -->
 ```cpp
-auto consumer_wait = [](<../../../13_Source_Analysis/flash_attention/auto& pipeline, auto& smem_pipe_read>) {
+auto consumer_wait = [](auto& pipeline, auto& smem_pipe_read) {
     auto barrier_token = pipeline.consumer_try_wait(smem_pipe_read);
     pipeline.consumer_wait(smem_pipe_read, barrier_token);
 };
@@ -488,7 +534,7 @@ _flash_attn_fwd.compile_cache[compile_key] = cute.compile(*compile_args, options
 
 <!-- source: flash_attn/cute/interface.py:1651-1651 -->
 ```python
-_flash_attn_fwd.compile_cache[compile_key](<../../../13_Source_Analysis/flash_attention/*call_args>)
+_flash_attn_fwd.compile_cache[compile_key](*call_args)
 ```
 
 缓存保存的是**可执行的编译结果**，不是某次 attention 的数值输出。同配置换一批 Q/K/V，仍要重新执行计算；改变需要专门编译的配置，则可能产生新 kernel。由此也能理解计时为什么要先 warmup：首轮可能混入编译、初始化等工作。

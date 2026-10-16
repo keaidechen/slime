@@ -151,6 +151,10 @@ flowchart TD
 
 最危险的问题不是立即抛错，而是 shape 恰好兼容、语义却映射错误。因此应与参考实现做逐层或 logits 对齐。
 
+以融合 QKV 权重说明这个风险：设输入隐藏维度为 2，Q/K/V 投影各有两行，存储约定均为 `[out,in]`。教学权重 `W_Q=[[1,0],[0,1]]`、`W_K=[[2,0],[0,2]]`、`W_V=[[3,0],[0,3]]`，按行拼接得到 `[6,2]`。输入 `x=[1,2]`，算 `xWᵀ` 应得到 `[1,2,2,4,3,6]`，切回三个 `[2]` 向量。
+
+若 loader 误按 K/Q/V 拼接，形状仍为 `[6,2]`，没有 shape 报错，但 Query 和 Key 的角色交换了。TP 再分片时，还必须核对是“各投影先分片再拼接”，还是直接切整个融合数组；GQA 的 Q/K/V 行数又可能不同。用这种小整数输入先核对语义，比只检查大 checkpoint 的元素数更有效。
+
 ### 5.3 Forward contract
 
 模型 forward 需要正确消费 runtime 提供的：
@@ -237,6 +241,14 @@ flowchart TD
 
 context length、prefill 成本和 KV 占用必须按最终扩展长度估算。
 
+### 从像素到 placeholder 的形状算例
+
+为便于手算，假设一个简化视觉语言模型把 4×4 的 RGB 图像切成 2×2 的 patch（图块），没有额外 class token、合并或多尺度裁剪。输入像素张量采用 `[batch,channel,height,width]=[1,3,4,4]`；共 `(4/2)×(4/2)=4` 个 patch，每个展平含 `3×2×2=12` 个数，得到 `[1,4,12]`。视觉编码器及投影层把它变成隐藏维度 d=8 的 `[1,4,8]` 特征。
+
+文本原为 `[BOS,看图,<image>,描述]`，长度 4；一个 `<image>` 替换为四个位置后长度是 `4-1+4=7`。语言模型接收的 embedding 是 `[7,8]`，其中四行来自视觉特征，三行来自文本 embedding。位置、placeholder 区间和特征顺序必须一一对应；有 4 行特征却只分配 1 个位置，既可能报 shape 错，也可能错误截断媒体。
+
+这是解释长度变化的玩具模型，实际 processor 可能使用 patch merge、动态分辨率、视频帧或特殊边界 token，必须读取其最终输出。特别是把分辨率边长翻倍会让二维 patch 数约增至四倍，不是两倍；因而“同样一张图”并不代表相同的 prefill 和 KV 成本。
+
 Scheduler 的 `_try_apply_padded_mm_input_ids()` 会在 processor 已给出 `padded_input_ids` 且长度条件吻合时替换对应 token 区间；`_maybe_compute_mrope_positions()` 为缺失的多模态位置编码补算。之后才进入普通 admission/context 检查。
 
 
@@ -253,6 +265,8 @@ feature path:  pixel/audio/video/precomputed features + item metadata
 ```
 
 模型实现负责在正确 token 位置注入 encoder 结果或 embeddings。placeholder 数量、feature 数量和 position metadata 任一不一致，都会形成 shape 或语义错误。
+
+这两条路径还有不同的所有权：CPU processor 持有原始媒体及处理后输入，IPC 消息可能传序列化值或共享内存句柄，GPU worker 持有编码器特征和后续激活。句柄送达不等于消费者读完；共享内存或 pinned buffer 要等实际读取/传输完成才能回收。对普通“视觉 embedding 注入 LLM”模型，prefill 完成后若后续 decode 只需 KV，原始视觉特征便可能释放；cross-attention 等架构若后续每步仍要读视觉状态，则必须继续保留。不能只按“进入 decode”统一清理所有模型。
 
 ### 8.1 多模态缓存 key 为什么需要媒体 hash
 
@@ -311,6 +325,8 @@ Rerank 至少有三条路径：
 `OpenAIServingRerank._convert_to_internal_request()` 对 cross-encoder 把 query 和每个 document 展开为 `[query, document]` pair，并设置 `is_cross_encoder_request=True`；tokenizer 由此请求 `token_type_ids`。Decoder-only reranker 则保留原请求，按 yes/no 等 token score 路径处理。
 
 所以 rerank 的有效 batch size 通常是 document 数，而不是 API request 数。
+
+例如 query=q、候选文档 `[d0,d1,d2]`，cross-encoder 形成三个输入 pair，输出可为 `[3]` 分数；若分数为 `[0.2,0.9,0.1]`，排序结果应关联原文档索引 `[1,0,2]`，不能把批内压缩后的行号当作原索引。Embedding 则可能对两个输入返回 `[2,4]` 向量，表示每输入一个四维表示；它不经过 next-token sampling，也没有“生成 4 个 token”的含义。Classification 输出 `[B,C]` 时 C 是类别数，更不能与词表大小 V 混用。
 
 
 ## 11. 新模型接入的验证顺序

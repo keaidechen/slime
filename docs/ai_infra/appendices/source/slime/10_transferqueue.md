@@ -12,7 +12,7 @@
 
 ### 1.1 单控制器的数据瓶颈
 
-verl 这类"单控制器 + worker 组"架构里，**所有数据都要经过 driver 进程**：rollout 产出 → driver 收集 → 转发给 ref/reward 算 logprob/score → driver 汇总 → 算 advantage → 分发给训练 worker。每一步数据在 driver 里序列化/反序列化/复制多遍，driver 成为吞吐天花板。AsyncFlow 论文与 verl 官方 PR（#5401，2025-12）的结论是：把数据面从控制面拆出去后，**端到端吞吐提升 49.1%**（论文数据：Qwen2.5-7B 128 卡同步 GRPO，r/s 1328.9 → 1980.7）。
+如果控制器反复物化、复制并转发大 batch，rollout→reference→reward→训练的多阶段数据传递会成为瓶颈。但“单控制器”只是控制流结构，不必然要求所有张量经过 driver；传 ObjectRef 或让 worker 直接取数也能避免部分中转。TransferQueue 将这项职责显式抽为独立数据平面，并加入字段就绪与消费账本。性能案例的口径见 §9 的本地上游 README，不能把收益脱离工作负载套到所有系统。
 
 ### 1.2 数据依赖天然是"细粒度、异步、多对多"的
 
@@ -27,6 +27,22 @@ RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码�
 这些都不是"一次 RPC 传一个 batch"能优雅表达的。TransferQueue 的做法：**把数据放进共享存储，系统里流动的只有轻量元数据（BatchMeta）**，消费方按元数据直接去存储拉取。
 
 ---
+
+### 1.3 一份数据为什么要有“就绪字段”
+
+用两条样本、三个字段演示：字段顺序固定为 `[tokens,reward,ref_log_probs]`。controller 的生产矩阵 shape 是 `[2,3]`：
+
+```text
+                  tokens reward ref_log_probs
+样本0                1      0       1
+样本1                1      1       0
+```
+
+奖励任务只需 tokens，两条都可取；训练若需要三个字段，当前一条也不可取。样本 0 的 reward 写完并回执后，第一行变成 `[1,1,1]`，训练才可选择它。这里“某样本生成完成”不能代表“它的全部训练依赖完成”。
+
+消费矩阵则可能是 `[2,2]`，列为 `[reward_task,actor_train]`。`[1,0]` 表示已被奖励任务领取/记账，而训练任务尚未消费，**不表示张量内容损坏或已删除**。生产状态和消费状态解决两个问题：能不能读，以及这一任务是否已选过。
+
+为了估算数据面收益，设 batch 本体为 D 字节、元数据为 m 字节、K 个阶段都经控制器收发。朴素中转可能让控制器处理约 $2KD$ 字节；传元数据则约 $2Km$ 字节，张量本体仍在存储与消费者之间传输，没有消失。系数 2 对应一次接收加一次发送。当 D=1 MB、m=1 KB、K=3 时，控制器的负担量级可从 6 MB 降到 6 KB。代价是增加存储服务、元数据查询、状态一致性和回收协议；小 batch 或低并发下，这些固定开销可能超过省下的复制。
 
 ## 2. 总体架构：控制面 / 数据面 / 客户端三层
 
@@ -84,6 +100,14 @@ RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码�
 
 ---
 
+### 4.1 元数据切片不等于张量已经重分片
+
+`BatchMeta.production_status` 在当前实现中是 shape `[B]` 的就绪向量，概括该 meta 所请求字段对各样本是否可用；controller 内部才保存样本×字段矩阵。不要把两者画成同一 shape。
+
+例如 meta 选择样本 `[0,1]` 和字段 `{tokens,reward}`，根据上节矩阵得到就绪向量 `[0,1]`；若改为 `{tokens,ref_log_probs}`，则为 `[1,0]`。把两份 meta 按相同样本做字段 `union`，状态按位与得到 `[0,0]`，正对应三字段都齐的条件。若把同一 meta 的样本次序重排为 `[1,0]`，其索引、分区、状态和逐样本形状也必须一起重排。
+
+假设 tokens 实际是长度 3 和 2 的两个 tensor，`select_samples([1])` 只把描述改成“去取长度 2 的那个对象”；读取动作仍需 client 访问后端。元数据代数能减少立即搬运，但不会免费完成 GPU 上的 TP 切分或所有消费者的真实下载。
+
 ## 5. Controller：全局账本
 
 `TransferQueueController`（controller.py:939-1600+）内部三个关键组件：
@@ -135,6 +159,14 @@ RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码�
 
 ---
 
+### 6.1 完成、提交与释放之间还隔着什么
+
+三步 put 协议的顺序不能颠倒：若先把 production 置 1 再写存储，消费者就可能读到不存在或半写入的数据。生产者若在“写完成、回执之前”崩溃，数据可能在，但账本仍说未就绪；这比暴露半成品保守，却需要重试/清理孤立数据。回执丢失后的重试还要沿用原索引和幂等语义，否则会多注册一份样本。
+
+同样，`mark_consumed` 在读取/选批流程中发生，不意味着 optimizer.step 已经成功、也不意味着 checkpoint 已落盘。如果训练读取后崩溃，是否重放该批由调用方的恢复协议决定；不能把消费位当作“训练效果恰好提交一次”的事务日志。
+
+释放数据之前，要确认所有需要它的任务都已完成，不再有在飞读、重试或训练恢复需要。后端用 RDMA 或 GPU 句柄时，还须等传输完成才能注销/复用内存；仅收到“请求已提交”不够。控制器快照与数据面快照也必须对应同一逻辑边界，否则恢复出的元数据会指向已经不存在的 payload。
+
 ## 7. 消费策略抽象：Sampler 与 StreamingDataLoader
 
 controller 只管"哪些就绪、哪些被消费过"，**"这一批取哪几个"是可插拔的策略**（`sampler/base.py:20-41` 的设计说明写得很清楚：生产状态归 controller、消费策略归 sampler）：
@@ -153,7 +185,7 @@ class BaseSampler(ABC):
 
 - **`SequentialSampler`**：顺序取，无放回；
 - **`GRPOGroupNSampler`**：GRPO 专用——同一 prompt 的 N 个采样**整组就绪才取**（对应 slime 里 group 级收集 + dynamic filter 的角色）；
-- **`RankAwareSampler`**：分布式训练每个 rank 独立拉取，但保证同 DP 组各 rank 拿到**相同样本**；
+- **`RankAwareSampler`**：分布式训练每个 rank 独立拉取，但按 `dp_rank` 与批次身份协调同一模型副本内协作 rank 的取数；
 - **`SeqLenBalancedSampler`**：按序列长度均衡组批（token 负载均衡）。
 
 上层封装：`StreamingDataset`（`dataloader/streaming_dataset.py:37`）是 torch `IterableDataset`，`__iter__` 里循环"查就绪 → sampler 选样 → 拉数据 → 标记消费"；`StreamingDataLoader`（streaming_dataloader.py:37）再包一层标准 DataLoader 接口（`reset/step/get_buffer`）。训练侧因此可以像写普通 PyTorch 训练一样消费异步产生的 RL 数据。
@@ -178,7 +210,11 @@ while i <= len(sorted_ready_indexes) - n and found_groups < required_groups:
 
 **一个数字例子**：`n_samples_per_prompt=3`，某一时刻 `ready_indexes = [0, 1, 3, 4, 5, 6, 7, 9, 10, 11]`（表示 prompt 0 只完成了 2/3 个采样、prompt 1（3,4,5）和 prompt 2（6,7,？）..实际上按 3 个一组来看：`[0,1]` 不成组，`[3,4,5]` 连续成组，`[6,7]` 不连续于后续的 9 所以不成组，`[9,10,11]` 连续成组）。扫描过程：`i=0` 看 `[0,1,3]`，`1→3` 差 2 不连续，`i+=1`；`i=1` 看 `[1,3,4]`，不连续，`i+=1`；`i=2` 看 `[3,4,5]`，连续！收进结果，`found_groups=1`，`i+=3=5`；`i=5` 看 `[6,7,9]`，`7→9` 差 2 不连续，`i+=1`；`i=6` 看 `[7,9,10]`，不连续，`i+=1`；`i=7` 看 `[9,10,11]`，连续！`found_groups=2`，命中 `required_groups`（若 `batch_size=6`）。最终 `sampled_indexes=[3,4,5,9,10,11]`——**恰好跳过了不完整的 prompt 0 和"看似有希望但实际不连续"的 6/7**，这与代码自带的 docstring 示例完全一致。
 
-**`_states` 缓存的意义**（141-191 行）：以 `(partition_id, task_name, dp_rank, batch_index)` 为 key 缓存采样结果——**同一个 `(dp_rank, batch_index)` 组合永远返回相同的样本集合**，即使底层 `ready_indexes` 后续发生了变化（比如更多样本就绪了）。这解决了分布式训练里的一个隐蔽问题：如果不缓存，某个 rank 因为网络延迟晚一点调用 `sample()`，看到的 `ready_indexes` 集合与其它 rank 不同，可能采出不同的样本组合，导致同一 DP 组的不同 rank 训练不同的数据（破坏 DP 的"同步梯度平均"假设）——缓存把"这一批具体是哪些样本"在第一次决定后就冻结下来，后续任何 rank/重试再问同一个 `batch_index` 都拿到完全一致的答案。
+**`_states` 缓存的意义**（141-191 行）：以 `(partition_id, task_name, dp_rank, batch_index)` 为 key 缓存采样结果——**同一个 `(dp_rank, batch_index)` 组合永远返回相同的样本集合**，即使底层 `ready_indexes` 后续发生了变化（比如更多样本就绪了）。这解决了分布式训练里的一个隐蔽问题：如果不缓存，某个 rank 因为网络延迟晚一点调用 `sample()`，看到的 `ready_indexes` 集合与其它 rank 不同，可能采出不同的样本组合，导致本应共同执行同一模型副本的 TP/PP rank 拿到不同数据。不同 DP 副本本来就应处理不同样本；不要把这两类通信组混淆——缓存把"这一批具体是哪些样本"在第一次决定后就冻结下来，后续任何 rank/重试再问同一个 `batch_index` 都拿到完全一致的答案。
+
+上述扫描有一个必须单独验证的边界：**连续 n 个编号不足以证明同组**。若 n=3，真实组是 `[0,1,2]` 与 `[3,4,5]`，而 ready 集合为 `[1,2,3]`，源码的连续检查会接受它，但它横跨两道题。当前 `GRPOGroupNSampler` 并没有在这段循环中验证组起点对齐或显式 `group_id`。
+
+因此前面的成功例子只说明该 ready 集合恰好得到正确结果，不是一般正确性证明。调用方需要额外保证可见性/索引分配使这种跨界片段不会出现，或采用显式分组与完整性验证。若组起点固定在 n 的倍数处，至少还需验证起点边界；若索引可回收、预留或稀疏，`group_id` 更直接。缓存错误的选组只能让错误稳定复现，不能使它变正确。
 
 ### 7.2 一个完整数字例子：8 个 prompt × 4 采样的 GRPO 端到端数据流
 
@@ -188,7 +224,7 @@ while i <= len(sorted_ready_indexes) - n and found_groups < required_groups:
 2. **controller 账本**：某一时刻 `production_status` 矩阵里，index `[12,13,14,15]`（prompt 3）四行的 `reward` 列全为 1，而 index `[0,1,2,3]`（prompt 0）还差一个——`scan_data_status` 能立刻算出"当前哪些样本的 `{input_ids, response, reward}` 三字段全齐"，返回 `ready_indexes` 大约是 `[4,5,...,31]`（减去 prompt 0 缺的那个）；
 3. **`GRPOGroupNSampler.sample(ready_indexes, batch_size=16, ...)`**：`required_groups=4`，扫描连续段，跳过不完整的 prompt 0，从 prompt 1 开始收集直到凑够 4 组（16 条），返回 `sampled_indexes`（例如 prompt 1/2/3/4 各 4 条）；
 4. **`get_data`**：训练客户端拿这 16 个 index 对应的 `BatchMeta`，直连存储后端并发拉取张量，本地组装成 `TensorDict`（不经过 controller，避免这一步成为瓶颈）；
-5. **训练侧消费**：GRPO advantage 计算天然要求"同一 prompt 的样本在同一批里"（组内做归一化），这正是 `GRPOGroupNSampler` 保证"要么整组都在，要么整组都不在"的原因——如果允许部分组样本混进批次，advantage 的组统计量就会算错；
+5. **训练侧消费**：GRPO advantage 计算天然要求"同一 prompt 的样本在同一批里"（组内做归一化），这正是调用方需要保证"要么整组都在，要么整组都不在"的原因；当前连续编号扫描还受 §7.1 的边界限制——如果允许部分组样本混进批次，advantage 的组统计量就会算错；
 6. **prompt 0 怎么办**：它会留在 `ready_indexes` 之外，等第 4 个样本的 reward 写完之后，下一次 `sample()` 调用会把它纳入下一批（或本批次的"补齐"逻辑，取决于调用方的重试策略）——这与 slime 里 partial rollout"半成品留在 buffer 里等下一轮"是同一个思想的不同实现（03 篇 §3）。
 
 ---
@@ -232,7 +268,7 @@ slime 没有采用 TransferQueue，两者代表数据流设计的两个点。**�
 | 数据通路 | RolloutManager 收集 → Ray object store → 训练 rank 拉取（01 篇 §5） | 共享存储 + 元数据账本，消费方直连数据面 |
 | 就绪/消费跟踪 | 进程内 buffer + `Sample.status` 状态机（03 篇） | controller 的样本×字段 / 样本×任务矩阵 |
 | 乱序/异步 | over-sampling + abort + fully async worker | sampler 按就绪集选批，天然乱序 |
-| 组语义（GRPO） | `generate_and_rm_group` 整组收集 | `GRPOGroupNSampler` 整组就绪才取 |
+| 组语义（GRPO） | `generate_and_rm_group` 整组收集 | `GRPOGroupNSampler` 按连续编号选组；须满足 §7.1 的额外组边界条件 |
 | 张量直传 | `rollout_data_transport="nixl"`（`slime/ray/placement_group.py:235`）、`enable_tensor_transport`（`slime/ray/actor_group.py:110`）——Ray 的 NIXL GPU 张量直传 | Mooncake/RayRDT 等后端 |
 | 适用哲学 | 数据流是训练循环的内部实现（单一生命周期） | 数据流是独立基础设施（多生产/消费方、跨集群、长生命周期 replay） |
 

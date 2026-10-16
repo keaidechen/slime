@@ -21,6 +21,10 @@ Distributed Optimizer 与 Megatron-FSDP 都沿数据并行域分片，但最重�
 
 更完整的选择解释见[源码问题详解第 12 节](<../06_reference/03_source_questions.md>)。
 
+先理解 FSDP（Fully Sharded Data Parallel，完全分片数据并行）为什么要把参数临时拼回来。DP 副本原本各有相同参数，增加副本会重复保存很多字节；若把每个参数沿数据域分开，常驻状态可以下降。但普通 Linear 算子仍需要它应计算的完整矩阵，FSDP 就在算子使用前从各数据 rank 收集，在不再使用后归还为分片状态。
+
+这里的“完整”是相对于该 FSDP 分片域而言的，不一定是全模型的全局矩阵。TP 已切成半张矩阵时，FSDP 收集回来的仍是那半张。这与 TP 让每张卡直接用部分矩阵共同求结果不同：FSDP 收集参数后，各数据参与者通常仍计算自己的样本。
+
 ## 2. 四种 sharding strategy 的准确语义
 
 `--data-parallel-sharding-strategy` 接受：
@@ -39,6 +43,17 @@ optim_grads_params~= optimizer + gradient + training-param sharding / ZeRO-3
 - `megatron/core/distributed/fsdp/src/megatron_fsdp/fully_shard.py:ShardingStrategy`
 - `megatron/core/distributed/fsdp/src/megatron_fsdp/distributed_data_parallel_config.py`
 - `megatron/core/distributed/fsdp/mcore_fsdp_adapter.py:_init_dist_index`
+
+以 8 个参数、两个数据参与者为例，在 BF16 计算参数、FP32 梯度/主权重/m/v 的理想账本下：
+
+| 策略 | 参数 | 梯度 | 主权重+m/v | 每卡持久状态合计 |
+|---|---:|---:|---:|---:|
+| no_shard | 16 B | 32 B | 96 B | 144 B |
+| optim | 16 B | 32 B | 48 B | 96 B |
+| optim_grads | 16 B | 16 B | 48 B | 80 B |
+| optim_grads_params | 8 B | 16 B | 48 B | 72 B |
+
+这是策略的持久状态模型，不是实际 allocator 输出。最后一行计算时还可能额外需要 16 B 的完整参数和工作区；累积梯度、padding、主参数别名及存储复用也会改变实测值。分片越深，常驻状态越少，但不能把每个阶段峰值都直接写成表中数字。
 
 ## 3. FSDP unit 只在哪条路径上是生命周期边界
 
@@ -82,6 +97,10 @@ persistent local param shards
 
 梯度 accumulation 还决定每个 microbatch 是否同步。`sync_model_each_microbatch`、`no_sync()`、`overlap_grad_reduce` 与 schedule 的 finalize hook 共同决定 RS/AR 边界；错误地重复同步同一 accumulation buffer 会让 gradient 被多次规约。
 
+若某 unit 的参数是 `[w0,…,w7]`，D=2 时两卡常驻 `[w0,…,w3]`、`[w4,…,w7]`。pre-forward hook 由各训练进程触发 AG，通信结果放入设备完整参数 buffer；compute stream 在参数 ready 后运行各自样本的 forward。forward 后若释放完整 buffer，autograd 仍需保留输入或重计算入口；反向前必须再次 AG，因为 `dX=dY Wᵀ` 需要 W。
+
+反向得到所有样本贡献后，RS 将本 rank 负责的梯度留在本地；optimizer 更新同一 owner 的主权重与动量，之后用于下一次 AG。若参数一生只收集一次而随后复用旧 buffer，即使分片中的主权重已更新，forward 仍可能读到旧值。hook 的意义就是把这些状态转换绑定到真实消费者边界。
+
 ## 5. overlap、prefetch 与 double buffer
 
 `overlap_param_gather` 让后续 unit 的参数 AG 尽量藏在当前 unit 计算后；`overlap_grad_reduce` 让已完成 backward 的 gradient bucket 尽早 RS。correctness 边界仍是：参数被读取前 AG 必须完成，optimizer 读取 grad shard 前 RS 必须完成。
@@ -98,6 +117,8 @@ main param + optimizer moments
 ```
 
 打开 overlap 或 double buffer 会用更多显存换遮蔽窗口。显存快照若只统计 persistent shard，会严重低估 forward/backward 峰值。开启 `--nccl-ub` 时，当前参数逻辑还会默认打开 FSDP double buffer 与 manual registration，应把这两个隐式变化记录进 A/B 配置。
+
+假设当前 unit 计算需 5 ms，下一 unit 参数 AG 需 3 ms，二者能独立执行且没有资源争用，那么提前 3 ms 发起 AG 可以让下一 unit 不等待。若 AG 实际需 8 ms，就仍暴露至少 3 ms。为重叠同时保留当前与下一份 full-param buffer，会把这部分峰值从 U 增到约 2U。若 GPU 剩余容量小于新增 U，预取即使有时间收益也无法使用。
 
 ## 6. TP、PP、CP、EP 组合时谁先切什么
 
@@ -177,6 +198,8 @@ correctness 先用 `no_shard` 或 DDP baseline 对齐固定输入 loss/gradient�
 假设每个 unit 的 full 参数为 U 字节，分片域大小 D，两个 unit 的持久参数 shard 共 `2U/D`。不计复用、梯度和优化器，计算当前 unit 时还可能有 U 字节 materialized buffer；若同时预取下一 unit，则活跃 full buffers 可达到约 2U。
 
 这只是 buffer 生命周期的上界式账本，不是 allocator 实测公式：实际实现可能复用 storage。做 A/B 时分别记录持久状态、current/prefetch full buffers、grad buffers 和 workspace。预取提高重叠也提高峰值，unit 太细又会增加 collective 启动数。
+
+取 U=16 MiB、D=4，两个 unit 持久参数 shard 为 `2×16/4=8 MiB`；单个 materialized buffer 存活时账面为 `8+16=24 MiB`，同时预取第二个则为 `8+16+16=40 MiB`。这些只算参数，不包括前文的梯度、m/v 和 workspace。这里“全模型参数分片后只需 8 MiB”与“计算期间参数相关活跃存储可到 40 MiB”可以同时成立，二者描述不同时间与不同对象。
 
 验收从 `no_shard` 到目标策略对齐同输入的一步梯度与更新，再比较各阶段峰值。保存/恢复另验 optimizer state；仅验证模型输出无法证明 optimizer shard mapping 正确。可运行入口与证据要求见[并行证据边界](<../05_design_and_failures/03_parallelism_validation.md>)。
 

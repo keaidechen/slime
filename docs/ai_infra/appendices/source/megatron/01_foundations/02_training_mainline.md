@@ -15,6 +15,8 @@ VPP（Virtual Pipeline Parallelism，虚拟流水线并行）让一个物理流�
 
 最终调用 `megatron.training.pretrain(...)`。这种设计把“训练框架控制流”和“任务特定逻辑”分开：pipeline schedule 并不知道 GPT loss 的细节，只遵守 `forward_step_func` 契约。
 
+可以把这三个函数理解为框架接收的三个回调：一个回答“造什么模型”，一个回答“从哪里取数据”，一个回答“这一批怎样计算”。provider 主要在初始化阶段调用；`forward_step` 则每个 microbatch 都调用。这样改任务目标时不必重写进程组、流水线和保存逻辑，但必须保留回调的输入输出约定。
+
 ## 2. `pretrain()` 的阶段
 
 入口位于 `megatron/training/training.py:1013`。建议按阶段而不是逐行阅读：
@@ -60,6 +62,14 @@ if update_successful:
 
 真实代码还插入了 timer、rerun state machine、vision grads、embedding sync、参数 hash 检查等，但主因果链不变。
 
+### 为什么累积梯度时不能逐个 microbatch 更新
+
+设目标是两个样本损失的平均 `L(w)=(L₀(w)+L₁(w))/2`。求导的线性性给出 `∇L=(∇L₀+∇L₁)/2`。只要两个梯度都在同一个 w 上计算，就可以逐批前反向、把梯度加到缓冲区，最后更新一次，无须同时保存两批的完整计算图。
+
+例：`Lᵢ=(wxᵢ-tᵢ)²/2`，`w=1`，两批分别是 `(x₀,t₀)=(1,0)`、`(x₁,t₁)=(2,0)`。梯度分别为 1 和 4，均值 2.5；学习率 0.1 时一次更新得到 `w'=0.75`。若每批后都以学习率 0.1 更新，则第一批后 w=0.9，第二批梯度变成 3.6，最终 w=0.54。这已经是另一个更新过程。
+
+所以 `zero_grad` 在累积窗口开始执行，参数在窗口结束前保持不变；每个 microbatch 的 saved activations 可在它的反向及相关异步使用结束后释放，累计梯度则必须一直保留到 optimizer 消费。PP 会让多批同时在途，但不改变这个数学前提。
+
 ### 延迟 loss closure 为什么关键
 
 `forward_step` 返回 `(output_tensor, loss_func)`，最后一个 pipeline stage 才执行 loss closure。这样 schedule 可以统一处理：
@@ -81,11 +91,13 @@ M = global_batch / (micro_batch × DP)
 
 每次 optimizer update 调用一次 `forward_backward_func`，内部跑 M 个 microbatch。当前快照的 step batch-size schedule 会让 M 随 consumed samples 改变；旧 `rampup_batch_size` 参数已被 calculator 标为 deprecated 并忽略。PP schedule、loss scale、LR scheduler 的 sample increment 都依赖当前 M。
 
-GBS（Global Batch Size，全局批量）是一次逻辑参数更新共同消费的样本数。它与单卡 microbatch、推理时的动态 batch 不同，变长数据还需独立记录有效 token 分母。
-
-MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
+MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。它们与推理时的动态 batch 不同，变长数据还需独立记录有效 token 分母。
 
 例：GBS=512、MBS=2、DP=32，则 M=8。PP=8 时只有 8 个 microbatch，恰好能填满但 bubble 仍明显；若 M=1，绝大多数 stage 会等待。
+
+再用较小的 `GBS=8,MBS=1,DP=2` 看数据身份：`M=8/(1×2)=4`，每个副本跑四个 microbatch，合计八个样本。若加 `PP=2`，只是每个副本由两个 stage 合作处理四个样本，GBS 仍是 8；不能再乘 PP。各批都只有一个样本，也不代表有效 token 数相同。
+
+例如两个 microbatch 的有效 token loss 分别为 `[1]`、`[3,3,3]`。microbatch mean 的平均为 `(1+3)/2=2`；token mean 为 `(1+3+3+3)/4=2.5`。前者让短批中的那个 token 占 1/2 权重，后者让每个 token 各占 1/4。差别来自训练目标的权重，不是浮点误差。源码的缩放由任务 closure、schedule 和梯度归约共同完成，不能把这个算例中的除法再全部手工加到任务代码。
 
 ## 5. 数据如何到各个 rank
 
@@ -101,6 +113,8 @@ infra 排障时要确认：
 ## 6. 一次 step 的状态提交边界
 
 mixed precision 下 `optimizer.step()` 可能因 overflow 失败。只有成功时才推进 LR/WD schedule 和参数更新计数；但外层 `train()` 无论本轮是否因 overflow 跳过参数更新，都会推进 iteration 与 `consumed_train_samples`，因为 batch 已从 iterator 消费。日志会用 `skipped_iter` 区分两种状态。checkpoint 最安全的语义是保存完整 iteration 边界上的整组状态，而不是半个 accumulation window。逐项状态表见[源码问题详解第 3 节](<../06_reference/03_source_questions.md>)。
+
+把提交边界具体化：假设迭代 10 前已消费 80 个样本，本轮 GBS=8，却因非有限梯度跳过更新。那么结束后 iteration 为 11、已消费样本为 88，权重和 Adam 动量保持旧值，学习率调度器不计入这次成功更新，loss scaler 可能降低缩放倍率。此时恢复若把样本数错误退回 80，就会重读这一批。训练计数、数据计数、优化器成功计数各回答不同问题，不能共享一个未经解释的“step”。
 
 ## 7. 同一个 microbatch 如何穿过调用边界
 

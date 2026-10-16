@@ -3,7 +3,11 @@
 相关基础：[通信与 tensor 基础](<../../../communication/两卡通信与torchrun.md>)。
 
 
-本表以仓库内 `Megatron-LM/docs/` 为版本基线，并用官方 latest 目录核对。状态含义：**详解**＝中文章节解释机制与源码；**归纳**＝提炼使用边界；**索引**＝不复写自动 API/维护流程，只给入口。
+本表以仓库内 `Megatron-LM/docs/` 为版本基线；官方 `latest` 链接用于继续查阅，不承诺它与本地快照逐项一致。状态含义：**详解**＝中文章节解释机制与源码；**归纳**＝提炼使用边界；**索引**＝不复写自动 API/维护流程，只给入口。
+
+“详解”表示已有教学解释，不表示本文已经测试所有硬件和配置。先确认自己在找哪一类答案：想知道为什么用 RS，看梯度所有权；想知道某开关在此版本能否组合，看参数校验及对应分支；想知道目标集群能快多少，需要实际运行。后两种答案不能只凭第一种机制解释得出。
+
+一个具体查询流程是“SP 为什么漏了 norm 梯度”：先读 SP 执行篇的两 token 手算，知道 norm 的 γ/β 在不同 token 上累积不同贡献；再查 `_allreduce_non_tensor_model_parallel_grads` 是否识别参数标记；最后在实际 backend 的 finalize 前后观察同一参数的梯度。这样 API 名称才能和它要维护的不变量对应起来。
 
 | 官方主题 | 本系列章节 | 状态 |
 |---|---|---|
@@ -41,6 +45,19 @@
 ## 为什么不逐页复制 API Reference
 
 API 页由源码签名与 docstring 自动生成，中文副本会迅速漂移。遇到具体符号时，先从本系列理解它所属的数据流，再查当前源码和官方 API；升级时用 `rg` 搜符号，不依赖旧行号。
+
+### 怎样处理版本变化与外部依赖
+
+记录四个字段：源码 commit、符号名、分支条件、外部库版本。例如 CP 的 Megatron adapter 接收 `cp_comm_type`，只证明该选项被交给 TE；后续使用哪个通信 kernel、支持哪些 mask，要继续检查对应 TE 版本。不能把 Core 源码中的一个参数当成外部实现已经验证过的证据。
+
+升级时可在本地按符号查找，而不盲跟旧行号：
+
+```bash
+rg -n 'def forward_step_calc_loss|calculate_per_token_loss' Megatron-LM/megatron/core/pipeline_parallel/schedules.py
+rg -n '_allreduce_non_tensor_model_parallel_grads' Megatron-LM/megatron/core/distributed/finalize_model_grads.py
+```
+
+先看签名和调用方，再看分支与数据流。一个同名函数可能改了默认值、输入布局或同步责任；旧示例仍能运行，不代表数学契约没变。本文链接为检索入口，实际升级结论应注明核对的版本和范围。
 
 ## 一手入口
 

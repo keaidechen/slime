@@ -27,6 +27,14 @@ CPU mathematical references passed; no distributed backend was executed.
 这些程序的 PASS 只表示相应参考模型中的断言成立；脚本没有实际执行 NCCL、TE 或 GPU GEMM。
 
 
+### 有限差分为什么能检查反向
+
+解析反向提供 `g=∂L/∂w`，有限差分独立地把 w 增减一个小数 ε，计算 `g_fd=[L(w+ε)-L(w-ε)]/(2ε)`。由 Taylor 展开，两边常数项抵消，二阶项抵消，剩下导数及 `O(ε²)` 截断误差；但 ε 过小又会放大浮点相减的舍入误差。
+
+例如 `L(w)=(2w-1)²/2,w=1,ε=0.01`，两侧损失为 0.5202、0.4802，差值 0.04 除 0.02 得 2，与解析梯度 `2(2w-1)=2` 相同。矩阵时逐元素扰动，只适合小规模参考。dropout、top-k 选择变化和其他不连续点会破坏平滑前提，因此应固定随机性与路由，或避开离散切换边界。
+
+有限差分正确仍不能证明某个 CUDA stream 等待正确，因为它没有执行那个运行时。相反，真实 GPU 运行不 hang，也不能证明丢掉远端 dK/dV 后的梯度仍正确。两层证据必须分别给出。
+
 ## 2. 仓库已有真实 GPU 入口
 
 [tests/test_qwen3_0.6B_parallel_check.py](<../../../../../../tests/test_qwen3_0.6B_parallel_check.py>) 是已有 dense 集成验证入口：
@@ -51,6 +59,12 @@ GBS/MBS、microbatch 数、DP/CP/EP/ETP/EDP、精度与 RNG 策略
 
 不只固定 seed：并行初始化、dropout stream、归约次序可能不同。先用 dropout=0 和可比较的全局初始参数，明确绝对/相对误差容限，再引入随机性或低精度。
 
+
+比较张量前先还原语义坐标。例如 TP 的 dW 按参数分片轴拼接，CP 输出按全局 token ID 排序，EP 结果按原 token 位置逆置换；不能直接比较 rank0 的局部数组。SP/CP 的两个局部张量即使 shape 相同，里面也可能是不同全局位置。
+
+误差可同时报告最大绝对误差 `max_i|a_i-b_i|`、相对范数 `||a-b||₂/max(||b||₂,δ)` 和预先选定的逐元素容差。δ 是避免零分母的小尺度，不能让它掩盖接近零的绝对误差。hash 相等是逐位一致证据；hash 不等不能量化差异。只比较 grad norm 也不够：`[1,0]` 和 `[0,1]` 范数都为 1，更新方向完全不同。
+
+一个可定位的最小顺序是输出 → loss 分子/分母 → dX 与每组 dW → optimizer 更新后权重。首次出现差异的边界比最后一条 loss 曲线更有解释力；若前反向全部对齐而新权重不同，应进入 optimizer 状态和参数同步检查。
 
 ## 4. 八类并行的配置与失效边界
 
@@ -82,6 +96,10 @@ expert_id, input_splits, output_splits, tokens_per_expert
 ```
 
 不要为每个生产操作加 barrier。barrier 会改变 schedule 和 overlap；调试 instrumentation 仅在隔离小运行中开启。对异步通信区分提交、真正完成、消费者等待，不用 CPU launch 时间冒充设备通信耗时。
+
+例如组 `{0,1}` 中 rank0 的操作序列是 `#7 AR(grad_A), #8 AR(grad_B)`，rank1 却是 `#7 AR(grad_B), #8 AR(grad_A)`。若 A/B shape 与 dtype 相同，通信甚至可能完成，却把不同逻辑参数相加，产生静默错误；若 shape 不同，可能报错或等待。仅记录 collective 名称和元素数仍不充分，必须加入参数/bucket 身份或稳定的逻辑操作标签。
+
+异步操作的日志应至少区分 submitted、dependency satisfied、consumer started。CPU 的“调用返回”可作为 submitted，不能据此声称 device completed；具体 backend 的 wait/event 语义决定消费者何时有权读数据。
 
 ## 6. 数值等价之后，性能收益仍需独立解释
 

@@ -38,11 +38,19 @@
 ---
 
 
+### 1.1 从两个 token 的生成看服务内部在做什么
+
+推理先做 prefill（预填充）：一次读完已有上下文，并为各层保存 key/value（键/值）张量，即 KV cache。随后做 decode（解码）：每步利用已有缓存生成一个新 token，追加它对应的状态，直到结束。设提示 token 为 `[10,11]`，回答为 `[20,21]`；第一次前向在提示末尾得到对 20 的分布，下一步把 20 输入模型再得到对 21 的分布。生成 21 的概率依赖 20，不能简单把两步当成彼此独立的请求并行执行。
+
+在一个仅有一层、两个 KV head、head dimension 为 2 的玩具模型中，单条长度为 3 的上下文，K 和 V 各有逻辑形状 `[3,2,2]`。若每元素 2 字节，缓存共 $2\times3\times2\times2\times2=48$ 字节；实际服务通常以页/块组织物理存储，层数、并发序列、分配粒度和共享前缀都会改变总占用。
+
+因此 `Sample.tokens` 与 KV cache 是两件事：前者是可跨进程保存的整数轨迹，后者是特定权重下计算出的中间状态。把 tokens 再发一次能恢复语义上的上下文；能否避免 prefill 重算，还取决于请求是否命中仍有效的缓存。
+
 ## 2. 编排层：server 与 router 的启动
 
 ### 2.1 启动总入口
 
-`RolloutManager.__init__`（`slime/ray/rollout.py:430` 起）里调用：
+`RolloutManager.__init__` 里调用部署入口。当前 `start_rollout_servers`、`ServerGroup`、`RolloutServer` 已移到 `slime/backends/sglang_utils/deployment.py`；下文旧行号只作历史定位：
 
 - `start_rollout_servers(args, pg)`（rollout.py:1090）：解析 `--sglang-config`（`_resolve_sglang_config`，rollout.py:1232，支持异构 server group、multi-model serving 的 YAML 配置），为每个模型启动 router，为每个 ServerGroup 创建引擎 actor；
 - `_start_router(args, ...)`（rollout.py:1019）：用 `multiprocessing.Process` 启动 **sglang_router** 进程。router 是所有推理 server 前的负载均衡入口——训练侧只认 `sglang_router_ip:sglang_router_port` 一个地址；
@@ -78,16 +86,16 @@ def launch_server_process(server_args: ServerArgs) -> multiprocessing.Process:
 
 IPC（Inter-Process Communication，进程间通信）让地址空间相互隔离的进程交换消息或共享资源。另一个进程的普通指针不能直接当作本进程的可访问地址。
 
-它用 `multiprocessing.Process` 启动了一个**独立的操作系统进程**，运行 sglang 自己的 `launch_server`。真正跑推理的 Scheduler / DetokenizerManager 是**另外的子进程**，进程间用 **ZMQ IPC** 通信，Ray 完全不参与这条链路；sglang 对外暴露的唯一稳定"接口契约"就是 FastAPI 起的这个 HTTP 服务（`/generate`、`/health_generate`、`/update_weights_from_tensor` 等几十个 endpoint，11 篇详解）。所以 `SGLangEngine._make_request` 等方法本质上都是 `requests.post/get(...)`——**不是"不想"直接调引擎，而是"没有别的方式"直接调**：sglang 引擎架构就是"HTTP server 前置于子进程引擎"，Ray actor 无法穿透到它内部的 ZMQ IPC 做函数调用。
+它用 `multiprocessing.Process` 启动了一个**独立的操作系统进程**，运行 sglang 自己的 `launch_server`。真正跑推理的 Scheduler / DetokenizerManager 是**另外的子进程**，进程间用 **ZMQ IPC** 通信，Ray 完全不参与这条链路；slime 在这条路径使用的接口契约是 FastAPI 提供的 HTTP 服务（`/generate`、`/health_generate`、`/update_weights_from_tensor` 等几十个 endpoint，见 [SGLang 控制面](<../sglang/04_interfaces_and_models/03_control_plane_and_post_training.md>)）。所以 `SGLangEngine._make_request` 等方法本质上都是 `requests.post/get(...)`。这是 slime 选择的集成边界；SGLang 还有其他使用方式，不能把此处的 HTTP 封装解释为引擎原则上无法通过其他接口使用。
 
 **为什么真正的生成请求（海量并发采样）走 HTTP router，而不走 Ray**：
 
 RPC（Remote Procedure Call，远程过程调用）把一次函数调用编码为消息，在另一进程或机器执行并返回结果。调用超时不证明远端没有执行，重试还需检查幂等性。
 
 1. **一个"engine"可能跨多个节点，Ray 看不到内部拓扑**：当 `tp_size` 超过单机 GPU 数时，一个 engine 跨 `nnodes` 个节点，只有 `node_rank == 0` 的进程对外暴露 HTTP 端口，真正的跨 rank 协同（TP/PP all-reduce）发生在 sglang 内部靠 NCCL，Ray 完全介入不了这层；
-2. **负载均衡/容错/PD-disaggregation 路由是重活，没必要在 Ray 里重造轮子**：sgl-model-gateway（Rust 实现）已经提供了 prefix-cache 感知路由、熔断重试、PD bootstrap room 路由等工业级能力（11 篇 §7）；
+2. **负载均衡/容错/PD-disaggregation 路由是重活，没必要在 Ray 里重造轮子**：sgl-model-gateway（Rust 实现）已经提供了 prefix-cache 感知路由、熔断重试、PD bootstrap room 路由等工业级能力（同上文链接的路由部分）；
 3. **支持"外部引擎"（`args.rollout_external`）**：完全独立于 Ray、已经在别处跑起来的 sglang server 可以直接接入同一个 router，对上层 rollout 代码没有任何区别；
-4. **性能/并发模型更适合**：一次 rollout 是成千上万个并发采样请求，`httpx.AsyncClient` 连接池 + 流式 SSE 输出比 Ray RPC（GCS 调度 + cloudpickle 序列化 + object store）更轻量，也更适合流式增量输出；
+4. **复用服务的并发模型**：连接池、流式 SSE（Server-Sent Events，服务器发送事件）和请求路由可沿用现有服务协议。HTTP 与 Ray RPC 的速度依赖消息大小和部署方式，不能只凭协议名称判断；
 5. **职责分离**：Ray 只承担"控制面"（申请 GPU、起停进程、健康检测重启、权重更新时的 NCCL 握手协调）——低频、非并发热点；"数据面"（海量 generate 请求）完全走 HTTP router，两者解耦干净，也是 sglang 自身单机部署（不依赖 Ray）时的标准用法，slime 只是原样复用。
 
 ### 2.4 深入拆解：`rollout_engine_lock` 只为一件事而存在
@@ -107,7 +115,7 @@ def _update_bucket_weights_from_distributed(self, converted_named_tensors, pbar=
 
 **原因**：`connect_rollout_engines_from_distributed` 为**每个 PP rank**建一个独立 NCCL group（04 篇 §5.5 的 `slime-pp_{n}`）。NCCL 集合通信要求同一 group 内所有参与方**以完全相同的顺序**发出对应操作，否则"张量 A 的广播在训练侧发出、但引擎侧先收到了本该属于张量 B 广播的调用"这种错位会导致 NCCL 死锁（hang）。没有这把锁，多个 PP rank（甚至同一 rank 内多个 bucket）可能并发对同一批 rollout engine 发起广播，Ray 端调用到达顺序和 NCCL 端发起顺序不一致就会踩坑。加了这把全局锁后，任意时刻只允许一个"bucket 广播"跟 rollout engine 群的 NCCL group 打交道——代码注释直白写着"Lock prevents NCCL deadlock"。
 
-**它不是唯一的同步机制，也不是所有更新路径都用**：`UpdateWeightFromTensor`（colocated，CUDA-IPC/nixl）接收了这个参数但根本不调用它——每个 bucket 是一次性 Ray remote 调用 + GPU 直接传输，不存在长期存活的 NCCL group，没有"顺序错位死锁"的风险；`UpdateWeightFromDisk*` 同理不用，改用同机 flock 文件锁保证串行。真正保证"权重替换期间不会用半新半旧权重生成"的，是另一套完全独立的机制——`pause_generation`/`continue_generation`（几乎所有更新路径都用，保证推理正确性），`rollout_engine_lock` 只管 NCCL 调用顺序不冲突，两者是完全不同维度的问题，不要混淆。
+**不同更新器使用不同的协调协议。** `UpdateWeightFromTensor` 接收这个锁参数，但当前实现没有使用它；它还包含远端 NCCL 路径，不能由“tensor 更新”推出“没有通信组或死锁风险”。磁盘路径中的文件锁用于串行化相关文件操作。`pause_generation`/`continue_generation` 则控制生成与换权的阶段边界。调用顺序、设备传输完成、接收端加载完成、完整版本发布是不同条件；文件锁或某个 Ray 方法返回都不能单独替代全部条件。04 篇按具体更新器展开这条依赖链。
 
 ---
 
@@ -127,7 +135,7 @@ def generate_rollout(
     return output
 ```
 
-注意两个设计：(1) `data_source.get_samples` 作为**函数**传入，rollout 函数决定何时取多少数据；(2) `aborted_samples`（本轮被截断的半成品）**回写**进数据源——这是 partial rollout 的关键一环（03 篇详解）。
+注意两个设计：（1）`data_source.get_samples` 作为**函数**传入，rollout 函数决定何时取多少数据；（2）`aborted_samples`（本轮被截断的半成品）**回写**进数据源——这是 partial rollout 的关键一环（03 篇详解）。
 
 ### 3.1 异步生成主循环 `generate_rollout_async`
 
@@ -162,6 +170,12 @@ def generate_rollout(
 - **dynamic filter**：每组完成后过 `--dynamic-sampling-filter-path`（如 DAPO 的"全对全错组丢弃"），被丢弃的组会扣减 `remaining_batch_size` 触发补采（sglang_rollout.py:429-433）。
 - 收够目标后调用 `abort` 清尾（见 §3.4）。
 
+把并发粒度缩小到可手算的规模：目标是 2 组、每组 2 条回答，超投 3 组。A 组两条完成于 1 秒和 5 秒，B 组完成于 2 秒和 3 秒，C 组完成于 2 秒和 4 秒，暂不计奖励耗时。组任务用 `gather` 等组内全部成员，因此 B 在 3 秒就绪、C 在 4 秒就绪、A 要到 5 秒。外层 `FIRST_COMPLETED` 在 3 秒收 B、4 秒收 C，随后清理 A。
+
+这说明“请求已完成”不等于“GRPO 组可训练”。组内平均奖励依赖两个结果，如果把 A 的快成员与 B 的快成员凑成一组，形状仍是两条，统计语义已经错了。实际收尾还包含取消、回收响应与奖励任务的等待，不能把 4 秒当最终方法返回时间。
+
+超投省的是关键路径上的等待，增加的是多发请求和被放弃的计算，也可能偏向快完成的任务。若三组共享 GPU 且已饱和，多出来的 C 会争用资源，A/B 的完成时间不再保持上述常数；因此此例解释调度依赖，不预测实测加速比。
+
 ### 3.2 全局状态单例 `GenerateState`
 
 ```84:118:slime/rollout/sglang_rollout.py
@@ -183,7 +197,7 @@ class GenerateState(metaclass=SingletonMeta):
 三个值得注意的点：
 
 1. **并发上限**：`sglang_server_concurrency × 引擎数` 的信号量，防止把 server 打爆；
-2. **top-p 回放**：`rollout_top_p != 1.0` 时自动加 `custom_params={"return_top_p_token_ids": True}`（sglang_rollout.py:107-108）——让 SGLang 返回每步采样时的候选核（nucleus），训练侧算 logprob 时只在相同候选集内计算，**保证训推 logprob 可比**（05 篇的 `_build_topp_keep_mask`）；
+2. **top-p 回放**：`rollout_top_p != 1.0` 时自动加 `custom_params={"return_top_p_token_ids": True}`（sglang_rollout.py:107-108）——让 SGLang 返回每步采样时的候选核（nucleus），训练侧算 logprob 时只在相同候选集内计算，为训推在相同候选集合上评分提供依据（05 篇的 `_build_topp_keep_mask`）；
 3. **`dp_rank_context`**（sglang_rollout.py:120-130）：SGLang data-parallel 多 DP rank 时的简单均衡——记录每个 DP rank 的在飞请求数，随机挑一个最空闲的。
 
 ### 3.3 单样本生成链路
@@ -229,6 +243,10 @@ class GenerateState(metaclass=SingletonMeta):
 
 `append_response_tokens`（`slime/utils/types.py:253-314`）会同步维护 `tokens / loss_mask / rollout_log_probs / top-p replay / 状态`，并做严格的长度校验——token 级数据对齐是 RL 正确性的生命线，03 篇详解 `Sample`。
 
+返回概率也要保持位置对齐。若新 token 为 `[20,21]`，响应里的 logprob 为 `[-0.6931,-1.3863]`，含义分别是近似概率 0.5 和 0.25，而不是整个回答的概率。固定上下文和采样分布时，回答概率为 $0.5\times0.25=0.125$，logprob 之和为 $-2.0794$。文本显示成两个字符并不保证只有两个 token，所以不能用字符串长度切概率数组。
+
+此外，服务返回的 logprob 是否已经包含 temperature、top-p 等采样变换，需要按端点语义核对。候选集回放提供重建该分布所需的支持集合，不能单独证明两个引擎在所有数值处理上完全一致。
+
 ### 3.4 中断：`abort`
 
 ```336:372:slime/rollout/sglang_rollout.py
@@ -248,7 +266,7 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
             aborted_samples.append(group)
 ```
 
-三步：(1) 置全局 `aborted` 标志，新的 `generate_and_rm` 进入时直接标记 ABORTED 返回（245-247 行）；(2) `abort_servers_until_idle`（`slime/backends/sglang_utils/server_control.py`）对所有 server 调 `/abort_request` 并等待排空——SGLang 会中断在飞请求并**返回已生成前缀**；(3) 若开了 `--partial-rollout`，把这些半成品打上 `start_rollout_id` 元数据收集起来，由 `generate_rollout` 回写 buffer，下一轮用新权重**续写**（03 篇）。
+三步：（1）置全局 `aborted` 标志，新的 `generate_and_rm` 进入时直接标记 ABORTED 返回（245-247 行）；（2）`abort_servers_until_idle`（`slime/backends/sglang_utils/server_control.py`）对所有 server 调 `/abort_request` 并等待排空——SGLang 会中断在飞请求并**返回已生成前缀**；（3）若开了 `--partial-rollout`，把这些半成品打上 `start_rollout_id` 元数据收集起来，由 `generate_rollout` 回写 buffer，下一轮用新权重**续写**（03 篇）。
 
 ---
 
@@ -262,7 +280,7 @@ async def abort(args: Namespace, rollout_id: int) -> list[list[Sample]]:
 - `sglang_config.py`：`--sglang-config` YAML 的解析（异构 server group、per-group 参数覆盖、PD 分离部署）。
 - `external.py`：外部托管引擎（`--rollout-external`）的适配。
 
-**为什么 slime 敢只做 server 模式？** 因为 SGLang 把 RL 需要的一切控制面（热更新、显存释放、中断、logprob 回传、top-p/routed-experts 回放）都经 HTTP 暴露了，engine 模式的内存直传优势被抹平，剩下全是 server 模式的结构性收益（隔离、弹性、负载均衡、多模型）。
+**为什么这条路径能支持 RL？** SGLang 的服务接口覆盖了生成、换权、暂停和显存管理，slime 因而能将推理生命周期独立管理。代价是协议调用、序列化、故障处理和版本协商；IPC/NCCL 可优化权重本体的搬运，但不会消除所有服务化开销。
 
 ### 4.1 深入拆解：model / server_group / engine 三层结构
 
@@ -280,13 +298,13 @@ SglangConfig                                    (整个 --sglang-config YAML)
 
 **第 3 层 engine** 是 `SGLangEngine` 这个 Ray actor，**一个 engine ≈ 一个逻辑上的 sglang server 实例（一个 TP 副本）**：`num_engines = group_cfg.num_gpus // num_gpus_per_engine`。如果 `num_gpus_per_engine`（TP size）超过单机 GPU 数，一个"逻辑 engine"要跨多台节点部署，`all_engines`（原始列表）包含每个"node-in-engine"的 actor，而 `engines`（对外可见的）每隔 `nodes_per_engine` 取一个——只保留每个逻辑 engine 里 `node_rank==0` 那个，只有它对外暴露 HTTP 端口，节点间协同全靠 sglang 内部的 NCCL。
 
-**一个完整例子**：`actor` model 配置 `worker_type=regular, num_gpus=8, num_gpus_per_engine=4`（TP=4），单机 8 卡：`num_engines=2`，各自在 4 张 GPU 上起 sglang server，都注册到 `actor` model 唯一的那个 router 上，rollout 代码打 `http://{actor_router_ip}:{actor_router_port}/generate` 时 router 在这 2 个 engine 间做负载均衡。如果同时配置了 `ref` model（`update_weights: false`），`RolloutManager.servers` 就是 `{"actor": RolloutServer(...update_weights=True), "ref": RolloutServer(...update_weights=False)}`——训练侧权重更新只会找 `update_weights=True` 的那个。
+**一个完整例子**：`actor` model 配置 `worker_type=regular, num_gpus=8, num_gpus_per_engine=4`（TP=4），单机 8 卡：`num_engines=2`，各自在 4 张 GPU 上起 sglang server，都注册到 `actor` model 唯一的那个 router 上，rollout 代码打 `http://{actor_router_ip}:{actor_router_port}/generate` 时 router 在这 2 个 engine 间做负载均衡。如果同时配置了 `ref` model（`update_weights: false`），`RolloutManager.servers` 就是 `{"actor": RolloutServer(...update_weights=True), "ref": RolloutServer(...update_weights=False)}`——当前 `RolloutManager._get_updatable_server` 只选择第一个 `update_weights=True` 的模型，不支持同时更新多个模型；冻结模型被排除。
 
 ### 4.2 深入拆解：GPU 分配如何从 placement group 精确落到 `base_gpu_id`
 
 链路：`create_placement_groups`（探测重排，01 篇 §7.1）→ 按 `actor`/`rollout` 切出各自的重排索引段（01 篇 §7.3 的例子：非 colocate 时 rollout 拿后半段，colocate 时训练/推理拿完全重叠的段）→ `ServerGroup.start_engines()` 再从"rollout 专属"的重排数组里，按 `gpu_offset`（跨 model/跨 group 全局累加，避免不同 model 抢同一批卡）+ `i * num_gpus_per_engine_on_node` 算出这个 engine 在数组里的下标 → 取出该下标对应的**真实物理 GPU id**作为 `base_gpu_id`，一路传进 `SGLangEngine.init()` → `ServerArgs(base_gpu_id=...)` → sglang 自己的 `--base-gpu-id` 启动参数。
 
-同 01 篇 §7.2 描述的训练侧机制一样，`RolloutRayActor.options(num_gpus=0.2, ...)` 这里的 `num_gpus=0.2` 也**故意申报一个远小于真实需求的零头值**——真正的资源隔离由 `placement_group_bundle_index` 精确指定的 bundle 保证，`num_gpus` 只是记账数字；同时设置 `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`，让 Ray **不要**自动重映射 `CUDA_VISIBLE_DEVICES`，因为 sglang 通过 `multiprocessing.Process` 另起子进程，且自己接受显式的 `--base-gpu-id` 精确指定要用哪几张卡——如果 Ray 再自动重映射一层，两套"GPU 编号"体系会打架错位。**一句话**：`pg` 负责"预定哪些物理机器上的哪些 GPU 资源槛"、`bundle_index` 决定 Ray actor 被调度到哪台物理机，而"这台机器上具体用第几号卡"由 `base_gpu_id` 显式传给 sglang，绕开 Ray 的自动分配机制。
+同 01 篇 §7.2 描述的训练侧机制一样，`RolloutRayActor.options(num_gpus=0.2, ...)` 这里的 `num_gpus=0.2` 也**故意申报一个远小于真实需求的零头值**——真正的资源放置由 `placement_group_bundle_index` 指定 bundle，显存互斥仍靠生命周期协议保证，`num_gpus` 只是记账数字；同时设置 `NOSET_VISIBLE_DEVICES_ENV_VARS_LIST`，让 Ray **不要**自动重映射 `CUDA_VISIBLE_DEVICES`，因为 sglang 通过 `multiprocessing.Process` 另起子进程，且自己接受显式的 `--base-gpu-id` 精确指定要用哪几张卡——如果 Ray 再自动重映射一层，两套"GPU 编号"体系会打架错位。**一句话**：`pg` 负责"预定哪些物理机器上的哪些 GPU 资源槛"、`bundle_index` 决定 Ray actor 被调度到哪台物理机，而"这台机器上具体用第几号卡"由 `base_gpu_id` 显式传给 sglang，绕开 Ray 的自动分配机制。
 
 
 ## 5. 评测路径

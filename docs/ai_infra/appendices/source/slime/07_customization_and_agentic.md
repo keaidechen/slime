@@ -29,6 +29,10 @@ TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与
 
 加载机制统一是 `load_function(path)`（`slime/utils/misc.py`）：`path` 形如 `my_module.my_file.my_func`，动态 import。这意味着**自定义代码不需要放进 slime 仓库**——你自己的项目目录加进 `PYTHONPATH` 即可。
 
+选择接口前先明确新增工作的状态归谁管理。只换单样本生成时，默认主循环仍负责组内等待、奖励调用、动态补采和取消；换整轮 rollout 后，这些职责要由自定义函数明确承担。`async def` 只允许协作等待，不会自动把阻塞工具调用搬到后台：在事件循环里直接跑耗时同步 HTTP 或 CPU 计算，会阻塞其它样本。可等待的客户端应 `await`，同步 I/O 可按其线程安全契约转到线程，昂贵 CPU 工作通常需要独立进程或服务。
+
+模块路径还必须在**远端执行进程**可导入。driver 本地能 `import my_project`，不代表各 Ray 节点都有该文件、依赖和环境变量；运行时环境是执行契约的一部分。
+
 ### 1.1 分发的关键细节
 
 自定义生成函数的分发点在 `generate_and_rm`（02 篇）：
@@ -45,7 +49,7 @@ TIS（Truncated Importance Sampling，截断重要性采样）对目标策略与
                     sample = await custom_generate_func(args, sample, sampling_params)
 ```
 
-两个设计：(1) **样本级覆盖**——`sample.generate_function_path` 优先于全局参数，eval 数据集可以给每条样本指定不同生成函数（sglang_rollout.py:569）；(2) 函数可以返回 `list[Sample]`——一次 agent 执行 fan-out 成多条前缀链式样本（共享 `rollout_id`，03 篇 §1.1），框架在 `generate_and_rm_group` 的 gather 中原样保留形状（sglang_rollout.py:297-303 的注释专门说明）。
+两个设计：（1）**样本级覆盖**——`sample.generate_function_path` 优先于全局参数，eval 数据集可以给每条样本指定不同生成函数（sglang_rollout.py:569）；（2）函数可以返回 `list[Sample]`——一次 agent 执行 fan-out 成多条前缀链式样本（共享 `rollout_id`，03 篇 §1.1），框架在 `generate_and_rm_group` 的 gather 中原样保留形状（sglang_rollout.py:297-303 的注释专门说明）。
 
 ### 1.2 只想改一点字段，为什么不必重写 generate？
 
@@ -84,7 +88,7 @@ async def attach_source(args, sample, *, rollout_id=None, evaluation=False):
 
 所以 hook 适合规范 metadata、裁剪/修正 response、预填 reward、加采样来源标签；dynamic filter 适合基于整组 reward 决定是否重采；`rollout-sample-filter-path` 则是目标 batch 已收齐后的整体操作。三者生命周期不同，不应仅因为都叫“后处理”就混用。
 
-### 1.3 最小自定义生成函数示例
+### 1.3 自定义生成循环骨架（需实现工具与初始化）
 
 ```python
 # my_project/multi_turn_generate.py
@@ -92,6 +96,8 @@ from slime.utils.types import Sample
 from slime.utils.http_utils import post
 
 async def generate(args, sample: Sample, sampling_params: dict) -> Sample:
+    # 前提：用匹配的 tokenizer/chat template 初始化 sample.tokens。
+    # run_my_tool、tokenizer_encode、my_reward_fn 是应用自己提供的接口。
     url = f"http://{args.sglang_router_ip}:{args.sglang_router_port}/generate"
     for turn in range(3):
         output = await post(url, {
@@ -112,9 +118,26 @@ async def generate(args, sample: Sample, sampling_params: dict) -> Sample:
     return sample
 ```
 
-启动时加 `--custom-generate-function-path my_project.multi_turn_generate.generate` 即可。要点回顾（03 篇）：模型 token `trainable=True` 且必须带 logprob；环境 token `trainable=False` 自动 mask；`append_response_tokens` 会替你维护全部不变量。
+补齐工具实现、prompt 编码、错误/取消处理和终止状态后，可通过 `--custom-generate-function-path my_project.multi_turn_generate.generate` 接入。上述骨架不是可直接复制运行的完整示例。要点回顾（03 篇）：模型 token `trainable=True` 且必须带 logprob；环境 token `trainable=False` 自动 mask；`append_response_tokens` 会替你维护全部不变量。
 
 ---
+
+### 1.4 一条“查订单”轨迹的完整契约
+
+假设输入为“查询订单 7”，模型先生成工具调用，工具返回“已发货”，模型再回复用户。用整数代替实际 tokenizer 输出：
+
+| 阶段 | token 增量 | response mask 增量 | 概率由谁提供 | 谁持有额外状态 |
+|---|---|---|---|---|
+| 初始提示 | `[10,11]` | 不属于 response | 不需要动作概率 | 数据源/模板 |
+| 模型调用工具 | `[20,21]` | `[1,1]` | 推理服务 | 请求、KV |
+| 工具返回 | `[30,31]` | `[0,0]` | 无，概率数组用 0 占位 | 工具服务/环境 |
+| 模型最终答复 | `[22]` | `[1]` | 推理服务 | 请求、KV |
+
+最终 `tokens` 为 `[7]` 形状，response、mask、逐 token 概率都覆盖长度 5 的区间，有效训练数 3。假设任务成功奖励 1，它评价的是整条轨迹，不是只奖励最后的 token 22。GRPO 将组内相对奖励广播给可训练动作，工具结果只作为上下文。
+
+如果请求超时发生在“工具已经改变订单状态、回复尚未到客户端”之间，重试不能默认重新执行同一操作。生成请求、工具操作和样本应各有可追踪身份；支持幂等键的环境可以用同一个操作 ID 重试，否则需查询状态或恢复快照。取消 Python task 也不自动取消远端工作，清理要覆盖 HTTP 请求、工具任务和环境资源。
+
+返回新 `Sample` 时要保留原来的 `index/group_index/rollout_id`，除非确实重新定义了归属；拆出 sibling 样本时按接口要求共享执行 ID。`COMPLETED` 表示任务正常终止，`TRUNCATED` 表示预算截止，`ABORTED` 表示中断；不能只填文本便把三者混成“成功”。
 
 ## 2. `slime/agent/`：生产级 agentic 支撑层
 
@@ -150,6 +173,12 @@ TITO（token-in-token-out）的理想情况是：外部 agent 框架第 N 轮请
 
 这是一个"宁可少训一点、也不要训练数据本身出现静默错位"的典型工程取舍——与整份文档反复出现的"不变量校验优先于容错猜测"的风格一致（03 篇 `append_response_tokens` 的严格断言、01 篇多 rank `start_rollout_id` 一致性断言是同一哲学的另外两个例子）。
 
+token 漂移可用一个更小的反例理解。原请求确实采样了 `[7,8]`，概率为 `[0.6,0.5]`；重新编码显示文本后却得到 `[9]`。不能给 9 填入 `log(.6)+log(.5)`：那是两个旧动作在两个旧上下文中的联合评分，不是当前上下文下一个新 token 的概率。保留原始 token 轨迹、或将无法对齐的段落改成仅上下文，才不会冒充采样记录。
+
+此处的 BPE（byte pair encoding，字节对编码）是文本到 token 的切分规则，并不是模型产生语义概率的过程。相同文本在相同 tokenizer、相同模板和相同编码边界下应确定地切分；漂移通常来自重渲染、文本修改、片段边界或特殊 token 变化，不能理解为 tokenizer 随机切词。
+
+
+
 `response_trained` 标志（`MessageNode.__init__`，82 行）解决另一个问题：**消息树上同一个回复节点可能被多条叶子路径共享**（多分支对话/多候选回复复用同一个历史前缀），线性化成 `list[Sample]` 时，第一条经过它的路径把它标记为"已训练"（loss_mask=1），后续路径遇到同一节点只把它当上下文重放（loss_mask=0）——**保证同一段回复内容在整批训练数据里只贡献一次梯度**，否则共享前缀的回复会被过采样、其梯度权重被隐式放大。
 
 ---
@@ -173,7 +202,7 @@ TITO（token-in-token-out）的理想情况是：外部 agent 框架第 N 轮请
 | `geo3k_vlm/`、`geo3k_vlm_multi_turn/` | 多模态 | VLM 单轮/多轮 RL |
 | `strands_sglang/` | 外部 agent 框架 | strands agent 与 slime 的集成 |
 
-仓库根还有 `slime/rollout/` 下的"内置特殊 rollout"可参考：`sft_rollout.py`（伪 rollout 跑 SFT）、`on_policy_distillation.py`（teacher 打分 reward）、`sglang_streaming_rollout.py`（SSE 流式生成，abort 不丢已生成内容）、`forge_load.py`（落盘数据回放做显存测试）、`sleep_rollout.py`（rollout 侧占位，纯训练调试）。
+仓库根还有 `slime/rollout/` 下的"内置特殊 rollout"可参考：`sft_rollout.py`（伪 rollout 跑 SFT）、`on_policy_distillation.py`（teacher 打分 reward）、`sglang_streaming_rollout.py`（SSE 流式生成，abort 不丢已生成内容）、`forge_load.py`（落盘数据回放做显存测试）、`sleep_rollout.py`（无限等待的占位函数；直接放进同步 driver 不会自动产生可训练 batch）。
 
 ---
 

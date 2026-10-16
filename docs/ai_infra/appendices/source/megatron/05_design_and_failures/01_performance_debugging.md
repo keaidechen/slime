@@ -19,6 +19,14 @@ straggler（慢参与者）是明显晚于其他参与者到达同步点或完�
 
 只看 rank0 平均值会掩盖 straggler；分布式 step 由最慢 rank 决定。
 
+### 先固定“完成了多少工作”再算吞吐
+
+设一次 update 消费 8 个样本，每样本 padded length=4，其中有效预测 token 共 28 个，用时 0.1 s，共 W=8 张 GPU。样本吞吐是 `8/0.1=80 samples/s`，有效 token 吞吐是 `28/0.1=280 tokens/s`，每卡为 `280/8=35 tokens/s/GPU`。若改按所有位置计算，则是 `8×4/0.1=320 positions/s`。两种口径都能报告，但不能把补齐比例不同的实验混在一起比较。
+
+MFU（Model FLOPs Utilization）=`F_model/(t_step×W×P_peak)`。F_model 是约定的本步有效模型运算次数，P_peak 是单卡对应精度的峰值 FLOP/s，分子分母单位相消。假设 F_model=1600 FLOPs、t=0.1 s、W=8、每卡峰值 4000 FLOP/s，则 MFU=0.5。这个缩小的数值例子不代表真实硬件。dense Transformer 常用 `6×参数量×token数` 近似主体训练 FLOPs，但长序列 attention、MoE 激活比例、词表等需另算，不能无条件套用。
+
+重计算执行的额外 FLOPs 通常不计入 F_model，否则“做更多重复工作”也会看起来提高模型有效利用率。硬件忙碌率与 MFU 同样不同：忙着通信或重复计算，未必在推进更多有效训练工作。
+
 ## 2. 容量估算
 
 先拆五项：
@@ -34,6 +42,10 @@ straggler（慢参与者）是明显晚于其他参与者到达同步点或完�
 MBS（Micro Batch Size）是每个数据并行参与者一次前反向处理的样本数；GBS（Global Batch Size）是一次逻辑更新的全局样本数。固定均匀批次时 GBS=MBS×DP 大小×累积次数。
 
 参数状态受 DP shard、TP/PP/EP shard 和 dtype 影响；activation 受 MBS、seq、hidden、layers/stage、SP/CP、recompute 影响。估算只是上界起点，最终以 allocator snapshot 和 profiler 验证。
+
+峰值应写成时间函数：`M_peak=max_t Σ_j M_j(t)`，M_j(t) 是时刻 t 第 j 类实际存活的设备存储字节数。各类别各自的最大值之和可作为保守上界，但通常不是实际峰值；共享 storage 的 view 又不能重复计数。pinned host memory 需要单独的主机预算，不能加到 HBM 使用量里。
+
+例如常驻状态 10 GiB，forward 的激活 6 GiB、workspace 2 GiB，阶段峰值为 18 GiB；optimizer 时激活已释放，新增临时空间 5 GiB，则为 15 GiB，整步峰值是 18 而不是 `10+6+2+5=23 GiB`。若异步通信让旧 activation 尚未释放，optimizer 的峰值可能重新上升；生命周期决定哪些项可以相加。
 
 ## 3. 从现象到层次
 
@@ -65,6 +77,8 @@ NVTX 是为 NVIDIA 分析工具标记事件和区间的接口。它让时间线�
 - memory；
 - NVTX ranges；
 - rank 与并行配置元数据。
+
+计时还要区分 CPU 与 GPU：在异步 kernel 调用前后读主机时钟，可能只测到提交耗时。设备区间应使用正确 stream 上的 CUDA events，读取 elapsed time 前确保终点完成；跨 stream、跨 rank 的整步则需要相容的边界。为测量而在每个算子后全局同步，会破坏原有 overlap，应只在实验边界或专门测量中使用。
 
 ### Nsight Systems
 
@@ -150,6 +164,10 @@ T_step =
 
 “exposed”很重要：一个 NCCL kernel 用了 5 ms，但完全藏在 8 ms GEMM 后面，对 step time 的边际影响接近 0。优化应针对 critical path，而不是 profiler 中累计时间最大的类别。
 
+例如 GEMM 在 `[0,8] ms` 执行，通信在 `[2,7] ms` 执行，两者累计 13 ms，但这段墙钟只有 8 ms；把通信优化到 3 ms，不一定改变完成时刻。若通信是 `[6,11] ms`，消费者在 8 ms 后等到 11 ms，则暴露尾部为 3 ms。此时减少尾部才直接缩短关键路径。若争用带宽使 GEMM 从 8 变成 10 ms，重叠图形更漂亮也不保证更快。
+
+这也是 Amdahl 定律的直观来源：总时间中只有比例 f 可以加速 s 倍，新的相对时间为 `(1-f)+f/s`，加速比为它的倒数。f=0.2、s=2 时，总体只有 `1/(0.8+0.1)≈1.11` 倍，而不是两倍。所有比例必须从相同端到端时间口径得到。
+
 ## 10. rank straggler 定位
 
 每 step 收集各 rank timer 后，不要立刻 all-reduce average；至少保留 max 与 max-rank：
@@ -168,6 +186,10 @@ dist.all_gather(all_values, local)
 - NCCL channel/topology；
 - 该 PP stage layer/MoE token 数；
 - storage/checkpoint writer。
+
+“先逐步取最慢 rank，再求分位数”与“先对每个 rank 求均值，再取最慢”并不等价。两个 step 的 rank 耗时分别为 `[10,14] ms`、`[16,10] ms`，逐步完成时间是 `[14,16]`，均值 15 ms；各 rank 均值为 `[13,12]`，再取最大却只有 13 ms，漏掉了轮流出现的慢参与者。
+
+p50 表示一半观测不超过该值，p95 表示 95% 不超过该值；样本很少时尾部分位数不稳定。3–5 步 trace 用来观察机制，较长的无 profiler 运行才适合测吞吐与尾延迟，二者的职责不同。
 
 ## 11. Nsight 时间线阅读例
 
@@ -205,6 +227,8 @@ optimizer step / param all-gather 峰值
 - 第二步才 OOM：异步 handle/graph/cache 泄漏或 allocator 碎片。
 
 记录 `memory_allocated` 与 `memory_reserved`。reserved 很高但 allocated 较低通常是 allocator cache/碎片，不应误判为模型 tensor。
+
+reserved 是分配器向设备保留的内存，allocated 是其中当前活跃 tensor 分配，后者通常包含在前者内，不能相加。`reserved-allocated` 较大可能只是可复用缓存，也可能包含难以复用的碎片，要结合 snapshot 判断。`empty_cache` 只能归还未被活跃 tensor 占用的缓存，不能释放 autograd 仍引用的激活，也不能替代修复保存列表或异步队列不断增长的问题。
 
 ## 13. 配置变更的 A/B 模板
 

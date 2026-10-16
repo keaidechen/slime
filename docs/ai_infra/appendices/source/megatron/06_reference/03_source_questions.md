@@ -88,6 +88,8 @@ expert grid:          expert_TP, PP, EP, expert_DP
 源码锚点：`megatron/core/parallel_state.py:RankGenerator`、`initialize_model_parallel`。
 
 
+可用“同一座标空间的两种网格”检验结论：W=8、PP=2、TP=2、CP=1 给出 DP=2；专家侧 ETP=1、EP=2 给出 EDP=2。两个乘积都等于 8。若再把 EP 乘进 dense 网格，就误算成 16。容量上 dense 参数由 TP/PP 切分，专家参数由 ETP/EP/PP 切分，数据副本数也不同，后续显存与梯度同步必须各算各的。
+
 ## 2. 一个 update 消费多少样本，microbatch 数怎样变化
 
 常规 fixed batch 下：
@@ -106,6 +108,8 @@ GBS（Global Batch Size，全局批量）是一次逻辑参数更新共同消费
 
 源码锚点：`megatron/core/num_microbatches_calculator.py`、`megatron/training/training.py:train`。
 
+
+算术整除的反例是目标 GBS=10、MBS=2、DP=2：每个微批轮次全局消费 4 个样本，无法用整数个等长轮次恰好消费 10。若配置允许向下调整，则 M=2、实际 GBS=8；若不允许，应拒绝，而不是把 M=2.5 当作可执行计划。变长 token 数与这个样本数整除问题独立，样本数能整除并不保证每批 token 分母相同。
 
 ## 3. mixed-precision overflow 后，iteration、样本和 LR 谁推进
 
@@ -136,6 +140,8 @@ checkpoint 需要保存这些状态的同一提交点，不能用“参数有没
 源码锚点：`megatron/training/training.py:train_step`、`train`。
 
 
+为什么“某卡发现 overflow”必须传播？设 TP=2 的矩阵由两卡各存一半，rank0 更新、rank1 跳过后，逻辑矩阵会一半新、一半旧。成功标志的组内一致性保证所有相关 shard 共同提交或共同跳过；这与梯度数值的 SUM 是不同类型的归约。检查参数变化时也应排除 scaler 的正常调整，不能把“optimizer 包装对象有状态变化”直接等同于模型参数更新。
+
 ## 4. `forward_step` 为什么返回延迟执行的 loss closure
 
 任务入口 `pretrain_gpt.forward_step` 不直接把 loss 变成一个最终 scalar，而是返回 output 与绑定了 `loss_mask` 的 closure。pipeline schedule 才知道当前 model chunk 是否是逻辑末 stage：
@@ -149,6 +155,8 @@ checkpoint 需要保存这些状态的同一提交点，不能用“参数有没
 
 源码锚点：`pretrain_gpt.py:loss_func`、`megatron/core/pipeline_parallel/schedules.py:forward_step_calc_loss`。
 
+
+closure 是一个把某些上下文绑定好的可调用对象。例如本批 loss mask=`[1,1,0]`，模型输出逐位置 loss=`[2,4,99]`，closure 应返回分子 6、有效数 2 和日志摘要，最后一项 99 不参与目标。中间 PP stage 只有 hidden `[S,B,H]`，没有词表预测，就无法执行这一定义；必须由真正的末 stage 调用。closure 或它绑定的张量需存活到调用结束，不能在模型返回后就复用 loss mask buffer。
 
 ## 5. microbatch mean 与全局 token mean 为什么可能不同
 
@@ -179,6 +187,14 @@ sample mean / sequence mean / microbatch mean / valid-token mean
 源码锚点：`pretrain_gpt.py:loss_func`、`schedules.py:forward_step_calc_loss`、`distributed/finalize_model_grads.py`。
 
 
+### 将 DP 和 microbatch 一起写进公式
+
+令 r 遍历数据副本，m 遍历累积批次，n_rm 是该块有效 token 数，s_rm 是它们的 loss 之和。全局 token mean 是 `L=Σ_rm s_rm / N`，`N=Σ_rm n_rm`。mask/token 数在常规目标里不依赖模型参数，所以求导得到 `∇L=(Σ_rm ∇s_rm)/N`。这就是“先累积分子梯度，最后按总 token 数除一次”的来源。
+
+反例：两个副本的有效数为 2、6，loss 和为 6、12；局部均值是 3、2，直接平均为 2.5；全局目标却是 `(6+12)/(2+6)=2.25`。正确的局部均值组合应是 `(2/8)×3+(6/8)×2`，每个 token 才等权。若通信采用 AVG 而不是 SUM，则最终缩放必须补偿这个平均系数，不能只看最后那一个 `/N`。
+
+如果整步 N=0，不存在有意义的 token mean，使用 `max(N,1)` 只防止除零，不能创造监督。此时权重衰减、辅助 loss 是否仍产生更新要按目标与实现处理，不能假设“没有主 loss 就所有状态都不变”。
+
 ## 6. batch 是不是每个 rank 都从 DataLoader 取一份
 
 不是。典型 GPT 路径分两步：
@@ -197,6 +213,8 @@ PP 会进一步减少字段：首 stage 主要需要 tokens/position，末 stage
 源码锚点：`megatron/core/utils.py:get_batch_on_this_tp_rank`、`get_batch_on_this_cp_rank`。
 
 
+可以给 batch 标上唯一身份 `(sample_id, token_position)`。同一 TP group 的 rank 若分别读取 sample7 和 sample8，再把各自 head/feature 的结果相加，就会拼出不属于任一样本的输出；shape 检查未必能发现。CP 切分后 ID 列表允许不同，但重组时应覆盖原样本的合法位置，且 position/mask/labels 同步切分。广播解决数据一致性，不等于所有维度都应该读同一份新样本。
+
 ## 7. Column/Row Parallel 的 forward 与 backward 通信在哪
 
 以 `Y=XA` 为例：
@@ -206,12 +224,14 @@ PP 会进一步减少字段：首 stage 主要需要 tokens/position，末 stage
 | Column Parallel | `A` 按输出列切 | 每 rank 产生 `Y_i`；通常不 gather | `dA_i` 本地；replicated input 的 `dX` 要跨 TP 求和 |
 | Row Parallel | `A` 按输入行切 | 每 rank 产生 partial `Y`，再 AR；SP 时改成 sequence RS | `dX_i` 本地，输入布局需要时由相邻层的 autograd mapping 恢复 |
 
-容易误读的是：源码 forward 里没有显式 `all_reduce(dX)`，不代表反向没有通信。`copy_to_tensor_model_parallel_region` 的契约就是“forward copy，backward all-reduce”；`gather_from_sequence_parallel_region` 则是“forward AG，backward RS”。通信被自定义 autograd Function 放到了对应方向。
+容易误读的是：源码 forward 里没有显式 `all_reduce(dX)`，不代表反向没有通信。`copy_to_tensor_model_parallel_region` 的契约就是“forward copy，backward all-reduce”；`gather_from_sequence_parallel_region` 在下游为分片计算、需要合并贡献时是“forward AG，backward RS”；重复计算分支可能只 split，需核对 `tensor_parallel_output_grad`。通信被自定义 autograd Function 放到了对应方向。
 
 Column→激活→Row 成对使用时，中间大 activation 始终保持 hidden shard，不必先组成完整 `[tokens, 4H]`。
 
 源码锚点：`megatron/core/tensor_parallel/layers.py:ColumnParallelLinear`、`RowParallelLinear`；`tensor_parallel/mappings.py`。
 
+
+一个通用判断来自链式法则：同一输入 X 被两个分支使用时，`dX=dX₀+dX₁`；两个独立输入分片 X₀/X₁ 各自产生梯度时，结果是按索引拼回 `[dX₀,dX₁]`。前者要求 reduction，后者要求 placement 恢复。autograd mapping 只是把这个数学关系绑定到 forward/backward 边界，不能脱离使用者记忆“AG 的反向永远是什么”。
 
 ## 8. SP 与 CP 的实际切分为什么不能画成同一张图
 
@@ -230,6 +250,8 @@ CP rank1 <- chunk1 + chunk2 = [2,3,4,5]
 源码锚点：`megatron/core/utils.py:_get_batch_on_this_cp_rank_per_sequence_balancing`、`_get_batch_on_this_cp_rank_per_document_balancing`。
 
 
+packed documents 给出另一个反例：两篇文档各两个 token，展平为 `[a0,a1,b0,b1]`，累计边界 `cu_seqlens=[0,2,4]`。b1 的全局数组下标为 3，却不能注意 a0/a1；它只可看同文档的 b0/b1。因此 causal 判断不只是 `key_index≤query_index`，还需要文档身份相同；本地重新编号和仅存一个总长度都会丢失必要信息。
+
 ## 9. 为什么 TP 通常节点内，而 EP all-to-all 更敏感
 
 TP collective 出现在几乎每层的主路径，消息往往与单个 GEMM 相邻。跨节点后，较低带宽和较高 latency 会被重复支付，且 TP size 过大还会把 GEMM 切小，降低计算效率。因此把变化最快的 TP ranks 放在 NVLink/NVSwitch 域通常最稳妥。
@@ -240,6 +262,8 @@ EP dispatch 的特征不同：每个 token 根据动态路由发到 expert owner
 
 源码锚点：`parallel_state.initialize_model_parallel` 的 rank order；`megatron/core/transformer/moe/token_dispatcher.py`。
 
+
+以简化通信模型 `t≈α+Q/β` 看两者：α 为消息启动延迟（秒），Q 为沿相关路径传输的字节数，β 为有效带宽（bytes/s）。小 Q 时提高 β 收益很小，主要支付 α；大 Q 时才更接近带宽约束。TP 每层反复支付这个代价，EP 则还要考虑各 peer 的 Q 不同。实际 collective 的多轮算法、争用和拓扑会改变系数，这个式子适合归因，不是性能保证。
 
 ## 10. collective hang 为什么经常不是 NCCL 自身的 bug
 
@@ -257,6 +281,8 @@ collective 是组内 rank 共同执行的有序协议。第 `k` 次 collective �
 定位时给通信调用记录 `(iteration, microbatch, op_seq, group_name, numel, dtype)`，对比首个不一致序号；同时先查所有 rank 的第一条 exception。只把 timeout 调大，会延后症状而不会修复协议不一致。
 
 
+还有更隐蔽的情况：两卡第 k 次都调用相同大小的 SUM AR，却分别传了参数 A、B 的梯度。协议可能正常完成，但相加的是不同逻辑对象。因而操作日志还要记录 bucket/参数身份；“不 hang”只排除了一部分协议错误，不能取代数值对照。复现后应找第一处分歧，不必把所有等待点都当作独立故障。
+
 ## 11. PP 发送 activation 后为什么还能反向
 
 `deallocate_output_tensor` 在 forward activation 发给下一 stage 后，把 `out.data` 换成单元素 tensor，释放大 payload，但 Python Tensor 对象与 `grad_fn` 仍存在。backward 收到下一 stage 发回的完整 gradient 后，`custom_backward` 直接调用 autograd engine，绕过普通 `torch.autograd.backward` 对 output/grad shape 的检查。
@@ -271,6 +297,8 @@ collective 是组内 rank 共同执行的有序协议。第 `k` 次 collective �
 
 源码锚点：`megatron/core/pipeline_parallel/schedules.py:deallocate_output_tensor`、`custom_backward`。
 
+
+释放 payload 也有设备依赖：当异步 send 仍在读取 storage 时，它不能被覆写或交给其他用途。调度器要在发送完成或建立等价安全依赖之后执行相应回收。autograd saved tensor 的引用、通信 buffer 的引用和 output 对象的引用是三套可能交叠的生命周期；销毁其中一个对象不代表其余消费者已结束。
 
 ## 12. Distributed Optimizer 与 Megatron-FSDP 的关键边界
 
@@ -290,6 +318,8 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 
 源码锚点：`megatron/core/optimizer/distrib_optimizer.py`、`megatron/core/distributed/fsdp/src/megatron_fsdp/fully_shard.py:ShardingStrategy`、`mcore_fsdp_adapter.py:FullyShardedDataParallel`、`megatron_fsdp.py:MegatronFSDP`。
 
+
+要区分“减少常驻量”与“降低峰值”：FSDP 持久参数若由 16 MiB 分到四卡，每卡只有 4 MiB；当前 unit 和下一 unit 的 full buffer 若各 16 MiB 同时存在，这一时刻就不能只报 4 MiB。Distributed Optimizer 可能常驻完整参数但少了反复收集的依赖；是否值得更深分片取决于容量瓶颈、可覆盖的通信窗口和 unit 粒度。
 
 ## 13. checkpoint 能重分片什么，不能自动解决什么
 
@@ -314,6 +344,8 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 源码锚点：`megatron/core/dist_checkpointing/mapping.py:ShardedTensor`、`validation.py:validate_sharding_integrity`、各 module 的 `sharded_state_dict`。
 
 
+恢复的正确顺序可理解为：目标模型先声明每个 shard 需要的全局坐标 → loader 重组对应字节 → optimizer 状态映射回同一逻辑参数 → 恢复计数/数据/RNG → 验证下一步。改变 tokenizer 却保持所有 shape 相同的情况，会通过结构检查而破坏词义；改变 Muon 矩阵分组则可能保持 forward 相同但改变下一次更新。二者分别说明模型函数和更新函数都在恢复契约内。
+
 ## 14. async checkpoint 什么时候才算完整
 
 `dist_checkpointing.serialization.save(..., async_sharded_save=True)` 返回 `AsyncRequest`，调用者还必须调度并最终 finalize。当前实现把 `metadata_finalize_fn` 放进 finalize callbacks：所有 shard 完成后才由 rank 0 写 checkpoint backend/version metadata，并做 barrier。
@@ -322,6 +354,17 @@ Distributed Optimizer 的“local grad shard”描述的是 optimizer ownership�
 
 源码锚点：`megatron/core/dist_checkpointing/serialization.py:save`、`megatron/training/checkpointing.py`。
 
+
+可以把异步保存拆成以下状态，而不是一个布尔“已保存”：
+
+| 时刻 | 谁负责 | 何时可释放或发布 |
+|---|---|---|
+| 快照准备 | 训练进程固定本 iteration 的状态 | 尚未复制完的源不能被下一步覆写 |
+| 后台写入 | writer 消费 staging buffer | 对应写任务读完前 staging buffer 不可复用 |
+| 全部 shard 完成 | 各参与者/请求收尾逻辑 | 某一个 writer 完成不能代表全部完成 |
+| metadata 与 tracker 提交 | backend 和训练侧 finalize | 只有完成标记与上层提交一致，才作为恢复候选 |
+
+若 rank0 已写完而 rank1 中途退出，目录中可能有大部分权重，但不应发布成完整 checkpoint。双缓冲可以让写入与下一步重叠，却要为未完成快照额外占用主机/设备容量；保存间隔小于写入耗时还可能使队列越积越长。
 
 ## 15. MoE auxiliary loss 是否要在任务 loss 中手工相加
 
@@ -341,6 +384,8 @@ schedule 的 `forward_step_calc_loss` 再根据 microbatch、CP、loss scale 和
 源码锚点：`megatron/core/transformer/moe/router.py:_apply_aux_loss`、`moe_utils.py:MoEAuxLossAutoScaler`、`schedules.py:forward_step_calc_loss`。
 
 
+把 autoscaler 看作在图上增加一条求导边：forward 对外仍返回原 activation a，backward 除了把 `dL/da` 传回主路径，还向辅助标量注入配置规定的导数。即使日志里展示的主 loss 数值没加上辅助项，router 参数梯度也可以包含它。因此“打印的 scalar 等于什么”与“autograd 最终对哪些目标求导”必须分别查清；日志汇总值不是第二次加 loss 的输入。
+
 ## 16. router replay 固定 expert 后，router 还有没有梯度
 
 replay 保存/提供的是 top-k indices。`REPLAY_FORWARD` 或 `REPLAY_BACKWARD` 下，代码不重新执行 top-k，而是：
@@ -357,13 +402,19 @@ probs = scores.gather(1, top_indices)
 源码锚点：`megatron/core/transformer/moe/router_replay.py:RouterReplay`、`router.py:TopKRouter`。
 
 
+设两个专家分数经过 softmax 得 `p=[p0,p1]`，replay 固定选择专家0，且当前这条路径使用未再归一化的 p0，专家输出为标量 f0=2。输出 `y=2p0`，所以 `∂y/∂z0=2p0(1-p0)`、`∂y/∂z1=-2p0p1`，一般非零。保存选择集合不等于对 p 做 detach；softmax 耦合还会让未选择 logit 有梯度。
+
+但这不是“任意 replay 都保证所有 router 参数非零梯度”：若 top-1 在选择后重新归一化成常数权重 1，主输出路径可能不再给该概率梯度，辅助目标仍可贡献。实际结论必须结合 score function、top-k 前后归一化和辅助项。replay 固定的是离散选择，而梯度由后续数学决定。
+
 ## 17. overlap 打开后为什么可能不快，甚至更慢
 
 overlap 只把通信搬到另一个可并行窗口，不会消除通信。收益近似取决于：
 
 ```text
-exposed_comm_after = max(comm_time - coverable_compute_window, tail_and_sync)
+ideal_exposed_comm = max(0, comm_time - coverable_compute_window)
 ```
+
+comm_time 和 coverable_compute_window 均以秒或毫秒计，且必须是同一次通信实际能够覆盖的独立计算区间。上式只是无资源争用时的理想剩余时间；额外事件、调度、尾部依赖和争用应按时间线另计，不能再把已包含的尾部重复相加。没有独立任务时，即使给通信新建 stream，可覆盖窗口也仍为 0。
 
 为了制造 overlap，框架可能拆 bucket、增加 stream/event、使用额外 buffer，并把大 collective 变成更多小 collective。当前 DDP 还只在 PP rank 0 默认启用细粒度 bucketing；后续 PP stage 的 DP 通信不在相同 critical path，源码会把 bucket size 设为 `None`，避免无收益拆桶。
 
@@ -391,3 +442,5 @@ N step -> save -> 新进程 load -> M step
 比较恢复后第一批 sample IDs、第一步 loss/grad norm、optimizer m/v、少量参数 hash，再逐层缩小差异。第一步就不同优先查数据/RNG/scale；多步后才漂移再查非确定 kernel、归约次序和异步 race。
 
 源码锚点：`megatron/training/checkpointing.py`、`megatron/core/tensor_parallel/random.py`、Transformer Engine extra state。
+
+例如某 RNG 流已依次消费 u0…u99，保存后的下一次应取 u100；重新设同一 seed 会回到 u0，只有恢复当前状态才能接续。还必须让调用次序一致：恢复后若多做一次随机数据增强，后续 dropout 就可能错位，除非它们使用独立的生成器。恢复随机数状态解决“从哪里开始”，保持消费顺序解决“每次随机数用在哪里”。

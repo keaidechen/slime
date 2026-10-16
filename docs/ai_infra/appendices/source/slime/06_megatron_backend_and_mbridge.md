@@ -10,6 +10,22 @@
 
 ---
 
+### 从一次单卡更新理解后端的职责
+
+模型 forward（前向）把 tokens 变成 logits，loss 把它们变成一个标量，backward（反向）计算每个参数的梯度，optimizer（优化器）据此更新参数。分布式后端需要把这四步分给多进程，同时保持等价的数学目标。slime 负责提供轨迹与 RL loss，Megatron 负责模型执行、通信和优化器调度；两者不是各训练一遍模型。
+
+最小例子是 4 条轨迹、2 个 DP 副本、每副本一次能处理 1 条：副本 0 处理 `[a,b]`，副本 1 处理 `[c,d]`，每个副本做 2 个 micro-batch 的前反向，再同步梯度并更新一次。若每个副本还使用 TP=2，就需要 4 张卡；同一副本的两个 TP rank 协作计算 a 或 c，而不是额外增加两条样本。
+
+在固定样本数、无 padding 且可整除时，梯度累积次数为
+
+$$
+N_{micro}=\frac{B_{global}}{D\,B_{micro}},
+$$
+
+其中 $B_{global}$ 是一次参数更新的样本数，D 是 DP 副本数，$B_{micro}$ 是每副本每次前反向的样本数。动态 token packing 下各 micro-batch 的样本数不同，这个固定公式就应让位于 `build_dp_schedule` 产生的实际计划。
+
+SP（sequence parallelism，序列并行）在 TP 协作中分摊部分激活；CP（context parallelism，上下文并行）切长序列的上下文计算。它们都不能当作额外的 DP 副本计入独立样本数。
+
 ## 1. 训练 actor 的初始化
 
 每个训练 rank 是一个 `MegatronTrainRayActor`（`slime/backends/megatron_utils/actor.py:51`），其 `init`（actor.py:53-201）做：
@@ -44,7 +60,7 @@ class _TensorBackuperNormal(TensorBackuper):
 
 DMA（Direct Memory Access，直接内存访问）让设备在 CPU 配置任务后自行搬运数据，减少 CPU 逐字节复制的工作；数据依赖和完成同步仍需显式管理。
 
-**`pin_memory=True` 是关键**：普通 CPU 内存（page-able memory）做 D2H/H2D 拷贝时 CUDA 驱动要先把数据搬到一段临时的锁页缓冲区再传输，pinned memory 直接跳过这一步，DMA 带宽能跑满——对一个几十 GB 的模型来说，这个选择直接决定了 `_switch_model` 是"零点几秒"还是"好几秒"的量级差异。
+**`pin_memory=True` 是关键**：普通 CPU 内存（page-able memory）做 D2H/H2D 拷贝时 CUDA 驱动要先把数据搬到一段临时的锁页缓冲区再传输，pinned memory 可减少中转并支持异步传输，但带宽仍受总线、NUMA、并发和拷贝大小限制，不能保证跑满或给出固定时延。
 
 **`copy()` 方法**（`copy(src_tag, dst_tag)`）：不经过 GPU，直接在两份 CPU 备份之间互拷（例如把 `actor` 备份复制成 `old_actor` 备份的初值），用于"某个 tag 需要先有一份初始快照，之后再逐步被覆盖"的场景。
 
@@ -59,9 +75,13 @@ def restore(self, tag):
 
 `_compute_hash_tensor` 故意写了注释 `# Not a real/good hash, but pretty fast`——把 tensor 按位重解释成 `uint32` 后求和，不是密码学哈希，会漏检某些碰撞；它只适合做开发期不变量检查，不能声称与真实数据备份具有相同安全性。当前 actor 不走这条分支，阅读它应当把它当成一个尚未启用的轻量优化接口。
 
+一次 ref 评分的所有权顺序是：保存 actor 快照 → 把 ref 从 CPU 复制到当前 GPU 参数 → 等复制完成 → 无梯度 forward，保存 `ref_log_probs` → 恢复 actor → 再做可求导训练。ref 概率是小得多的 response 长度数组，不必为它常驻整套模型。
+
+例如参数主体共 8 GiB，actor/ref/old 三份 CPU tag 就可能需要约 24 GiB 主机存储，GPU 活跃参数仍约 8 GiB；这不包括优化器、梯度和 workspace。省 GPU 容量的代价是 CPU 容量与切换时间。`non_blocking=True` 只表示允许异步提交，代码末尾的设备同步保证拷贝完成前不复用源/目标；不能在上一套参数的 backward 尚未消费它时覆盖参数。
+
 ### 1.2 深入拆解：`StatelessAdam`（`stateless_adam.py`）——数学上等价于什么？
 
-`--use-stateless-adam` 的动机是省掉 Adam 一阶/二阶矩（`exp_avg`/`exp_avg_sq`）的显存（每个参数额外 2 份 FP32 状态，等于模型参数量的 2 倍显存）。但它不是"不用 Adam"，而是**每一步都假装 Adam 的历史矩全是 0，重新算一遍"如果只有当前这一个梯度，Adam 会怎么更新"**：
+`--use-stateless-adam` 的动机是省掉 Adam 一阶/二阶矩（`exp_avg`/`exp_avg_sq`）的显存（每参数两份 FP32 矩状态，共 8 字节；相对于每参数 2 字节的 BF16 权重是 4 倍，而非 2 倍）。但它不是"不用 Adam"，而是**每一步都假装 Adam 的历史矩全是 0，重新算一遍"如果只有当前这一个梯度，Adam 会怎么更新"**：
 
 ```python
 group["step"] = 1                                   # 永远当作 Adam 的第 1 步
@@ -76,6 +96,22 @@ param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad 
 
 ---
 
+把 stateless 的公式从 Adam 第一步推出来。普通 Adam 的矩递推为
+
+$$
+m_t=\beta_1m_{t-1}+(1-\beta_1)g_t,\quad
+v_t=\beta_2v_{t-1}+(1-\beta_2)g_t^2.
+$$
+
+$g_t$ 是梯度，与参数同形状；$m_t$ 与梯度同单位，$v_t$ 是梯度平方的单位。若每步都重置历史，就有 $m=(1-\beta_1)g_t$、$v=(1-\beta_2)g_t^2$；再用 step=1 的偏差校正，$\hat m=m/(1-\beta_1)=g_t$、$\hat v=v/(1-\beta_2)=g_t^2$。学习率 $\eta$ 控制参数步长，$\epsilon$ 是防止分母为零的小正数，与分母中的梯度尺度相同，所以更新为
+
+$$
+\Delta\theta=-\eta\frac{g_t}{\sqrt{g_t^2}+\epsilon}
+=-\eta\frac{g_t}{|g_t|+\epsilon}.
+$$
+
+取参数 `[1,1]`、梯度 `[2,-0.5]`、学习率 $\eta=0.1$、暂忽略 eps 和 weight decay，更新后为 `[0.9,1.1]`；普通 SGD 会得到 `[0.8,1.05]`。若下一步梯度翻转，stateless 立即跟着翻转，普通 Adam 的历史一阶矩会缓冲这种变化。它节省状态存储，但改变优化轨迹，不能以“省显存”替代质量评估。
+
 ## 2. 复用 Megatron 的模型构建
 
 ### 2.1 `setup_model_and_optimizer`（model.py:270-318）
@@ -87,6 +123,8 @@ param.addcdiv_(grad, denom, value=-lr * numerator_scale)   # param -= lr * grad 
 3. `get_megatron_optimizer` 建优化器。
 
 **LR scheduler 的步数估算**（model.py:182-235）：Megatron 按 iteration 调度学习率，而 RL 的"一步"是 rollout——slime 用 `num_rollout × rollout_batch_size × n_samples_per_prompt / global_batch_size` 换算出 `train_iters`（model.py:204），让 cosine/linear/WSD 调度在 RL 语义下正确展开。
+
+用最小批次核对调度单位：计划 10 轮 rollout，每轮 2 个 prompt×2 个回答，共 40 条；若一次更新使用全局 batch=2，则预计 20 次 optimizer step。学习率 warmup 若写 2 个更新步，只覆盖第一轮的两次更新，不是前两轮 rollout。动态过滤通常会增加生成开销而保持接受 batch 大小；fan-out 或不完整批次则可能改变实际更新计数，最终应检查执行计划。
 
 ### 2.2 Stateless Adam（省显存技巧）
 
@@ -173,15 +211,15 @@ direct iterator 被 tensor/文件两类消费者复用：
 
 ## 5. 训练一步的内部
 
-`train_actor`（actor.py:414-542）的大致流程：
+当前 `train_actor` 的依赖顺序为：
 
-1. **（可选）routing replay 填充**（`fill_routing_replay`，actor.py:297-345）：MoE 模型把 rollout 时记录的 `rollout_routed_experts` 灌进 forward，强制训练侧走相同专家路由——消除训推 router 数值差异引起的 logprob 不一致（MoE RL 稳定性的关键技巧，`ENABLE_ROUTING_REPLAY=1`，actor_group.py:96-97）；
-2. **多轮前向**：对数据迭代器的每个 micro-batch 跑 forward（packing 后的序列），`loss_function` 计算（05 篇）；
-3. **ref/old 模型的 logprob**：需要 KL 时先用 ref tag 前向一遍存 `ref_log_probs`（`compute_log_prob`，actor.py:346）；
-4. Megatron 的 `optimizer.step()` 与 LR 调度；
-5. 指标聚合返回。
+1. 若启用 routing replay（专家路由回放），载入 rollout 记录的专家选择，让训练按所记录的路由执行。这减少路由不同造成的评分偏差，不消除精度、上下文或采样处理的其它差异。
+2. 在需要构造优势时，按配置切到 ref/teacher tag，分别无梯度评分并保存概率，再恢复 actor tag；这些结果必须先于使用它们的优势或正则计算就绪。
+3. 按配置缓存更新前的 actor 评分，或在满足 `can_reuse_log_probs_in_loss` 时复用训练 forward 的 detached 评分；PPO 路径还接收 critic 的 values。不能认为每种配置必定多算同样次数的 forward。
+4. 构造 advantages/returns，执行数据后处理与指标记录，之后才调用 Megatron `train`，按计划完成各 micro-batch 的可求导 forward、loss、backward 与梯度累积。
+5. 到一个全局 batch 的更新边界再调用优化器并推进学习率。训练结束后推进 profiler；外层训练方法保存更新后的 actor CPU 备份，供换权使用。
 
-`train_critic`（actor.py:386-414）同构，区别是 value head + `value_loss_function`，并把 values 通过 `external_data` 回传（critic 先训、actor 后训的编排见 01 篇 §2.1）。
+`train_critic` 先无梯度计算当前 values，供 value loss 的旧值和 actor 优势使用，再构造自己的 returns 并训练价值模型。返回 actor 的是这批**更新前已算好的 values**，不是训练后重新计算的一批值；相关编排见 01 篇 §2.1。
 
 ---
 
@@ -204,7 +242,7 @@ direct iterator 被 tensor/文件两类消费者复用：
 | 另一后端 | 无 | FSDP2 | FSDP2（AutoModel/DTensor） |
 | checkpoint | Megatron 原生 + slime 内建 HF 双向转换 | 封装格式 | HF/Megatron 双格式 |
 
-slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Megatron+SGLang 一路，把抽象层压到最薄——上游 Megatron 的并行、优化器、checkpoint 新特性可以零成本继承。
+slime 的取舍（README「轻量且有明确取舍」）：只深度优化 Megatron+SGLang 一路，把抽象层压到最薄——复用上游实现可减少重复开发，但新特性仍需验证版本、模型和 RL 数据路径的兼容性。
 
 ---
 

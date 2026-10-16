@@ -17,6 +17,10 @@ self.tp_ep_group = pg_collection.tp_ep
 
 因此本文件中的 `tp_size` 是 **ETP**，不一定是 attention TP。`tp_ep` 是 expert TP 与 EP 的联合域，用于汇总 token 分布等信息。
 
+把一个 expert 看成独立的 MLP，router 看成给每个 token 选专家的函数。EP（Expert Parallelism）决定“专家 e 住在哪张卡”；ETP（Expert Tensor Parallelism）决定“专家 e 的一个矩阵由哪几张卡合算”；EDP（Expert Data Parallelism）决定“同一专家分片还有几份处理其他数据的副本”。三个组不是三个同义词。
+
+dropless 指所有选中的 token-expert 路径都保留，不因容量上限丢弃；top-k 的 k 是每 token 选择的专家数。即使某个 rank 本地没有分到 token，它也仍可能是通信组成员，不能直接跳过所有 collective。路由 metadata 和 payload 的顺序必须由所有参与者共同遵守。
+
 ## 2. 参数和网格如何确定
 
 [parallel_state.initialize_model_parallel](<../../../../../../Megatron-LM/megatron/core/parallel_state.py>) 先建 decoder generator，再建 expert generator：
@@ -70,6 +74,12 @@ rank0 `input_splits=[3,1]`，`output_splits=[3,1]`；rank1 分别为 `[1,3]` 与
 
 `preprocess` 对本 rank 的 expert 计数先按 `[EP,L]` 求和得到 `input_splits`；在 `tp_ep_group` 汇总所有计数后，取出本地 experts 的计数，得到 `output_splits` 和 `output_splits_tp`。后者描述 ETP gather/RS 的变长分段。`token_combine` 交换 A2A 的输入/输出 split 角色，完成逆向传输。
 
+把第一个例子的记录写出来，才能看懂两次置换。rank0 发向 owner0 的三条记录为 `(t0,e0)、(t1,e1)、(t1,e0)`，rank1 发来 `(t3,e1)`；接收时可能按来源排列，计算时则要排成 e0 的 `[t0,t1]` 与 e1 的 `[t1,t3]`。这里 t1 出现两次是有意的 top-2 复制，不是重复读取样本。第二次排序让同一专家的矩阵乘法拥有连续行，逆排序则把结果还给正确的来源。
+
+例如 t0 的两条路径权重是 0.7、0.3，两个专家输出分别为 `[2,0]`、`[0,4]`，则合并结果为 `[1.4,1.2]`，shape 仍是 `[H=2]`。若上游梯度为 `[1,1]`，专家输出收到的梯度分别为 `[0.7,0.7]`、`[0.3,0.3]`；两个概率的直接梯度分别是点积 2 和 4，再通过 router 的归一化规则回传。不能在 expert 内乘一次概率，combine 时再乘一次，否则结果变成 `[0.98,0.36]`。
+
+逆置换索引、split 计数和概率不仅供 forward combine 使用；反向还要沿同一路由送回梯度，因此应存活到相应 autograd 节点完成。A2A 的 send buffer 在传输完成前也不能当下一批的 permutation workspace 使用。
+
 ## 5. 再叠 ETP=2，会多什么
 
 对固定 EP owner，两个 ETP ranks 各收到一部分来源 tokens。`dispatch_postprocess` 沿 `self.tp_group` gather，使两个 ranks 都能用自己的 FC1 shard 处理该 owner 的完整 token 集合。
@@ -113,6 +123,10 @@ ETP 是一个函数的部分和；EP 是 token/expert 目的地与逆路由；ED
 - 两次 permutation、两种通信与 expert GEMM 的 exposed tail；吞吐结论看整个 step。
 
 dropless、drop-and-pad、FP8 padding、shared-expert overlap、AllGather 和 Flex dispatcher 会改变上述分段或同步。切换路径时先重新列账本，再复用性能结论。
+
+令某组共有 T 个唯一 token、每 token 选 K 个专家，则总路由行数是 T×K，均匀时每个专家平均 `T×K/E` 行。例如 T=8、K=2、E=4，平均是 4；若计数为 `[10,2,2,2]`，热点专家需要处理平均量的 2.5 倍。增加专家数减少每个专家的 token 行数，可能让 GEMM 更小，不能只以参数分摊比例推算加速。
+
+grouped GEMM 把多组不同专家矩阵乘法统一提交，主要减少小算子的调度开销；它不会把热点的 10 行自动均分给其他具有不同权重的专家。capacity/drop、路由平衡和网络布局解决的是不同问题，启用其中一个不能替代另两个。
 
 ## 8. 不对称路由如何暴露等价性的边界
 

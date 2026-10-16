@@ -98,6 +98,8 @@ flowchart TD
 
 只保存原始 `messages` 不能重放同一个模型输入。
 
+可以把 chat template 看成一次编译：输入是 `[{role:"user",content:"你好"}]` 这样的结构，输出是模型约定的特殊 token 与正文 token 序列。例如教学模板输出 `[BOS,USER,你好,END,ASSISTANT]`；BOS 是 Beginning Of Sequence（序列开始标记），其余标记同样是模型约定。另一模板若多插入换行，最终 token 就可能不同，前缀匹配和后续概率也随之改变。实际 token ID 必须由该模型 tokenizer 得到，不能把这些英文标签直接当通用 ID。
+
 ### 2.3 `input_ids` 是否完全绕过消息处理
 
 不是完全绕过。当前 Chat 路径在提供 `input_ids` 时跳过模板 tokenization，但仍调用 `_process_messages()`，以便得到 stop token/字符串和 tool-call constraint。随后 `_convert_to_internal_request()` 选择 `input_ids=processed_messages.prompt_ids`。
@@ -164,6 +166,8 @@ obj.normalize_batch_and_arguments()
 `_handle_parallel_sampling()` 读取 `sampling_params["n"]`。单输入且 `n > 1` 时，请求会先被转换为 batch 形态，随后为多个样本扩展输入、sampling params 和 request IDs。
 
 因此 `n` 不是 sampler 在一个 logits 向量上简单抽若干 token；它会在请求生命周期和返回聚合层形成多个子请求。排查吞吐或 KV 占用时，应按展开后的有效请求数计算。
+
+例如两条输入 A/B 各要 `n=2` 个完整答案，逻辑上形成 A0、A1、B0、B1 四条子序列。A0/A1 的 prompt KV 可以共享，但它们一旦生成不同 token，后缀、随机数状态、grammar 状态和完成时间就分别推进；不能用同一条 `output_ids` 表示。批级温度可能从标量 0.8 广播成 `[0.8,0.8,0.8,0.8]`，设备侧常以 `[4]` 或 `[4,1]` 参与广播，而不是给词表中的每个 token 设置不同温度。
 
 ### 4.2 源码观察：输入“择一”校验没有想象中严格
 
@@ -249,6 +253,18 @@ flowchart TD
 
 ### 6.1 penalty、grammar 和 logit bias
 
+先明确 logits 与概率的区别。Logit 是模型给词表每项的未归一化分数，可以为负，也不要求和为 1。对批大小 B、词表大小 V，`logits:[B,V]`；每行独立处理一条序列。温度 T 是无单位的正数，概率为：
+
+```text
+p_i = exp(z_i/T) / sum_j exp(z_j/T)
+```
+
+i/j 是词表索引，z 是 logit。分母把指数值归一化；为数值稳定通常先减去行最大值，因分子分母同乘一个因子而不改变结果。T 不是时间，温度 0 必须走前述 greedy 特殊路径，不能直接除以 0。
+
+手算取三 token 的 `z=[ln 4,ln 2,0]`。T=1 时指数值是 `[4,2,1]`，概率 `[4/7,2/7,1/7]`；T=2 时指数变为 `[2,√2,1]`，最大项概率约 0.453，分布更平。若对第一项加 bias=`-ln 2`，T=1 时变为 `[2,2,1]/5=[0.4,0.4,0.2]`。这个 bias 是加在 logit 上，不是从概率减掉 `ln 2`。
+
+Presence penalty 按“是否出现过”惩罚，frequency penalty 按出现次数惩罚。假设某 token 出现了 3 次，两个系数均为 0.2，其加性惩罚分别是 0.2 与 0.6。Repetition penalty 是另一类缩放规则，常按 logit 正负分别缩放，不能与上述相减混同。参数作用顺序会改变结果，因此下面按本快照代码顺序解释。
+
 `SamplingBatchInfo.apply_logits_bias()` 的当前顺序为：
 
 1. overlap 模式下应用预累计 additive/scaling penalties，或 non-overlap 下调用 penalizer orchestrator；
@@ -259,13 +275,23 @@ flowchart TD
 
 ### 6.2 top-k、top-p、min-p 的 backend 差异
 
+过滤的动机是避免从很长的低概率尾部抽到不合适的 token，但代价是改变原始模型分布。继续用 `[4/7,2/7,1/7]`：
+
+| 单独应用的规则 | 保留条件 | 本例结果 |
+|---|---|---|
+| top-k，k=2 | 概率最高的两项 | 保留前两项，再归一化为 `[2/3,1/3,0]` |
+| top-p，p=0.8 | 降序累加，保留达到阈值的最短前缀 | 第一项约 0.571 不够，两项约 0.857，保留前两项 |
+| min-p，m=0.4 | 每项至少为最高概率的 m 倍 | 阈值 `0.4×4/7≈0.229`，保留前两项 |
+
+top-p 的 p 是累计质量阈值，min-p 的 m 是相对最高项比例；它们都不是“每个 token 概率至少 p”。组合过滤时必须按具体 backend 的规则算，不能从这个单独应用示例推断任意组合都等价。归一化后 `[2/3,1/3,0]` 的累计边界是 `[2/3,1,1]`；用均匀随机数 u=0.8 抽样会选择第二项。真实实现可使用不同但等价的抽样算法，随机数映射未必相同。
+
 标准路径先 temperature scaling 和 softmax，再交给 sampling backend：
 
 - FlashInfer 在需要 `min_p` 时先做 top-k renormalization，再 top-p renormalization，再 min-p sampling；否则使用 joint top-k/top-p kernel；
 - PyTorch fallback 使用自身的 top-k/top-p/min-p 实现；
 - Ascend 有独立的 logits sampling 路径。
 
-RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+RNG（Random Number Generator，随机数生成器）把 seed 和推进中的状态映射为随机数；过滤顺序或抽样 kernel 改变时，同 seed 也可能对应不同输出样本。
 
 bitwise 相同（逐位一致）要求同一浮点格式下每个结果的二进制位完全相同；满足数值容差只要求误差足够小，两种验收标准不同。
 
@@ -300,6 +326,10 @@ seed 是请求级采样状态，但可复现性还依赖：
 `Req.check_match_stop_str_prefix()` 会检查当前 tail 是否与 stop string 前缀重叠。Streaming 输出器据此暂缓发送可能属于 stop string 的尾部字符，避免先把半个 stop sequence 发给客户端、下一 chunk 才发现需要裁剪。
 
 Detokenizer 还根据 `finished_reason.matched` 和 `no_stop_trim` 决定最终文本是否裁掉匹配内容。因此 streaming 不是简单地把非流式字符串切块；它持有增量 decode 和安全输出边界状态。
+
+例如 stop string 是 `END`，解码出的文本先后为 `答E`、`N`、`D`。第一次只能确认 `答` 安全，尾部 E 可能是停止串开头；第二次继续暂存 EN；第三次确认 END，按裁剪规则不把它发送给用户。如果第三次来的是 X，则 ENX 不再匹配 END，可以释放暂存文本。这个小缓冲换来了不可撤回的流式输出正确性，也可能让用户看到的首段文本晚于模型的首 token。
+
+HTTP 的 SSE（Server-Sent Events，服务器发送事件）chunk 是一次网络消息，不必对应一个模型 token。将多个 token 合并进一个 chunk，可以减少传输开销，却会改变客户端观察到的间隔；测 ITL 时需说明用 token 时间还是 chunk 时间。Logprob 是概率的自然对数，原始模型分布与过滤后采样分布又可能不同，后训练消费前应核对返回字段的具体口径。
 
 
 ## 8. Streaming 与 non-streaming 应怎样比较

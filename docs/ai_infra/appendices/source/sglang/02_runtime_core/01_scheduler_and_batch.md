@@ -3,6 +3,8 @@
 相关基础：[Transformer 与 KV](<../../../../05_Inference/19_生成执行与采样.md#s1>)。
 
 
+如果让每个请求独占 GPU 直到生成完，短请求会被长请求挡住；如果把一批请求固定到全部完成，又会让先完成的位置空转。连续批处理把调度单位缩成“一次模型迭代”，用更频繁的准入、退出与资源核算换取设备利用率。下面先用普通自回归、无推测解码的路径，随后再加入异步重叠。
+
 ## 1. 三个核心对象
 
 - `Req`：`srt/managers/schedule_batch.py:713`，单请求的 token、采样、KV、状态；
@@ -20,6 +22,10 @@
 TTFT（Time To First Token，首 token 延迟）从约定的请求起点计到首个输出 token，通常包含排队、输入处理和 Prefill。客户端与服务端的起点可能不同，报告时应明确。
 
 prefill 的大 GEMM 算术强度高；decode 的 batch×1 GEMM 和 KV 读取更依赖带宽/launch latency。混在同一 batch 的策略决定 TTFT 与 ITL 的权衡。
+
+GEMM 是 General Matrix Multiplication（通用矩阵乘法）。若线性层输入 `X` 为 `[N,d]`、权重 `W` 为 `[d,h]`，输出 `XW` 为 `[N,h]`；`N` 是本轮 token 数，`d/h` 是输入/输出特征维度。每个输出元素需要 `d` 次乘法及约 `d` 次加法，总工作约 `2Ndh` FLOP（浮点运算次数）。权重的 `dh` 个数可供 N 行复用，N 较大时更容易摊薄权重读取成本。
+
+例如两个请求 A/B 分别还需 2/4 个输出，忽略 prefill：固定 batch 的四轮有效请求数是 `2,2,1,1`，最后两轮留有空位；连续批处理允许 A 完成后把新请求 C 加进来。它减少空转，但每轮都要维护请求顺序、长度、KV 和采样状态。若新请求需要很长 prefill，插入它反而可能拉长 B 的下一个 token 间隔，所以“及时准入”仍受预算限制。
 
 ## 3. 正常 scheduler loop
 
@@ -59,6 +65,10 @@ overlap 下 CPU 可能写 scheduler/共享 buffer，而 GPU forward 仍在读，
 
 这是罕见但关键的并发点：正确性不能靠“CUDA 通常很快”或 Python GIL。修改共享 metadata 时要知道哪个 stream、哪个 iteration 在读。
 
+用假设时长估计收益：CPU 调度与结果处理每轮 `C=2 ms`，GPU forward 每轮 `G=6 ms`。完全串行三轮需 `3(C+G)=24 ms`；若各轮可理想流水且依赖就绪，三轮约需 `C+G+2×max(C,G)=20 ms`，长序列稳态轮距从 8 ms 降到 6 ms。`max` 来自 CPU/GPU 同时工作时较慢的一方决定推进速度。若 grammar 每轮必须等 GPU 结果回到 CPU 才能准备下一轮，或 barrier 覆盖整段 forward，这个理想重叠就无法完全实现。
+
+GIL（Global Interpreter Lock，Python 全局解释器锁）约束 Python 线程执行字节码，不负责同步 CUDA stream。Stream 是设备命令的有序队列；同一队列保持顺序，不同队列之间的依赖通常要用 event（事件）显式表达。
+
 ### 何时禁用 overlap
 
 源码会在某些 batch 边界禁用：
@@ -85,6 +95,14 @@ overlap 下 CPU 可能写 scheduler/共享 buffer，而 GPU forward 仍在读，
 
 对候选请求不能只看 input length，要减掉 prefix cache hit 后真正需要 extend 的 token 数。
 
+#### 把准入条件写成两本预算
+
+令请求 `i` 的完整待处理长度为 `L_i`、可复用长度为 `H_i`，则本轮未命中工作量是 `E_i=L_i-H_i`，单位均为 token。简化为 page size=1、无额外预分配：选中集合 `S` 必须满足 `sum(E_i)≤P`，其中 P 是本轮 prefill token 预算；还需 `sum(E_i)+R≤F`，其中 F 是当前可分配 KV slot 数，R 是留给已运行请求的预算。两条不等式分别保护单轮工作量和长期内存，不能互相代替。
+
+小例：`P=5`、`F=7`、`R=3`，候选 A 的 `(L,H)=(4,2)`、B 为 `(3,0)`、C 为 `(3,2)`。A+B 的工作量是 5，符合 P，却需要 `5+3=8` 个 slot，超过 F；A+C 只需 `2+1+3=6`，两项都通过。即便还有空闲 request slot，也不能接纳 A+B。
+
+这只是预算直觉，实际 `PrefillAdder` 还估计未来输出、页取整、可驱逐空间和特殊模型状态。命中的 H 个 KV 已占据池空间；它们不能既算作“已复用”又算作 free。反过来，满足 token 预算也不意味着两批耗时相同：历史越长，新 Query 需要读取的 KV 越多。
+
 ## 6. running batch 与请求推进
 
 一次 generation result 后，每个请求可能：
@@ -108,7 +126,7 @@ finish 顺序很重要：先确定哪些 KV 可纳入 prefix cache，再释放 r
 - retract/preempt 部分 running request，使其之后重算；
 - 拒绝超长请求。
 
-RNG（Random Number Generator，随机数生成器）具有随抽样推进的内部状态。仅保存初始 seed 不能恢复已推进的位置，重计算和恢复训练通常还需保留状态及对应的消费顺序。
+RNG（Random Number Generator，随机数生成器）决定随机采样。回撤恢复时要区分“重建已输出 token 的 KV”和“为下一 token 新采样”，不能因为重算而额外消耗同一输出位置的随机数。
 
 retract 不是“暂停 GPU kernel”，而是释放其部分资源并把请求放回可恢复状态。需要保证 output token、已缓存前缀、sampling RNG 与 grammar 状态可重建，否则会产生不一致输出。
 
@@ -148,7 +166,7 @@ self.decode_batch_idx = 0
 - `output_ids`：已经提交的生成 token；
 - `full_untruncated_fill_ids`：调度/模型真正需要的完整序列视图；
 - `extend_range`：本轮需要计算 KV 的区间；
-- `kv_committed_len`：已经安全提交的 KV 边界；
+- `kv_committed_len`：请求侧 KV 长度账本；部分准备路径会提前推进本轮目标长度，设备可读性仍由执行依赖与结果边界保证；
 - `extend/decode_batch_idx`：跨轮追踪执行次数。
 
 speculative、chunked prefill、SWA 都依赖“committed”和“临时”边界不混淆。
@@ -224,6 +242,8 @@ retract 某请求至少要处理：
 - 重新进入 waiting queue 的优先级与等待时间。
 
 最危险的是只释放 KV，但 `kv_committed_len` 未回退，重入时 scheduler 认为 KV 已存在。
+
+例如某请求已输出 `[20,21]`，设备容量不足时回撤。恢复时输入应是原 prompt 加这些已提交 token，用来重建缺失的 KV；不能再把重算所得的 `20,21` 发给客户端，也不能把它们当作两次新的随机采样。grammar（语法状态机）也应处在已提交前缀之后，而非再消费一遍这些 token。回撤省下的是占用时间和当下容量，增加的是未来重算、排队以及恢复状态的复杂度。
 
 ## 14. 调度日志最小字段
 
