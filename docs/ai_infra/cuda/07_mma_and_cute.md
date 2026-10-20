@@ -8,6 +8,8 @@
 
 ## 7.1 先跨过 C++ 模板这道门
 
+**C++ 模板**是用类型或编译期常量定制代码的机制，例如生成不同元素类型、不同 tile 宽度的版本。模板实例是编译时确定的一份具体代码；运行时函数参数则提供本次处理的数据。CuTe 大量用模板表达形状和布局，因此先区分“选择哪份代码”和“向代码传入什么数据”。
+
 CUDA 源码里的尖括号经常描述编译期配置，而不是运行时输入。用普通 C++ 看一个完整的小程序：
 
 ```cpp
@@ -54,6 +56,8 @@ CuTe 的 `Int<16>{}` 同时涉及类型和对象：`Int<16>` 是携带常量 16 
 
 ## 7.2 WMMA：32 条线程共同做一次矩阵乘
 
+**WMMA** 是以一个 warp 为协作单位的矩阵乘累加 C++ 接口，用来表达 `D=A@B+C`。它将输入与累加结果组织成 **fragment（矩阵片段）**：整个逻辑矩阵由 warp 共同持有，各线程的 fragment 只保存其中一部分。它与第 2 章“每线程独立算一个输出”的分工不同，也不为每个线程额外分配一张完整矩阵。
+
 第 2 章中，每个线程用一个 `float acc` 算一个 C 元素。现在一个完整 warp 共同完成 `16×16` 的输出，归约维度 K=16，输入 FP16，累加 FP32：
 
 ```cpp
@@ -92,6 +96,8 @@ FP32 累加能减轻长串求和的舍入，但不能恢复输入转 FP16 时丢
 
 ## 7.3 从 WMMA 走向 FA2 使用的 MMA atom
 
+**MMA atom** 是 CuTe 对一种基础矩阵乘累加操作及其线程/数值布局规则的封装，**TiledMMA** 再把 atom 按规则组织成更大的计算分工。它们属于代码与布局抽象；实际矩阵指令由硬件执行。学习 atom 是为了知道某个输出坐标属于哪个 lane，以及哪些 lane 应共同做行归约。
+
 WMMA 是建立协作计算概念的示例，FA2 这条路径通过 CuTe 封装更具体的 MMA 指令，不直接调用上述 WMMA API。当前工作区 `kernel_traits.h` 在相应架构与类型分支里选择 `SM80_16x8x16_F32F16F16F32_TN`。
 
 对该 SM80 `m16n8k16` FP32 accumulator 布局，一个 warp 产生 `16×8=128` 个结果，32 条线程各有 4 个。令 `lane=0..31`，四个结果的逻辑坐标可写成：
@@ -104,13 +110,15 @@ i,j ∈ {0,1}
 
 例如 lane 5 拥有 `(1,2)、(1,3)、(9,2)、(9,3)`。lane 4/5/6/7 拥有相同的两行、不同列，合起来覆盖这两行全部 8 列。需要做逐行归约时，这四个 lane 就是自然的协作组。
 
-`m16n8k16` 中 m=16、n=8 是结果 tile 的行列数，k=16 是本次乘加的归约长度：A `[16,16]` 与 B `[16,8]` 生成 C `[16,8]`。每个输出累加 16 个乘积，按惯例共 `2*16*8*16=4096` FLOPs。4 个 accumulator/线程来自 `16*8/32=4`，是输出值数，不是每线程发出四次独立矩阵指令。CuTe 的 atom 可理解为这种基础协作操作及布局规则，TiledMMA 再把多个 atom 组合成更大的计算分工；它不会改变每个底层指令的参与要求。
+`m16n8k16` 中 m=16、n=8 是结果 tile 的行列数，k=16 是本次乘加的归约长度：A `[16,16]` 与 B `[16,8]` 生成 C `[16,8]`。每个输出累加 16 个乘积，按惯例共 `2*16*8*16=4096` FLOPs。4 个 accumulator/线程来自 `16*8/32=4`，是输出值数，不是每线程发出四次独立矩阵指令。TiledMMA 的组合不会改变每个底层指令的参与要求。
 
 PTX（Parallel Thread Execution）是 NVIDIA 的虚拟指令表示，还需经后续编译生成目标 GPU 的机器代码；查看 PTX 可以理解部分操作，但不能据此确定最终寄存器占用与指令调度。
 
 这张坐标表针对上述 MMA 指令的 accumulator；**不能拿来索引 WMMA 的 fragment.x，也不能直接套给 A/B 操作数或其他指令形状**。硬件布局可核对 [PTX ISA 的矩阵片段说明](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-fragment-mma-16816-float)。`attention_cpu.py` 会枚举这 128 个坐标，检查既不重复也不遗漏；第 9 章再扩展到 FA2 的 `128×128` tile。
 
 ## 7.4 CuTe Layout 先理解成“坐标到偏移的函数”
+
+**Layout（布局）**是把逻辑坐标映射到线性偏移的规则；shape 指定合法坐标范围，stride 等规则决定每个坐标落到哪里。**Tensor 视图**将一份数据存储与 Layout 组合，让程序按逻辑坐标访问数据。创建视图本身不分配或搬运矩阵，这一点决定了“转置视图”和“复制转置后的数据”是不同操作。
 
 一份内存为 `[10,11,12,20,21,22]`。行优先 `2×3` 视图对应：
 
@@ -140,6 +148,8 @@ auto view = make_tensor(data, layout);
 
 ## 7.5 CuTe 示例的依赖边界
 
+**依赖边界**说明运行示例还需要哪些外部工具、头文件和版本。本节的布局映射在 host 上计算，不启动 GPU kernel；但示例使用 CuTe/CUTLASS 头文件并通过 nvcc 构建，因此仍依赖 CUDA Toolkit。先确认这一点，再执行下面的可选准备步骤。
+
 本项目的 FlashAttention 子模块记录了 CUTLASS 子模块 commit `7127592069c2fe01b041e174ba4345ef9b279671`。如果 `flash-attention/csrc/cutlass/include/cute/tensor.hpp` 尚不存在，在目标开发机器从项目根目录执行：
 
 ```bash
@@ -155,7 +165,9 @@ nvcc -O2 -std=c++17 --expt-relaxed-constexpr \
 
 ## 7.6 一条线程为什么有两套坐标
 
-真实代码分别定义搬运的 `TiledCopy` 与计算的 `TiledMMA`：
+**搬运分工**指定线程负责传递哪些数据，**计算分工**指定线程参与矩阵指令时持有哪些操作数和累加值。这两种分工可以不同：搬运希望连续、对齐，MMA 则要求特定的操作数分布，shared memory 充当交接处。同一逻辑元素的 global 与 shared 物理地址布局也可以不同。
+
+真实代码用 `TiledCopy` 表达分块搬运分工，用前面的 `TiledMMA` 表达计算分工。以下接口用于提取线程自己的视图或执行操作：
 
 | 名称 | 要回答的问题 |
 |---|---|
@@ -165,18 +177,29 @@ nvcc -O2 -std=c++17 --expt-relaxed-constexpr \
 | `partition_fragment_C` | 当前线程持有哪些 accumulator 片段 |
 | `copy` / `gemm` | 真正执行搬运或计算；建立视图本身不等于执行这些操作 |
 
-搬运希望连续、对齐；MMA 则要求特定的操作数分布，因此不必采用同一分工。shared memory 充当交接处。对相同逻辑元素，global 与 shared 的物理地址布局也可以不同。
+### bank conflict 与 shared 布局
 
-为什么 shared 还需要重新排布？以常见的 32 个 bank、连续 32-bit 字分配到连续 bank 的标量 FP32 访问模型为例，`bank=(字节偏移/4)%32`。对行优先 `tile[32][32]`，一个 warp 的 lane t 读 `tile[t][0]`，字偏移为 32t，全部命中 bank 0 的不同地址，产生 bank conflict，访问需要拆分处理。若每行填充到 33 项，偏移为 33t，bank=t，冲突就消失；代价是多 `32*4=128` 字节 shared。若所有 lane 读取同一个字，则可以广播，不能当成上述“不同地址落同一 bank”的冲突。模型及适用范围见 [Shared Memory and Memory Banks](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#shared-memory-and-memory-banks)。
+**bank** 是 shared memory 的硬件存储分区；**bank conflict** 指一次访问中，不同地址落到同一个 bank，超出其同时服务能力，需要拆分处理的情况。重排 shared 布局，是为了让消费者需要的地址更好地分散到不同 bank；这与第 1 章减少 global sector 数的合并访存是不同问题。
 
-因此 global 合并访存与 shared bank conflict 检查的是不同层的地址集合。某种排列可让 global 连续读，却让 shared 的列读发生冲突。padding 增加容量，swizzle 则通过可逆的地址重排改变 bank 分布；两者都需要按真实消费者的访问方式验证，尤其 FP16 向量访问和矩阵加载不能机械套用上面的标量公式。
+以常见的 32 个 bank、连续 32-bit 字分配到连续 bank 的标量 FP32 访问模型为例，`bank=(字节偏移/4)%32`。对行优先 `tile[32][32]`，一个 warp 的 lane t 读 `tile[t][0]`，字偏移为 32t，全部命中 bank 0 的不同地址，产生 bank conflict，访问需要拆分处理。若每行填充到 33 项，偏移为 33t，bank=t，冲突就消失；代价是多 `32*4=128` 字节 shared。若所有 lane 读取同一个字，则可以广播，不能当成上述“不同地址落同一 bank”的冲突。模型及适用范围见 [Shared Memory and Memory Banks](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#shared-memory-and-memory-banks)。
 
-例如一个**纯教学**的 4×4 布局用 `physical_col=logical_col XOR row` 重排每行；每行仍是原列的一次排列。读者必须用同样的映射才能取回原元素。真实 `Swizzle<...>` 作用于指定地址位，不能把这个 4×4 公式直接套入 FA2；先理解“逻辑坐标没变、物理摆放改变”，再读已有 [布局与流水精读](<../appendices/source/flash_attention/03_layout_and_pipeline.md>) 的 swizzle 和线程 37 算例。
+因此某种排列可让 global 连续读，却让 shared 的列读发生冲突。**padding** 是在布局中增加不承载有效元素的填充位置，以改变行步长等地址关系；**swizzle** 则通过可逆的地址重排改变 bank 分布。前者会增加容量需求，两者都需要按真实消费者的访问方式验证，尤其 FP16 向量访问和矩阵加载不能机械套用上面的标量公式。
 
-XOR 是按位异或，相同位得 0、不同位得 1。row=1 时，逻辑列 0/1/2/3 对应物理列 1/0/3/2；逻辑 `(1,2)` 因而写到该行物理列 3。读取也应用同一映射才能拿回该值。因为 `(c XOR r) XOR r=c`，每行内可以逆变换、没有丢失元素。它改变的是存储位置，数学上的 query、key 和特征含义不变。
+XOR 是按位异或，相同位得 0、不同位得 1。例如一个**纯教学**的 4×4 布局用 `physical_col=logical_col XOR row` 重排每行；每行仍是原列的一次排列。读者必须用同样的映射才能取回原元素。真实 `Swizzle<...>` 作用于指定地址位，不能把这个 4×4 公式直接套入 FA2；先理解“逻辑坐标没变、物理摆放改变”，再读已有 [布局与流水精读](<../appendices/source/flash_attention/03_layout_and_pipeline.md>) 的 swizzle 和线程 37 算例。
+
+row=1 时，逻辑列 0/1/2/3 对应物理列 1/0/3/2；逻辑 `(1,2)` 因而写到该行物理列 3。读取也应用同一映射才能拿回该值。因为 `(c XOR r) XOR r=c`，每行内可以逆变换、没有丢失元素。它改变的是存储位置，数学上的 query、key 和特征含义不变。
 
 ## 7.7 四种布局概念的边界
 
-模板参数、逻辑坐标和物理存储各有不同含义。若将前文普通 C++ 示例的 Width 从 16 改为 32，只会改变 `columns`；`scale<false>(3.0f)` 返回 3，这些操作与线程如何协作无关。转置视图改变坐标到地址的映射，不复制底层数据。
+本章的**四种布局相关概念**分别描述数据块的大小、线程怎样排列、各线程持有哪些值，以及值放在什么地址。它们回答不同问题，不能仅凭一个 shape 就推断其余三者：
+
+| 概念 | 回答的问题 | 例子 |
+|---|---|---|
+| tile 形状 | 本次处理多大的逻辑矩阵块？ | score `[128,128]` |
+| 线程排列 | 哪些线程组成协作组，如何编号？ | 一个 block 的 4 个 warp |
+| 每线程持有的值 | 某个线程负责哪些逻辑坐标？ | lane 5 的 4 个 MMA accumulator 坐标 |
+| 内存布局 | 逻辑坐标对应哪个存储偏移？ | 行优先 stride、shared swizzle |
+
+模板参数可以描述上述规则，但模板语法本身不是一种硬件布局。若将前文普通 C++ 示例的 Width 从 16 改为 32，只会改变 `columns`；`scale<false>(3.0f)` 返回 3，这些操作与线程如何协作无关。转置视图改变坐标到地址的映射，不复制底层数据。
 
 在 m16n8 accumulator 的映射中，lane 31 持有 `(7,6)、(7,7)、(15,6)、(15,7)`；这些坐标描述每条线程的寄存器值。`wmma::mma_sync` 则要求整个 warp 协作，不能放在只允许 lane 0 进入的分支中。区分 tile 形状、线程排列、每线程持有的值和实际内存布局，才能解释后续流水中的搬运与计算。

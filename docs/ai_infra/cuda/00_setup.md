@@ -4,6 +4,8 @@
 
 ## 0.1 先认识要安装的三层
 
+CUDA 开发环境中的三层分别负责**设备通信、源码编译和上层计算调用**：驱动连接操作系统与 GPU，Toolkit 提供开发工具，PyTorch 等框架提供张量操作接口。它们彼此配合，但安装或验证其中一层，并不等于另外两层也已准备好。
+
 普通 C++ 循环由 CPU 执行；将函数写成 CUDA kernel 后，还需要编译出 GPU 能运行的代码，并由 CPU 通过驱动提交。把“编译程序”和“运行程序”拆开，才能理解为什么 GPU 可见、框架可用、源码可编译是三个不同的检查。
 
 host 指负责分配、提交和取回结果的主机端，device 指执行本教程 kernel 的 NVIDIA GPU 端。CUDA Toolkit 是开发工具集合，API 是应用程序编程接口，Runtime API 是程序调用的 `cudaMalloc` 等运行时接口，驱动则负责更底层的设备交互。compute capability（计算能力版本，如 8.0）描述 GPU 的架构功能，不是 Toolkit 的版本号；`sm_80` 是对应的编译目标名称。
@@ -38,7 +40,9 @@ nvcc -O2 -lineinfo -std=c++17 docs/ai_infra/cuda/examples/cuda_basics.cu -o /tmp
 
 ## 0.2 只补当前需要的 C++
 
-Python 的 `a[i] + b[i]` 在 C++ 中也这样写，但 C++ 指针本身不携带长度与形状：
+**指针是保存内存地址的值**。`float` 是单精度浮点数类型，`float*` 是指向 float 数据的指针类型，`const float*` 表示不能通过这个指针修改数据。指针本身不携带数组的长度或形状，因此 CUDA 接口经常同时传入“数据地址”和“元素数”。
+
+Python 的 `a[i] + b[i]` 在 C++ 中也这样写。下面的 CPU 函数用指针访问数组，并用 n 明确处理范围：
 
 ```cpp
 void add_cpu(const float* a, const float* b, float* c, int n) {
@@ -48,7 +52,7 @@ void add_cpu(const float* a, const float* b, float* c, int n) {
 }
 ```
 
-逐项解释：`float` 是单精度浮点数，`float*` 是指向浮点数据的地址，`const float*` 表示不能通过这个指针修改数据。`int n` 把数组长度另行传入。`++i` 让下标加一，花括号包住函数或循环体，分号结束语句。这里默认 `a`、`b`、`c` 都至少有 `n` 个元素；越界不会像 Python 一样自动抛出 `IndexError`。
+逐项解释：`int n` 把数组长度另行传入。`++i` 让下标加一，花括号包住函数或循环体，分号结束语句。这里默认 `a`、`b`、`c` 都至少有 `n` 个元素；越界不会像 Python 一样自动抛出 `IndexError`。
 
 示例在 CPU 上用 `std::vector<float>` 保存数组。`v.size()` 是元素数，`v.data()` 是首元素指针。CUDA 分配和拷贝使用**字节数**，所以 `n` 个 `float` 需要 `n * sizeof(float)` 字节。`size_t` 用来表达非负的对象大小。
 
@@ -70,6 +74,8 @@ void add_cpu(const float* a, const float* b, float* c, int n) {
 
 ## 0.3 CPU 与 GPU 如何连接
 
+本教程采用**显式设备内存管理**：CPU 内存与 GPU 显存分别分配，通过拷贝传递数据。host 代码负责准备输入、提交计算、确认完成并读取结果，kernel 负责在 GPU 上计算。分配、提交、完成和取回结果是不同的动作：
+
 ```text
 CPU 创建输入 → 分配 GPU 显存 → 拷贝输入到 GPU
             → 启动 kernel → 等待所需结果 → 拷贝结果到 CPU → 比较答案
@@ -90,7 +96,9 @@ CPU 创建输入 → 分配 GPU 显存 → 拷贝输入到 GPU
 
 “变量 `d_a` 还存在”和“它指向的显存还有效”是两件事；释放后保留的地址不能继续使用。更一般的异步程序必须等最后一个 GPU 使用者完成，才能复用或释放它使用的缓冲区。第 1 章用 stream/event 表达这个条件，第 8 章将同一原则应用到 kernel 内的 shared 缓冲区。
 
-示例的 `CUDA_CHECK(...)` 检查每次 Runtime API 调用，失败时打印文件、行号和错误文字后退出。kernel 启动使用特殊语法，随后要单独调用 `cudaGetLastError()`；异步执行错误还需要在同步点检查，下一章会解释。
+**同步点**是程序确认此前某些 GPU 工作已完成的位置。kernel launch 通常是异步提交：CPU 调用返回，不代表 GPU 已执行完。示例把 kernel 与 D2H 拷贝放在同一默认 stream，拷贝按顺序等前面的 kernel 完成，并在结果进入 CPU 内存后才返回。因此流程图中的“等待所需结果”包含在这次 D2H `cudaMemcpy` 调用里，无需再单独等待一次 kernel。这里阻塞的是调用它的 CPU 线程，进程中的其他线程仍可执行；也不能将这种返回保证推广到所有拷贝方向和异步 API。具体区别见 [CUDA API 同步行为](https://docs.nvidia.com/cuda/cuda-runtime-api/api-sync-behavior.html)。
+
+`CUDA_CHECK(...)` 是示例定义的**错误检查宏**，把括号内 CUDA API 返回的 `cudaError_t` 错误码与 `cudaSuccess` 比较，失败时打印文件、行号和错误文字后退出。它本身不接收 kernel 完成通知，也不决定是否等待；是否等待取决于括号里的 API。kernel 启动使用特殊语法，随后用 `CUDA_CHECK(cudaGetLastError())` 检查当前记录的错误，包括能在启动时发现的配置错误；检查成功不证明 kernel 已开始或已完成。运行中的异步错误还需要在同步点检查，下一章会解释。
 
 ## 自查
 
