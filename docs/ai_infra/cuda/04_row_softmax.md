@@ -55,6 +55,8 @@ for (int j = t; j < cols; j += B)
     local_max = fmaxf(local_max, x[row * cols + j]);
 ```
 
+`fmaxf(a,b)` 是 CUDA 支持的单精度数学库函数，返回两个 float 的较大值，不是本例自己定义的函数。因此这条赋值是在更新“当前线程迄今见过的最大值”，不是直接得到整行最大值。
+
 `B` 是本次编译实例的线程数。没有元素的线程保留负无穷，它对取最大值没有影响。求和时对应的中性值是 0。**无有效数据的线程仍参与协作，只是贡献中性值。**
 
 先用 4 个“工作者”模拟一行 7 个元素 `[0,ln(2),ln(4),0,ln(2),ln(4),0]`，不把它误当成真实 4-lane warp：
@@ -72,7 +74,14 @@ for (int j = t; j < cols; j += B)
 
 **warp shuffle 是同一 warp 内线程交换寄存器值的协作机制**。它让某个 lane 获得另一个参与 lane 的值，无需先通过 shared 中转；本节用它把各线程的局部统计量合并成 warp 统计量。它的作用范围是 warp，不能直接合并不同 warp 的值。
 
-`__shfl_down_sync(mask, x, delta)` 让当前 lane 取得编号较大 lane 的 x；这里所有 32 个 lane 都执行，使用完整 mask `0xffffffffu`。例如 delta=16 时，lane 0 取得 lane 16 的值。它不需要先把 x 放进 shared。
+先明确变量属于谁：`warp_reduce(float x)` 由每个线程分别调用，32 个线程各自有一份私有的 x，通常保存在各自的寄存器中；它不是一份所有线程共同读写的变量。假设 lane 0–31 的初始 x 分别为 1–32：
+
+```text
+lane：       0   1   2   3  ...  16  17  ...  31
+自己的 x：   1   2   3   4  ...  17  18  ...  32
+```
+
+源码使用下面的循环。`IsMax` 是编译期模板参数：true 时执行 `fmaxf(x,other)` 求最大值，false 时执行 `x+other` 求和；交换值的结构完全相同。
 
 ```cpp
 for (int delta = 16; delta > 0; delta >>= 1) {
@@ -81,11 +90,77 @@ for (int delta = 16; delta > 0; delta >>= 1) {
 }
 ```
 
-这是编译期参数 `IsMax` 控制的同一个归约结构。每轮距离减半，最后 **lane 0** 的值覆盖 32 个输入；其他 lane 的值不能当成完整结果。以 8 lane 的缩小示意来看，lane 0 先接上 4，再接上已包含 2/6 的 2，最后接上已包含 1/3/5/7 的 1。完整示例使用真正的 32 lane。
+**一次 shuffle 只传值，后面的表达式才合并。** `__shfl_down_sync(mask,x,delta)` 的默认 width 是 32。在本例完整 warp、全部 lane 参与的前提下，来源编号是 `lane+delta`：若它小于 32，就把来源线程在本轮调用中传入的 x 复制到当前线程的 other。不会取走来源线程的值，也不会由 shuffle 自动执行加法或最大值计算。
 
-本实现的前提是完整 warp、所有 lane 在这些调用处共同参与；不能把 mask 原样复制进任意提前退出或分歧分支。shuffle 传的是参与线程的值，不替你完成任意 shared/global memory 的同步。API 约束见 [CUDA C++ Language Extensions](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html)。
+例如 delta=16 时：
 
-参与 mask 是一个 32 位整数，第 t 位声明 lane t 参与这次协作；`0xffffffffu` 的 32 位全部为 1。它不是“这个 lane 有几个输入”的标记。处理 7 个元素时，完整 warp 的后 25 个 lane 没有数据但仍可带着中性值参与；若让它们提前退出，再使用完整 mask，就不再满足本实现的协作前提。down 形式的归约只保证 lane 0 收齐结果；后续 shared 写回与广播才让整块线程获得同一个值。
+```text
+lane 16 的 x=17 ──复制──→ lane 0 的 other=17
+                            lane 0 自己的 x 原来为 1
+                            求和时更新 x=1+17=18
+
+lane 24 的 x=25 ──复制──→ lane 8 的 other=25
+                            lane 8 自己的 x 原来为 9
+                            求和时更新 x=9+25=34
+```
+
+**lane 16 加上 delta=16，来源编号变成 32，会停止计算吗？不会。** 来源越过默认 width=32 的边界时，shuffle 返回调用线程自己的 x；它不会跨到下一个 warp 的 lane 0，也不会自动返回 0。所有线程仍继续执行循环里的合并表达式。对于上面的初始值，第一轮有：
+
+| 当前 lane | 请求的来源编号 | shuffle 返回的 other | 求和版本的新 x | 最大值版本的新 x |
+|---|---|---|---|---|
+| 0 | 16 | lane 16 的 17 | `1+17=18` | `max(1,17)=17` |
+| 8 | 24 | lane 24 的 25 | `9+25=34` | `max(9,25)=25` |
+| 15 | 31 | lane 31 的 32 | `16+32=48` | `max(16,32)=32` |
+| 16 | 32，越界 | 自己的 17 | `17+17=34` | `max(17,17)=17` |
+| 31 | 47，越界 | 自己的 32 | `32+32=64` | `max(32,32)=32` |
+
+“返回自身”只描述 shuffle 的返回值；求和版本接着执行加法，所以这些 lane 的 x 会翻倍，并不是整行代码都不改变 x。这里的编号越界也不同于“编号有效，但来源 lane 没有参与调用”：后者读到的值没有定义，不能按返回自身处理。
+
+**多轮如何收齐 32 个输入？** `delta >>= 1` 让距离按 `16→8→4→2→1` 变化。后面取得的 x，已经可能是上一轮合并过的部分结果。例如第二轮 delta=8，lane 0 得到的是 lane 8 更新后的 34，而不是最初的 9，于是自己的 x 从 18 变成 `18+34=52`，包含原来的 1、17、9、25 四个数。
+
+继续跟踪求和版本的 lane 0：
+
+| 阶段 | 来源 lane | 本轮取得的 other | lane 0 更新后的 x | lane 0 已覆盖的原始输入数 |
+|---|---|---|---|---|
+| 初始 | — | — | 1 | 1 |
+| delta=16 | 16 | 17 | 18 | 2 |
+| delta=8 | 8 | 34 | 52 | 4 |
+| delta=4 | 4 | 68 | 120 | 8 |
+| delta=2 | 2 | 136 | 256 | 16 |
+| delta=1 | 1 | 272 | 528 | 32 |
+
+最后一轮之前，lane 0 已经收齐奇数 `1+3+…+31=256`，lane 1 已经收齐偶数 `2+4+…+32=272`，两者相加得到 `1+2+…+32=528`。最大值版本沿同样的路径，lane 0 最终得到 32。
+
+**后半部分 lane 的重复相加为什么不污染最终结果？** 每轮只需要保留越来越短的前缀，供后续归约使用：
+
+| 本轮 delta | 本轮之后还会用于最终 lane 0 结果的 lane 范围 |
+|---|---|
+| 16 | 0–15 |
+| 8 | 0–7 |
+| 4 | 0–3 |
+| 2 | 0–1 |
+| 1 | 0 |
+
+例如第一轮越界的 lane 16–31 虽然会继续计算，但第二轮需要保留的 lane 0–7 只读取第一轮正确的 lane 8–15，因此不会把越界后的重复值带入这条有效归约路径。表格表示数据依赖中需要保留的结果，不表示其他线程退出；源码每一轮仍由全部 32 个 lane 执行。最后只保证 **lane 0** 拿到完整结果，其他 lane 不保证，所以后续用 `if (lane==0) scratch[warp]=x` 只写出这一份结果。
+
+**没有 __syncthreads()，多轮之间怎样同步？** 每一轮调用的 `_sync` shuffle 会协调 mask 指定的参与线程，使它们在对应调用处交换各自的寄存器操作数。每个线程又必须先算出本轮新的 x，才能把这个 x 作为下一轮调用的参数：
+
+```text
+第一轮 shuffle(delta=16)：参与 lane 交换本轮传入的 x
+    ↓ 各线程使用自己的 other 更新 x
+第二轮 shuffle(delta=8)：参与 lane 交换上一轮更新后的 x
+    ↓ 各线程继续更新 x
+第三轮 shuffle(delta=4)
+    ↓ ……
+```
+
+例如 lane 0 到达第二轮调用时，不能把 lane 8 最初的 9 当作第二轮的操作数；lane 8 必须先完成第一轮的 `9+25=34`，才能携带 34 参与第二轮交换。**调用参与线程的协调，加上每线程的操作数依赖，保证这里的寄存器归约可以逐轮衔接**，无需在这段循环中额外插入 `__syncthreads()` 或 `__syncwarp()`。这不是假设“同一个 warp 永远自动同步”，也不要求所有 lane 同时完成两次 shuffle 之间的每条普通指令。
+
+但 shuffle 的 `_sync` **不提供 shared/global memory 的内存屏障或内存顺序保证**。如果线程先写 shared，再让其他线程读取，需要使用适合该协作范围的 `__syncwarp()` 或 `__syncthreads()` 等同步，不能只靠一次 shuffle 代替；第 4.4 节用 shared 交接不同 warp 的结果时，仍然需要 block barrier。
+
+**mask 表示谁参与，不表示谁有有效输入。** `0xffffffffu` 是 32 位全部为 1 的无符号整数，第 t 位声明 lane t 参与协作。本例要求完整 warp 的全部 32 个 lane 都按相同顺序执行这些调用，并使用相同 mask；不能只让 `lane<delta` 的线程执行完整 mask 的 shuffle。处理 7 个输入时，后 25 个 lane 仍执行循环，只是求和时带 0、求最大值时带负无穷。不要让归约所需的来源 lane 提前退出或跳过调用。
+
+上述来源越界、参与 mask 和内存屏障语义见 [官方 Warp Shuffle Functions 说明](https://docs.nvidia.com/cuda/archive/13.0.3/cuda-c-programming-guide/index.html#warp-shuffle-functions)；当前接口入口见 [CUDA C++ Language Extensions](https://docs.nvidia.com/cuda/cuda-programming-guide/05-appendices/cpp-language-extensions.html)。
 
 ## 4.4 四个 warp 怎样合成一个 block 的结果
 

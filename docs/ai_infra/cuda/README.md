@@ -46,6 +46,7 @@ CUDA 编译命令从第 0 章开始给出，后续新示例在相应章节单独
 |---|---|---|
 | [cpu_walkthrough.py](<examples/cpu_walkthrough.py>) | 1–2 | Python 标准库；教学资源预算、二维线程编号、归约和 tiled GEMM |
 | [cuda_basics.cu](<examples/cuda_basics.cu>) | 1–3 | CUDA；实际硬件/编译资源查询、基础算子和 Event 计时 |
+| [matmul_tiled.html](<examples/matmul_tiled.html>) | 2 | 浏览器；完整 A/B/C 的输入输出映射、逐项累加、合作加载与 kernel 逐段解释，无需 GPU |
 | [attention_cpu.py](<examples/attention_cpu.py>) | 4–7、9 | Python 标准库；在线状态、错误反例、120 组分块/遍历顺序对照与布局覆盖 |
 | [attention_lab.cu](<examples/attention_lab.cu>) | 4–6 | CUDA；warp/block Softmax、普通/在线 Attention，逐元素对照 FP64 CPU 参考 |
 | [wmma_tile.cu](<examples/wmma_tile.cu>) | 7 | 兼容 WMMA 的 GPU/Toolkit；FP16 输入、FP32 累加的小矩阵乘 |

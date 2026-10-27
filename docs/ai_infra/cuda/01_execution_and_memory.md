@@ -228,7 +228,9 @@ S0 开头的 4 字节没有用到，最后一个元素又落进了 S4。于是 `
 
 这个比例反映本次访问对 sector 的利用程度，**不等于实测 HBM 流量，也不能直接换算成运行时间**。命中缓存的 sector 可能无需再次访问 HBM，本次未使用的数据也可能被邻近 warp 复用；实际指令和架构仍会改变下游请求。第三种访问的每个地址其实都按 32 字节对齐，但地址很分散，因此还要同时考虑**对齐与集中程度**：让一个 warp 的访问尽量落在少量 sector 内。相关模型见 [合并访问说明](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#coalesced-access-to-global-memory)。
 
-二维 block 的线程编号先让 x 增长：
+<a id="thread-warp-lane-mapping"></a>
+
+**二维、三维 block 如何组成 warp？** CUDA 按 **x 最快变化、其次 y、最后 z** 的顺序，把 block 内的线程坐标转换成线性编号，再每 32 个线程组成一个 warp。这个编号规则由 CUDA 定义，与数组写成 `a[y][x]` 还是 `a[x][y]` 无关，也不表示线程按编号先后执行：
 
 ```text
 linear_tid = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z)
@@ -236,7 +238,34 @@ warp = linear_tid // 32
 lane = linear_tid % 32
 ```
 
-因此第 2 章的 `dim3(16,16)` 仍有 256 线程、8 个 warp；warp 0 覆盖 y=0 与 y=1 两行，各 16 个 x。**二维 block 不等于物理上按二维摆放的运算单元。** 合并访存时要看这 32 个线程的实际地址，而不是只看矩阵画成了几行几列。
+这里的 warp 编号是在当前 block 内的编号，lane 是线程在所属 warp 内的编号。第 2 章使用 `dim3(16,16)`，即 `blockDim.x=16, blockDim.y=16, blockDim.z=1`，共有 256 个线程、8 个 warp。令 `tx=threadIdx.x, ty=threadIdx.y`，则 `linear_tid=ty*16+tx`：
+
+| `ty` | `tx` | `linear_tid` | block 内 warp 编号 | lane 编号 |
+|---|---|---|---|---|
+| 0 | 0–15 | 0–15 | 0 | 0–15 |
+| 1 | 0–15 | 16–31 | 0 | 16–31 |
+| 2 | 0–15 | 32–47 | 1 | 0–15 |
+| 3 | 0–15 | 48–63 | 1 | 16–31 |
+| … | … | … | … | … |
+| 14 | 0–15 | 224–239 | 7 | 0–15 |
+| 15 | 0–15 | 240–255 | 7 | 16–31 |
+
+把每一行中的数字画成 lane 编号，前两个 warp 的逻辑分布是：
+
+```text
+                    tx →
+             0   1   2  ...  14  15
+ty = 0       0   1   2  ...  14  15  ┐ warp 0
+ty = 1      16  17  18  ...  30  31  ┘
+ty = 2       0   1   2  ...  14  15  ┐ warp 1
+ty = 3      16  17  18  ...  30  31  ┘
+```
+
+因此，固定 `ty=0`、让 `tx` 从 0 到 15，得到连续的 lane 0–15；接下来是 `ty=1` 的 lane 16–31。反过来，固定 `tx=0`、让 `ty` 从 0 到 3，线性编号是 0、16、32、48，对应 `(warp,lane)` 为 `(0,0)`、`(0,16)`、`(1,0)`、`(1,16)`，并不是连续 lane。lane 编号会在每个 warp 内重新从 0 开始。
+
+这个分布随 block 形状变化：`dim3(32,8)` 中，一个 warp 恰好覆盖同一 y 的 32 个 x；`dim3(1,256)` 中，x 始终为 0，相邻 lane 才对应相邻 y。三维 block 也沿用上面的公式，排完一个 x/y 平面再增加 z。
+
+**二维 block 不等于物理上按二维摆放的运算单元。** 分析合并访存时，先用 block 形状确定一个 warp 的 32 个线程坐标，再代入访存表达式计算地址。第 2 章的矩阵乘会据此展开 A/B 的合作加载。
 
 shared 的访问还要考虑 bank，即内部存储分区；global 合并访存和 shared bank conflict 是不同问题。第 7 章在布局变换时继续解释，初学时先确保索引和同步正确。
 
